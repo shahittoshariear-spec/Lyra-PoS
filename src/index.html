@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+<title>Immaculate POS</title>
+<link rel="icon" href="app-icon.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Startup splash -->
+  <div class="splash-screen" id="splashScreen">
+    <div class="splash-content">
+      <img class="splash-mark" src="app-icon.png" alt="" />
+      <div class="splash-appname">Immaculate POS</div>
+      <div class="splash-title">Shariear's Software</div>
+    </div>
+  </div>
+
+  <div class="app" id="app">
+
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="brand">
+        <img class="brand-mark" src="app-icon.png" alt="Immaculate POS" />
+        <div class="brand-text">
+          <div class="brand-name">Immaculate</div>
+          <div class="brand-sub">Point of Sale</div>
+        </div>
+      </div>
+
+      <div class="nav-group" id="navGroup">
+        <div class="nav-pill" id="navPill"></div>
+        <button class="nav-btn active" data-view="till">
+          <span class="nav-icon">◎</span> Till
+        </button>
+        <button class="nav-btn nav-protected" data-view="stock">
+          <span class="nav-icon">▤</span> Stock <span class="nav-lock">🔒</span>
+        </button>
+        <button class="nav-btn nav-protected" data-view="ledger">
+          <span class="nav-icon">▦</span> Ledger <span class="nav-lock">🔒</span>
+        </button>
+        <button class="nav-btn nav-protected" data-view="dashboard">
+          <span class="nav-icon">◈</span> Overview <span class="nav-lock">🔒</span>
+        </button>
+        <button class="nav-btn nav-protected" data-view="reports">
+          <span class="nav-icon">📊</span> Reports <span class="nav-lock">🔒</span>
+        </button>
+        <button class="nav-btn nav-protected" data-view="settings">
+          <span class="nav-icon">⚙</span> Setup <span class="nav-lock">🔒</span>
+        </button>
+      </div>
+
+      <div class="sidebar-foot">
+        <button class="lock-toggle" id="lockToggleBtn" title="Lock and return to Client mode">
+          <span id="lockToggleIcon">🔓</span> <span id="lockToggleLabel">Admin unlocked</span>
+        </button>
+        <div class="clock" id="clock">--:--</div>
+        <div class="shop-name-mini" id="shopNameMini">My Shop</div>
+        <div class="ss-watermark" aria-hidden="true">S.S</div>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="content">
+
+      <!-- TILL VIEW -->
+      <section class="view active" id="view-till">
+        <div class="day-summary-bar" id="daySummaryBar">
+          <div class="day-summary-item">
+            <span class="day-summary-label">Today's Total</span>
+            <span class="day-summary-value" id="dsTotal">R0.00</span>
+          </div>
+          <div class="day-summary-sep"></div>
+          <div class="day-summary-item">
+            <span class="day-summary-label">Cash</span>
+            <span class="day-summary-value ds-cash" id="dsCash">R0.00</span>
+          </div>
+          <div class="day-summary-item">
+            <span class="day-summary-label">Card</span>
+            <span class="day-summary-value ds-card" id="dsCard">R0.00</span>
+          </div>
+          <div class="day-summary-item" id="dsOtherWrap" style="display:none;">
+            <span class="day-summary-label">Other</span>
+            <span class="day-summary-value" id="dsOther">R0.00</span>
+          </div>
+        </div>
+        <div class="till-grid">
+
+          <div class="till-catalog">
+            <div class="till-toolbar">
+              <input type="text" id="productSearch" class="search-input" placeholder="Search products, or scan a barcode…" autocomplete="off" />
+              <button class="btn btn-ghost" id="heldSalesBtn" style="display:none;">Held <span id="heldCount">0</span></button>
+            </div>
+            <div class="chip-row" id="categoryChips"></div>
+            <div class="product-grid" id="productGrid"></div>
+          </div>
+
+          <aside class="receipt-tape">
+            <div class="tape-scallop tape-scallop-top"></div>
+            <div class="tape-body">
+              <div class="tape-header">
+                <div class="tape-shop" id="tapeShopName">My Shop</div>
+                <div class="tape-meta" id="tapeMeta">New sale</div>
+              </div>
+              <div class="tape-items" id="tapeItems">
+                <div class="tape-empty">Cart is empty. Tap a product to add it.</div>
+              </div>
+              <div class="tape-divider"></div>
+              <div class="tape-totals">
+                <div class="tape-row"><span>Subtotal</span><span id="tapeSubtotal">0.00</span></div>
+                <div class="tape-row"><span>Tax</span><span id="tapeTax">0.00</span></div>
+                <div class="tape-row tape-total"><span>Total</span><span id="tapeTotal">0.00</span></div>
+              </div>
+              <div class="tape-actions">
+                <button class="btn btn-ghost" id="clearCartBtn">Clear</button>
+                <button class="btn btn-ghost" id="holdBtn">Hold</button>
+                <button class="btn btn-charge" id="chargeBtn" disabled>Charge</button>
+              </div>
+            </div>
+            <div class="tape-scallop tape-scallop-bottom"></div>
+          </aside>
+
+        </div>
+      </section>
+
+      <!-- STOCK VIEW -->
+      <section class="view" id="view-stock">
+        <div class="view-head">
+          <div>
+            <h1>Stock</h1>
+            <p class="view-sub">Everything you sell, and how much is left.</p>
+          </div>
+          <button class="btn btn-primary" id="addProductBtn">+ Add product</button>
+        </div>
+
+        <div class="toolbar-row">
+          <input type="text" id="stockSearch" class="search-input" placeholder="Filter by name or SKU…" />
+          <select id="stockCategoryFilter" class="select-input"></select>
+        </div>
+
+        <div class="bulk-bar" id="stockBulkBar" style="display:none;">
+          <span id="stockBulkCount">0 selected</span>
+          <div class="bulk-bar-actions">
+            <button class="btn btn-ghost" id="stockBulkClearBtn">Clear selection</button>
+            <button class="btn btn-danger" id="stockBulkDeleteBtn">Delete selected</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table" id="stockTable">
+            <thead>
+              <tr>
+                <th class="checkbox-col"><input type="checkbox" id="stockSelectAll" /></th>
+                <th>Product</th>
+                <th>SKU</th>
+                <th>Category</th>
+                <th>Supplier</th>
+                <th class="num">Price</th>
+                <th class="num">Cost</th>
+                <th class="num">Stock</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="stockTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- LEDGER VIEW (sales history) -->
+      <section class="view" id="view-ledger">
+        <div class="view-head">
+          <div>
+            <h1>Ledger</h1>
+            <p class="view-sub">Every sale that's gone through the till.</p>
+          </div>
+        </div>
+        <div class="toolbar-row">
+          <input type="date" id="ledgerDateFilter" class="select-input" />
+          <button class="btn btn-ghost" id="ledgerClearFilter">All time</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="ledgerTable">
+            <thead>
+              <tr>
+                <th>Sale #</th>
+                <th>Date</th>
+                <th>Items</th>
+                <th class="num">Total</th>
+                <th>Payment</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- DASHBOARD VIEW -->
+      <section class="view" id="view-dashboard">
+        <div class="view-head">
+          <div>
+            <h1>Overview</h1>
+            <p class="view-sub" id="dashDateLabel">Today at a glance.</p>
+          </div>
+          <div class="segmented period-tabs" id="periodTabs">
+            <button class="seg-btn active" data-period="day">Day</button>
+            <button class="seg-btn" data-period="week">Week</button>
+            <button class="seg-btn" data-period="month">Month</button>
+            <button class="seg-btn" data-period="year">Year</button>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-label" id="statSalesLabel">Sales today</div>
+            <div class="stat-value" id="statTodaySales">0.00</div>
+          </div>
+          <div class="stat-card stat-card-profit">
+            <div class="stat-label" id="statProfitLabel">Profit today</div>
+            <div class="stat-value" id="statTodayProfit">0.00</div>
+          </div>
+          <div class="stat-card stat-card-profit">
+            <div class="stat-label" id="statMarginLabel">Margin today</div>
+            <div class="stat-value" id="statTodayMargin">0%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Transactions</div>
+            <div class="stat-value" id="statTodayCount">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Items sold</div>
+            <div class="stat-value" id="statTodayItems">0</div>
+          </div>
+          <div class="stat-card stat-card-warn">
+            <div class="stat-label">Low stock</div>
+            <div class="stat-value" id="statLowStock">0</div>
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <div class="panel">
+            <h2 id="paymentSplitTitle">Payment split today</h2>
+            <div class="bar-list" id="paymentSplitToday"></div>
+          </div>
+          <div class="panel">
+            <h2 id="topSellersTitle">Top sellers today</h2>
+            <ul class="rank-list" id="topSellersList"></ul>
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <div class="panel">
+            <h2>Low stock</h2>
+            <ul class="plain-list" id="lowStockList"></ul>
+          </div>
+          <div class="panel">
+            <h2 id="historyTitle">Sales history</h2>
+            <div class="table-wrap history-wrap">
+              <table class="data-table" id="historyTable">
+                <thead>
+                  <tr><th id="historyDateHeader">Date</th><th class="num">Sales</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Txns</th></tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- REPORTS VIEW (items sold breakdown) -->
+      <section class="view" id="view-reports">
+        <div class="view-head">
+          <div>
+            <h1>Reports</h1>
+            <p class="view-sub" id="reportsDateLabel">How much of what sold.</p>
+          </div>
+          <div class="segmented period-tabs" id="reportsPeriodTabs">
+            <button class="seg-btn active" data-period="day">Day</button>
+            <button class="seg-btn" data-period="week">Week</button>
+            <button class="seg-btn" data-period="month">Month</button>
+            <button class="seg-btn" data-period="year">Year</button>
+          </div>
+        </div>
+
+        <div class="toolbar-row">
+          <input type="text" id="reportsSearch" class="search-input" placeholder="Filter by product name…" />
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table" id="reportsTable">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th class="num">Qty sold</th>
+                <th class="num">Revenue</th>
+                <th class="num">Cost</th>
+                <th class="num">Profit</th>
+                <th class="num">Margin</th>
+              </tr>
+            </thead>
+            <tbody id="reportsTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SETTINGS VIEW -->
+      <section class="view" id="view-settings">
+        <div class="view-head">
+          <div>
+            <h1>Setup</h1>
+            <p class="view-sub">Shop details, tax, and backups.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <div class="panel">
+            <h2>Shop details</h2>
+            <label class="field">
+              <span>Shop name</span>
+              <input type="text" id="setShopName" />
+            </label>
+            <label class="field">
+              <span>Address</span>
+              <input type="text" id="setAddress" />
+            </label>
+            <label class="field">
+              <span>Phone</span>
+              <input type="text" id="setPhone" />
+            </label>
+            <label class="field">
+              <span>Receipt footer message</span>
+              <input type="text" id="setFooter" />
+            </label>
+            <button class="btn btn-primary" id="saveShopDetailsBtn">Save shop details</button>
+          </div>
+
+          <div class="panel">
+            <h2>Till settings</h2>
+            <label class="field">
+              <span>Currency symbol</span>
+              <input type="text" id="setCurrency" maxlength="4" />
+            </label>
+            <label class="field">
+              <span>Tax rate (%)</span>
+              <input type="number" id="setTaxRate" min="0" max="100" step="0.1" />
+            </label>
+            <label class="field">
+              <span>Low stock threshold</span>
+              <input type="number" id="setLowStock" min="0" step="1" />
+            </label>
+            <button class="btn btn-primary" id="saveSettingsBtn">Save till settings</button>
+          </div>
+
+          <div class="panel">
+            <h2>Categories</h2>
+            <div class="chip-row" id="settingsCategoryChips"></div>
+            <div class="field-inline">
+              <input type="text" id="newCategoryInput" placeholder="New category name" />
+              <button class="btn btn-ghost" id="addCategoryBtn">Add</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Backup</h2>
+            <p class="panel-note">All data lives only on this computer. Export a backup file regularly, especially before reinstalling.</p>
+            <div class="field-inline">
+              <button class="btn btn-ghost" id="exportBackupBtn">Export backup…</button>
+              <button class="btn btn-ghost" id="importBackupBtn">Import backup…</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Import products</h2>
+            <p class="panel-note">Bring in a product list exported from POS Maid (Excel/CSV) or any spreadsheet with Name, SKU/barcode, price, and stock columns. Matches existing products by SKU and updates them; anything new is added.</p>
+            <div class="field-inline">
+              <button class="btn btn-ghost" id="importProductsBtn">Import from Excel / CSV…</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Security</h2>
+            <p class="panel-note">The Admin Key protects Stock, Ledger, Overview, and Setup from Client mode. Anyone at the till can still ring up sales without it.</p>
+            <label class="field"><span>Current Admin Key</span><input type="password" id="setCurrentKey" autocomplete="off" /></label>
+            <label class="field"><span>New Admin Key</span><input type="password" id="setNewKey" autocomplete="off" /></label>
+            <label class="field"><span>Confirm new Admin Key</span><input type="password" id="setConfirmKey" autocomplete="off" /></label>
+            <button class="btn btn-primary" id="changeAdminKeyBtn">Update Admin Key</button>
+          </div>
+
+        <div class="panel panel-danger panel-full">
+            <h2>Danger zone</h2>
+            <p class="panel-note">These can't be undone. Both require your Admin Key again to confirm, even though you're already unlocked.</p>
+            <div class="danger-row">
+              <div>
+                <div class="danger-row-title">Reset sales &amp; stock</div>
+                <div class="danger-row-desc">Clears the Ledger, Overview history, and held sales, and sets every product's stock to 0. Products, prices, categories, and settings are kept.</div>
+              </div>
+              <button class="btn btn-danger" id="resetSalesStockBtn">Reset&hellip;</button>
+            </div>
+            <div class="danger-row">
+              <div>
+                <div class="danger-row-title">Reset all data</div>
+                <div class="danger-row-desc">Wipes everything back to a blank install &mdash; products, sales, categories, settings, and the Admin Key itself. You'll set a new Admin Key right after.</div>
+              </div>
+              <button class="btn btn-danger" id="resetAllBtn">Reset&hellip;</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Product edit modal -->
+  <div class="modal-overlay" id="productModalOverlay">
+    <div class="modal">
+      <h2 id="productModalTitle">Add product</h2>
+      <label class="field"><span>Name</span><input type="text" id="pmName" /></label>
+      <div class="field-row">
+        <label class="field"><span>SKU / barcode</span><input type="text" id="pmSku" /></label>
+        <label class="field"><span>Category</span><select id="pmCategory"></select></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Price</span><input type="number" id="pmPrice" min="0" step="0.01" /></label>
+        <label class="field"><span>Cost</span><input type="number" id="pmCost" min="0" step="0.01" /></label>
+        <label class="field"><span>Stock on hand</span><input type="number" id="pmStock" min="0" step="1" /></label>
+      </div>
+      <label class="field"><span>Supplier</span><input type="text" id="pmSupplier" placeholder="e.g. Marltons, Bio Farm…" /></label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="pmDeleteBtn" style="display:none;">Delete</button>
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="pmCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="pmSaveBtn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Held sales modal -->
+  <div class="modal-overlay" id="heldModalOverlay">
+    <div class="modal modal-narrow">
+      <h2>Held sales</h2>
+      <div id="heldList" class="held-list"></div>
+      <div class="modal-actions">
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="heldCloseBtn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin key modal (create on first run, or unlock to leave client mode) -->
+  <div class="modal-overlay" id="adminModalOverlay">
+    <div class="modal modal-narrow">
+      <h2 id="adminModalTitle">Enter Admin Key</h2>
+      <p class="panel-note" id="adminModalNote">Leaving Client mode requires the Admin Key.</p>
+
+      <div id="adminUnlockFields">
+        <label class="field"><span>Admin Key</span><input type="password" id="adminKeyInput" autocomplete="off" /></label>
+      </div>
+
+      <div id="adminCreateFields" style="display:none;">
+        <label class="field"><span>Choose an Admin Key</span><input type="password" id="adminKeyCreateInput" autocomplete="off" /></label>
+        <label class="field"><span>Confirm Admin Key</span><input type="password" id="adminKeyConfirmInput" autocomplete="off" /></label>
+      </div>
+
+      <div class="modal-actions">
+        <div class="modal-actions-right" id="adminModalActions">
+          <button class="btn btn-ghost" id="adminCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="adminConfirmBtn">Unlock</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import products: column mapping modal -->
+  <div class="modal-overlay" id="importModalOverlay">
+    <div class="modal">
+      <h2>Import products</h2>
+      <p class="panel-note" id="importFileLabel">Match the columns from your file to Immaculate's product fields.</p>
+
+      <div class="field-row">
+        <label class="field"><span>Name *</span><select id="mapName"></select></label>
+        <label class="field"><span>SKU / barcode</span><select id="mapSku"></select></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Category</span><select id="mapCategory"></select></label>
+        <label class="field"><span>Price *</span><select id="mapPrice"></select></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Cost</span><select id="mapCost"></select></label>
+        <label class="field"><span>Stock on hand</span><select id="mapStock"></select></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Supplier</span><select id="mapSupplier"></select></label>
+      </div>
+
+      <div class="table-wrap import-preview">
+        <table class="data-table" id="importPreviewTable"></table>
+      </div>
+      <p class="panel-note" id="importSummary"></p>
+
+      <div class="modal-actions">
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="importCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="importConfirmBtn">Import products</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charge / payment modal -->
+  <div class="modal-overlay" id="chargeModalOverlay">
+    <div class="modal modal-narrow">
+      <h2>Take payment</h2>
+      <div class="charge-total-display">
+        <span>Total due</span>
+        <span id="chargeTotalDisplay">0.00</span>
+      </div>
+      <div class="segmented" id="paymentMethodSeg">
+        <button class="seg-btn active" data-method="Cash">Cash</button>
+        <button class="seg-btn" data-method="Card">Card</button>
+        <button class="seg-btn" data-method="Other">Other</button>
+      </div>
+      <label class="field" id="tenderedField"><span>Amount tendered</span><input type="number" id="tenderedInput" min="0" step="0.01" /></label>
+      <div class="change-display" id="changeDisplay" style="display:none;">
+        <span>Change due</span>
+        <span id="changeAmount">0.00</span>
+      </div>
+      <div class="modal-actions">
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="chargeCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="chargeConfirmBtn">Complete sale</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt preview modal -->
+  <div class="modal-overlay" id="receiptModalOverlay">
+    <div class="modal modal-narrow">
+      <h2>Sale complete</h2>
+      <div class="receipt-preview" id="receiptPreview"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="receiptRefundBtn" style="display:none;">Refund this sale</button>
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="receiptCloseBtn">Close</button>
+          <button class="btn btn-primary" id="receiptPrintBtn">Print receipt</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic confirm modal: replaces native confirm(), which can be unreliable
+       (blocking the renderer, losing focus, or appearing behind the window)
+       on some Windows setups. -->
+  <div class="modal-overlay" id="confirmModalOverlay">
+    <div class="modal modal-narrow">
+      <h2 id="confirmModalTitle">Are you sure?</h2>
+      <p class="panel-note" id="confirmModalBody"></p>
+      <div class="modal-actions">
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="confirmModalCancelBtn">Cancel</button>
+          <button class="btn btn-danger" id="confirmModalOkBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
