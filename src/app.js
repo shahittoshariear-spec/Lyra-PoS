@@ -14,7 +14,7 @@
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-  const PROTECTED_VIEWS = ['stock', 'ledger', 'dashboard', 'reports', 'settings'];
+  const PROTECTED_VIEWS = ['dashboard', 'reports', 'settings'];
 
   function money(n) {
     const v = Number(n || 0);
@@ -43,6 +43,16 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  // What counts as a search hit: the product's name, its SKU/barcode, or the
+  // shop's own short name for it — so typing "mp" can bring up Puppy Food.
+  // One helper, so the Till, Stock and the bulk selector can never disagree.
+  function matchesQuery(p, q) {
+    if (!q) return true;
+    return (p.name || '').toLowerCase().includes(q) ||
+      (p.sku || '').toLowerCase().includes(q) ||
+      (p.alias || '').toLowerCase().includes(q);
+  }
+
   const MODAL_CLOSE_MS = 200;
   function openModal(el) {
     if (typeof el === 'string') el = $(el);
@@ -63,6 +73,11 @@
       if (el.dataset.openToken !== token) return; // a newer open superseded this close
       el.classList.remove('active');
       el.classList.remove('closing');
+      // Whatever the modal was for (a finished sale, an edit), the next thing
+      // that usually happens is a scan — so hand the keyboard back to the
+      // barcode box rather than leaving it wherever the modal left it. This is
+      // what stopped scans landing in the tendered-amount field after a sale.
+      if ($('#view-till').classList.contains('active')) focusScanTarget();
     }, MODAL_CLOSE_MS);
   }
 
@@ -142,12 +157,23 @@
     if (view === 'till') { renderCatalog(); renderDaySummary(); focusScanTarget(); }
   }
 
+  // The pill's geometry only changes when the window is resized, but this used to
+  // read offsetTop/offsetHeight on every single view switch — a forced layout of
+  // the whole document, which got slower the more rows the tables were holding.
+  const navPillMetrics = new Map();
+  window.addEventListener('resize', () => navPillMetrics.clear());
+
   function updateNavPill() {
     const activeBtn = document.querySelector('.nav-btn.active');
     const pill = $('#navPill');
     if (!activeBtn || !pill) return;
-    pill.style.transform = `translateY(${activeBtn.offsetTop}px)`;
-    pill.style.height = activeBtn.offsetHeight + 'px';
+    let metrics = navPillMetrics.get(activeBtn);
+    if (!metrics) {
+      metrics = { top: activeBtn.offsetTop, height: activeBtn.offsetHeight };
+      navPillMetrics.set(activeBtn, metrics);
+    }
+    pill.style.transform = `translateY(${metrics.top}px)`;
+    pill.style.height = metrics.height + 'px';
   }
 
   function initClock() {
@@ -205,6 +231,12 @@
     openAdminModal('unlock', null, opts);
   }
 
+  // Stock and the Ledger are wide open in Client mode: whoever is on the till can
+  // check what's left, add or change a product, look a sale up, reprint it, or
+  // hand money back. Only Overview, Reports and Setup are held back, and the
+  // two Danger Zone resets still ask for the key again on top of that (see
+  // requireAdminConfirmation above).
+
   function initAdminModal() {
     $('#adminCancelBtn').addEventListener('click', () => {
       pendingConfirmAction = null;
@@ -256,14 +288,23 @@
   }
 
   // ---------------- Barcode scanning ----------------
-  // Most barcode scanners act as a fast keyboard: they "type" the code, then send Enter.
-  // We buffer keystrokes and treat a fast burst ending in Enter as a scan.
+  // Most scanners act as a fast keyboard: they type the code, then press Enter.
+  // Keystrokes are buffered document-wide, so a scan still registers when the
+  // barcode box isn't focused (straight after a sale, or after clicking
+  // anywhere); the box's own contents are considered as well, because that is
+  // where a scanner's characters land when it *is* focused. On Enter the
+  // candidate that actually resolves to a product wins, so a slow scanner — or
+  // a stale code left in the box — can't make a scan quietly disappear.
 
   function initBarcodeScanning() {
     let buffer = '';
     let lastTime = 0;
-    const FAST_GAP_MS = 40;   // scanners type far faster than a human
-    const MIN_LEN = 3;
+    // Deliberately generous. A cheap scanner is near-instant, but a wireless one
+    // can be well over 100ms per character, and a busy till adds jitter of its
+    // own — so a tight threshold is exactly what made scans intermittent.
+    const FAST_GAP_MS = 150;
+    const ENTER_GAP_MS = 500;  // last character to Enter
+    const MIN_LEN = 2;         // shop codes can be as short as "A1"
 
     document.addEventListener('keydown', (e) => {
       const now = Date.now();
@@ -272,13 +313,9 @@
 
       // Ignore navigation/modifier keys, but let printable characters and Enter through.
       if (e.key === 'Enter') {
-        if (buffer.length >= MIN_LEN && gap < 300) {
-          const code = buffer;
-          buffer = '';
-          handleScan(code, e);
-        } else {
-          buffer = '';
-        }
+        const burst = (buffer.length >= MIN_LEN && gap < ENTER_GAP_MS) ? buffer : '';
+        buffer = '';
+        handleScanEnter(burst, e);
         return;
       }
       if (e.key.length !== 1) return; // ignore Shift, Tab, arrows, etc.
@@ -291,39 +328,98 @@
     }, true);
   }
 
-  function handleScan(code, evt) {
-    const active = document.activeElement;
-
-    // If the SKU field in the product editor is focused, fill it instead of adding to cart.
-    if (active && active.id === 'pmSku') {
-      return; // let it type normally, the field already received the characters
-    }
-    // If typing in any other text input/select that isn't the till search box, don't intercept.
-    const tag = active ? active.tagName.toLowerCase() : '';
+  // True when the keystrokes belong to some other field — the product editor's
+  // SKU box, a modal's inputs, the stock filter — which must never be hijacked.
+  function isForeignTypingField(el) {
+    if (!el) return false;
+    const tag = el.tagName.toLowerCase();
     const isTypingField = tag === 'input' || tag === 'select' || tag === 'textarea';
-    if (isTypingField && active.id !== 'productSearch') return;
+    return isTypingField && el.id !== 'productSearch';
+  }
 
-    // Only auto-add on the Till screen.
-    if (!$('#view-till').classList.contains('active')) return;
+  // Resolves scanned/typed text to a product, with no side effects — no toasts,
+  // no cart, no DOM — so several candidates for the same scan can be tried
+  // before committing to one. An exact SKU/barcode wins; otherwise the text is
+  // treated as a search and only counts once it has narrowed to a single
+  // product, so a half-typed word can never add the wrong thing.
+  function resolveScanText(text) {
+    const t = String(text == null ? '' : text).trim();
+    if (!t) return { product: null, matches: null, text: '' };
+    const lower = t.toLowerCase();
+    const bySku = DATA.products.find(p => (p.sku || '').toLowerCase() === lower);
+    if (bySku) return { product: bySku, matches: null, text: t };
+    const matches = DATA.products.filter(p => matchesQuery(p, lower));
+    return { product: matches.length === 1 ? matches[0] : null, matches, text: t };
+  }
 
-    const product = DATA.products.find(p => (p.sku || '').toLowerCase() === code.toLowerCase());
-    if (product) {
-      pulseTapeBody();
-      addToCart(product);
-      toast('Scanned: ' + product.name);
-      $('#productSearch').value = '';
-      renderCatalog();
-    } else {
-      toast('No product with barcode "' + code + '"');
-      $('#productSearch').value = code;
-      renderCatalog();
-      const input = $('#productSearch');
-      input.classList.remove('shake-error');
-      void input.offsetWidth;
-      input.classList.add('shake-error');
-    }
+  // What one Enter press should be taken to mean. Both places a scan can land
+  // are considered; the one that resolves to a product wins, and if neither does
+  // the barcode box is used, which is what a person typed.
+  function bestScanText(burst) {
+    const input = $('#productSearch');
+    const candidates = [];
+    [input ? input.value : '', burst].forEach(t => {
+      const trimmed = String(t == null ? '' : t).trim();
+      if (trimmed && !candidates.includes(trimmed)) candidates.push(trimmed);
+    });
+    return candidates.find(t => resolveScanText(t).product) || candidates[0] || '';
+  }
+
+  function handleScanEnter(burst, evt) {
+    // Somewhere else entirely is being typed into; leave it alone.
+    if (isForeignTypingField(document.activeElement)) return;
+    commitScan(bestScanText(burst));
     evt.preventDefault();
   }
+
+  // Adds what was scanned, or what was typed into the barcode/search box, and
+  // clears that box so the next scan starts clean. Returns true when something
+  // went into the sale.
+  function commitScan(typed) {
+    const text = String(typed == null ? '' : typed).trim();
+    const input = $('#productSearch');
+    if (!text) return false;
+    if (!$('#view-till').classList.contains('active')) return false;
+
+    const { product, matches } = resolveScanText(text);
+
+    if (!product) {
+      toast(matches && matches.length > 1
+        ? matches.length + ' products match "' + text + '" — narrow it down.'
+        : 'No product matches "' + text + '"');
+      // An unrecognised code is left on screen so it can be read and re-typed —
+      // selected, so the next scan replaces it instead of being glued onto it.
+      if (input) {
+        input.value = text;
+        renderCatalog();
+        shakeSearchBox(input);
+        focusScanTarget();
+        input.select();
+      }
+      return false;
+    }
+
+    // The box is emptied before the add is attempted. Leaving the code behind
+    // when the item couldn't go in (nothing left in stock) used to mean the next
+    // scan was appended to it, which then matched nothing at all.
+    const boxHadText = !!input && input.value !== '';
+    if (input) input.value = '';
+    pulseTapeBody();
+    const added = addToCart(product);
+    if (boxHadText) renderCatalog();
+    focusScanTarget();
+    if (!added) return false;
+    toast('Added: ' + product.name);
+    return true;
+  }
+
+  function shakeSearchBox(input) {
+    if (!input) return;
+    input.classList.remove('shake-error');
+    void input.offsetWidth;
+    input.classList.add('shake-error');
+  }
+
 
   function focusScanTarget() {
     const el = $('#productSearch');
@@ -334,6 +430,11 @@
   }
 
   // ---------------- Till / catalog ----------------
+
+  // How many product cards the Till draws at once. Shops can carry thousands of
+  // products; drawing them all on every keystroke is what makes a till feel
+  // slow, so the list is capped once it gets long (searching narrows it).
+  const MAX_CATALOG_CARDS = 120;
 
   function renderCategoryChips() {
     const row = $('#categoryChips');
@@ -352,42 +453,38 @@
     renderCategoryChips();
     const q = ($('#productSearch').value || '').trim().toLowerCase();
     const grid = $('#productGrid');
-    grid.innerHTML = '';
+    // If the category on screen has just been deleted, fall back to everything.
+    if (activeCategory !== 'All' && !DATA.categories.includes(activeCategory)) activeCategory = 'All';
 
-    const items = DATA.products.filter(p => {
-      const matchCat = activeCategory === 'All' || p.category === activeCategory;
-      const matchQ = !q || p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q);
-      return matchCat && matchQ;
-    }).sort((a, b) => a.name.localeCompare(b.name));
+    const items = DATA.products.filter(p =>
+      (activeCategory === 'All' || p.category === activeCategory) && matchesQuery(p, q)
+    ).sort((a, b) => a.name.localeCompare(b.name));
 
     if (!items.length) {
       grid.innerHTML = '<div class="tape-empty" style="grid-column:1/-1;">No products match. Add stock from the Stock tab, or scan a barcode.</div>';
       return;
     }
 
-    const fragment = document.createDocumentFragment();
-    items.forEach(p => {
-      const card = document.createElement('button');
+    // A shop can hold thousands of products, and drawing every one of them on
+    // every keystroke is what makes the Till feel slow. Only the first screenful
+    // is drawn once the list gets long — typing in the search box narrows it.
+    const shown = items.slice(0, MAX_CATALOG_CARDS);
+    let html = '';
+    shown.forEach(p => {
       const outOfStock = p.stock <= 0;
-      card.className = 'product-card' + (outOfStock ? ' out-of-stock' : '');
-      card.disabled = outOfStock;
       const low = p.stock > 0 && p.stock <= DATA.settings.lowStockThreshold;
-      card.innerHTML = `
-        <div class="product-card-name">${escapeHtml(p.name)}</div>
+      html += `<button class="product-card${outOfStock ? ' out-of-stock' : ''}" data-id="${p.id}"${outOfStock ? ' disabled' : ''}>
+        <div class="product-card-name">${escapeHtml(p.name)}${p.alias ? ' <span class="row-sub">' + escapeHtml(p.alias) + '</span>' : ''}</div>
         <div class="product-card-meta">
           <span class="product-card-price">${money(p.price)}</span>
           <span class="product-card-stock ${low ? 'low' : ''}">${outOfStock ? 'Out of stock' : p.stock + ' left'}</span>
         </div>
-      `;
-      card.addEventListener('click', (e) => {
-        if (card.disabled) return;
-        flyToCart(card);
-        pulseTapeBody();
-        addToCart(p);
-      });
-      fragment.appendChild(card);
+      </button>`;
     });
-    grid.appendChild(fragment);
+    if (items.length > shown.length) {
+      html += `<div class="tape-empty" style="grid-column:1/-1;">Showing ${shown.length} of ${items.length} products — type to narrow the list.</div>`;
+    }
+    grid.innerHTML = html;
   }
 
   function flyToCart(sourceEl) {
@@ -431,11 +528,12 @@
     const inCart = existing ? existing.qty : 0;
     if (inCart + 1 > product.stock) {
       toast('Not enough stock left for ' + product.name);
-      return;
+      return false;
     }
     if (existing) existing.qty += 1;
     else cart.push({ productId: product.id, name: product.name, price: product.price, qty: 1 });
     renderCart(existing ? product.id : null);
+    return true;
   }
 
   function changeQty(productId, delta) {
@@ -723,16 +821,132 @@
 
   // ---------------- Refunds ----------------
 
-  async function refundSale(sale) {
-    if (sale.type === 'return') { toast('This is already a refund record.'); return; }
-    const already = DATA.sales.some(s => s.refundOf === sale.id);
-    if (already) { toast('This sale has already been refunded.'); return; }
+  function findSaleById(id) { return DATA.sales.find(s => s.id === id) || null; }
+
+  // How many of each product have already been handed back for this sale.
+  // Refunds are stored as their own records (type 'return') linked back by
+  // refundOf, so what is left to refund is the sold quantity minus the sum of
+  // every refund already recorded against it.
+  function refundedByProduct(sale) {
+    const refunded = new Map();
+    DATA.sales.forEach(r => {
+      if (r.type !== 'return' || r.refundOf !== sale.id) return;
+      (r.items || []).forEach(li => refunded.set(li.productId, (refunded.get(li.productId) || 0) + li.qty));
+    });
+    return refunded;
+  }
+
+  // The lines of a sale that can still go back, with how many are left on each.
+  function refundableLines(sale) {
+    if (!sale || sale.type === 'return' || !Array.isArray(sale.items)) return [];
+    const refunded = refundedByProduct(sale);
+    return sale.items
+      .map(item => ({ item, remaining: item.qty - (refunded.get(item.productId) || 0) }))
+      .filter(line => line.remaining > 0);
+  }
+
+  // Offered on any past sale with something left to hand back. No Admin Key is
+  // wanted: a refund is a normal part of a day on the till.
+  function canRefundSale(sale) {
+    return !!sale && sale.type !== 'return' && refundableLines(sale).length > 0;
+  }
+
+  let refundTarget = null;
+  let refundQty = new Map();   // productId -> quantity to hand back
+
+  function openRefundModal(sale) {
+    const lines = refundableLines(sale);
+    if (!lines.length) { toast('There is nothing left to refund on this sale.'); return; }
+    refundTarget = sale;
+    // Start with everything selected — the common case is a full refund.
+    refundQty = new Map(lines.map(l => [l.item.productId, l.remaining]));
+    $('#refundModalTitle').textContent = 'Refund sale #' + sale.number;
+    renderRefundLines();
+    openModal('#refundModalOverlay');
+  }
+
+  // Tax is apportioned from the original sale rather than recalculated from the
+  // current tax rate, so a refund can never drift from the tax actually charged.
+  function refundSelectionTotals() {
+    let subtotal = 0;
+    refundTarget.items.forEach(li => {
+      const q = refundQty.get(li.productId) || 0;
+      if (q > 0) subtotal += li.price * q;
+    });
+    const ratio = refundTarget.subtotal ? subtotal / refundTarget.subtotal : 0;
+    const tax = refundTarget.tax * ratio;
+    return { subtotal, tax, total: subtotal + tax };
+  }
+
+  function renderRefundLines() {
+    const wrap = $('#refundLines');
+    const refunded = refundedByProduct(refundTarget);
+    wrap.innerHTML = '';
+
+    refundTarget.items.forEach(li => {
+      const already = refunded.get(li.productId) || 0;
+      const max = li.qty - already;
+      const q = refundQty.get(li.productId) || 0;
+
+      const row = document.createElement('div');
+      row.className = 'refund-line' + (max <= 0 ? ' refund-line-done' : '');
+      row.innerHTML = `
+        <div class="refund-line-info">
+          <div class="refund-line-name">${escapeHtml(li.name)}</div>
+          <div class="refund-line-meta">${money(li.price)} each · ${max > 0 ? max + ' of ' + li.qty + ' refundable' : 'already refunded'}</div>
+        </div>
+        <div class="refund-line-qty">
+          <button class="qty-btn" data-step="-1"${q <= 0 ? ' disabled' : ''}>−</button>
+          <span class="refund-line-qty-num">${q}</span>
+          <button class="qty-btn" data-step="1"${q >= max ? ' disabled' : ''}>+</button>
+        </div>
+        <div class="refund-line-total">${money(li.price * q)}</div>
+      `;
+      row.querySelectorAll('.qty-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const next = (refundQty.get(li.productId) || 0) + Number(btn.dataset.step);
+          refundQty.set(li.productId, Math.max(0, Math.min(max, next)));
+          renderRefundLines();
+        });
+      });
+      wrap.appendChild(row);
+    });
+
+    const totals = refundSelectionTotals();
+    $('#refundTotalValue').textContent = money(totals.total);
+    $('#refundConfirmBtn').disabled = totals.subtotal <= 0;
+  }
+
+  async function submitRefund() {
+    if (!refundTarget) return;
+    const sale = refundTarget;
+    const selected = sale.items
+      .map(li => ({ ...li, qty: refundQty.get(li.productId) || 0 }))
+      .filter(li => li.qty > 0);
+    if (!selected.length) { toast('Choose at least one item to refund.'); return; }
+
+    const totals = refundSelectionTotals();
+    const wholeSale = refundableLines(sale).every(l => (refundQty.get(l.item.productId) || 0) >= l.remaining);
+
     const ok = await confirmDialog(
-      'Refund this sale?',
-      'Refund sale #' + sale.number + ' for ' + money(sale.total) + '? Stock will be restored.',
-      'Refund sale'
+      wholeSale ? 'Refund sale #' + sale.number + '?' : 'Refund part of sale #' + sale.number + '?',
+      'Hand back ' + (wholeSale ? 'the whole sale' : selected.length + ' item' + (selected.length > 1 ? 's' : '')) +
+      ' for ' + money(totals.total) + '? Stock goes back on the shelf.',
+      wholeSale ? 'Refund sale' : 'Refund items'
     );
     if (!ok) return;
+
+    closeModal('#refundModalOverlay');
+    await refundSale(sale, selected, totals);
+  }
+
+  // Records a refund against a sale. `refundItems` may be the whole sale or just
+  // part of it. The refund is stored as its own 'return' record with negative
+  // totals, which is what makes it count correctly in the Ledger, the day
+  // summary and every report, and it carries refundOf so the original sale can
+  // always be found again.
+  async function refundSale(sale, refundItems, totals) {
+    const items = refundItems.map(li => ({ ...li, lineTotal: li.price * li.qty }));
 
     const refund = {
       id: uid('r'),
@@ -740,16 +954,17 @@
       date: new Date().toISOString(),
       type: 'return',
       refundOf: sale.id,
-      items: sale.items,
-      subtotal: -sale.subtotal,
-      tax: -sale.tax,
-      total: -sale.total,
+      refundOfNumber: sale.number,
+      items,
+      subtotal: -totals.subtotal,
+      tax: -totals.tax,
+      total: -totals.total,
       paymentMethod: sale.paymentMethod,
-      tendered: -sale.total,
+      tendered: -totals.total,
       change: 0
     };
 
-    sale.items.forEach(li => {
+    items.forEach(li => {
       const p = DATA.products.find(pp => pp.id === li.productId);
       if (p) p.stock += li.qty;
     });
@@ -757,11 +972,30 @@
     DATA.sales.push(refund);
     await persist();
     renderCatalog();
+    if ($('#view-stock').classList.contains('active')) renderStock();
     renderDaySummary();
     closeModal('#receiptModalOverlay');
-    toast('Sale #' + sale.number + ' refunded.');
+
+    const wholeSale = refundableLines(sale).length === 0;
+    toast(wholeSale ? 'Sale #' + sale.number + ' refunded.' : 'Part of sale #' + sale.number + ' refunded.');
     if ($('#view-ledger').classList.contains('active')) renderLedger();
     if ($('#view-dashboard').classList.contains('active')) renderDashboard();
+
+    // Put the refund's own receipt on screen so it can be printed (or handed
+    // over) straight away.
+    currentSaleForReceipt = refund;
+    currentReceiptIsHistorical = false;
+    showReceiptModal(refund);
+  }
+
+  function initRefundModal() {
+    $('#refundCancelBtn').addEventListener('click', () => closeModal('#refundModalOverlay'));
+    $('#refundAllBtn').addEventListener('click', () => {
+      if (!refundTarget) return;
+      refundableLines(refundTarget).forEach(l => refundQty.set(l.item.productId, l.remaining));
+      renderRefundLines();
+    });
+    $('#refundConfirmBtn').addEventListener('click', submitRefund);
   }
 
   // ---------------- Receipt ----------------
@@ -774,7 +1008,15 @@
     if (s.address) lines.push(center(s.address, 32));
     if (s.phone) lines.push(center(s.phone, 32));
     lines.push('-'.repeat(32));
-    lines.push((isReturn ? 'REFUND for Sale #' : 'Sale #') + sale.number);
+    const original = isReturn ? findSaleById(sale.refundOf) : null;
+    const originalNumber = isReturn ? (sale.refundOfNumber || (original && original.number) || sale.number) : sale.number;
+    if (isReturn) {
+      lines.push('REFUND of Sale #' + originalNumber);
+      lines.push('Refund #' + sale.number);
+      if (original && Math.abs(sale.total) < Math.abs(original.total) - 0.005) lines.push('(part of the sale above)');
+    } else {
+      lines.push('Sale #' + sale.number);
+    }
     lines.push(new Date(sale.date).toLocaleString());
     lines.push('-'.repeat(32));
     sale.items.forEach(li => {
@@ -813,10 +1055,64 @@
     </style></head><body>${escapeHtml(text)}</body></html>`;
   }
 
+  // A short receipt for Setup's "Test print" button. Built the same way as a
+  // real one, so it also proves the shop's own details fit the paper.
+  function sampleReceiptText() {
+    const s = DATA.settings;
+    const cur = s.currency || '';
+    const lines = [];
+    lines.push(center(s.shopName || 'My Shop', 32));
+    if (s.address) lines.push(center(s.address, 32));
+    if (s.phone) lines.push(center(s.phone, 32));
+    lines.push('-'.repeat(32));
+    lines.push('Test receipt');
+    lines.push(new Date().toLocaleString());
+    lines.push('-'.repeat(32));
+    lines.push('Sample item');
+    lines.push(padRow('  1 x ' + cur + '10.00', cur + '10.00'));
+    lines.push('-'.repeat(32));
+    lines.push(padRow('TOTAL', cur + '10.00'));
+    lines.push('');
+    lines.push(center('Printer set up correctly.', 32));
+    return lines.join('\n');
+  }
+
+  // Sends a receipt straight to a thermal printer as raw ESC/POS. The printer's
+  // Windows driver is not used at all, so this works with printers that cannot
+  // print through their own driver.
+  async function printReceiptToPrinter(sale, printer) {
+    const res = await window.tally.printReceiptRaw(
+      receiptText(sale),
+      printer,
+      { cut: DATA.settings.receiptCutPaper !== false }
+    );
+    if (res && res.ok) {
+      toast('Receipt printed.');
+    } else {
+      toast('Could not print: ' + ((res && res.error) || 'unknown error'));
+    }
+    return res;
+  }
+
+  // Prints without opening the preview first, for a customer who comes back for
+  // a copy. Uses the receipt printer from Setup when one is chosen, and the
+  // normal print dialog otherwise.
+  async function reprintReceipt(sale) {
+    const printer = (DATA.settings.receiptPrinter || '').trim();
+    if (printer) { await printReceiptToPrinter(sale, printer); return; }
+    const res = await window.tally.printReceipt(receiptHtml(sale));
+    if (res && res.ok) toast('Sent to printer.');
+  }
+
   function showReceiptModal(sale) {
     $('#receiptPreview').textContent = receiptText(sale);
-    const canRefund = currentReceiptIsHistorical && sale.type !== 'return' && unlocked && !DATA.sales.some(s => s.refundOf === sale.id);
+    const isReturn = sale.type === 'return';
+    $('#receiptModalTitle').textContent = isReturn
+      ? 'Refund #' + sale.number
+      : (currentReceiptIsHistorical ? 'Sale #' + sale.number : 'Sale complete');
+    const canRefund = currentReceiptIsHistorical && canRefundSale(sale);
     $('#receiptRefundBtn').style.display = canRefund ? 'inline-flex' : 'none';
+    $('#receiptPrintBtn').textContent = currentReceiptIsHistorical ? 'Reprint receipt' : 'Print receipt';
     openModal('#receiptModalOverlay');
   }
 
@@ -824,17 +1120,39 @@
     $('#receiptCloseBtn').addEventListener('click', () => closeModal('#receiptModalOverlay'));
     $('#receiptPrintBtn').addEventListener('click', async () => {
       if (!currentSaleForReceipt) return;
+      const printer = (DATA.settings.receiptPrinter || '').trim();
+      if (printer) {
+        await printReceiptToPrinter(currentSaleForReceipt, printer);
+        return;
+      }
       const res = await window.tally.printReceipt(receiptHtml(currentSaleForReceipt));
       if (res && res.ok) toast('Sent to printer.');
     });
     $('#receiptRefundBtn').addEventListener('click', () => {
-      if (currentSaleForReceipt) refundSale(currentSaleForReceipt);
+      if (currentSaleForReceipt) openRefundModal(currentSaleForReceipt);
     });
   }
 
   // ---------------- Stock ----------------
 
   let selectedStockIds = new Set();
+  let visibleStockCount = 0;
+
+  // Long tables are what make the app feel heavy: every extra row is another row
+  // the browser has to lay out on each view change, and a shop can hold thousands
+  // of products. Only the first page of rows is drawn, and "Show more" reveals
+  // the next page, so nothing is ever out of reach. Searching, picking a
+  // category, or "Select all" still covers every matching product.
+  const MAX_STOCK_ROWS = 500;
+  const MAX_LEDGER_ROWS = 500;
+
+  // How many rows are currently revealed, and which filter that page size
+  // belongs to. Changing the search or the category starts a fresh first page;
+  // clicking "Show more" (or saving an edit) keeps the rows already revealed.
+  let stockRowLimit = MAX_STOCK_ROWS;
+  let stockRenderKey = null;
+  let ledgerRowLimit = MAX_LEDGER_ROWS;
+  let ledgerRenderKey = null;
 
   function renderStock() {
     const filterSel = $('#stockCategoryFilter');
@@ -847,14 +1165,20 @@
     const cat = filterSel.value || 'All';
     const body = $('#stockTableBody');
 
+    const renderKey = cat + '\u0000' + q;
+    if (renderKey !== stockRenderKey) {
+      stockRenderKey = renderKey;
+      stockRowLimit = MAX_STOCK_ROWS;
+    }
+
     const items = DATA.products
-      .filter(p => (cat === 'All' || p.category === cat))
-      .filter(p => !q || p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q))
+      .filter(p => (cat === 'All' || p.category === cat) && matchesQuery(p, q))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     // Drop selections for products no longer in view (filtered out or deleted).
     const visibleIds = new Set(items.map(p => p.id));
     selectedStockIds.forEach(id => { if (!visibleIds.has(id)) selectedStockIds.delete(id); });
+    visibleStockCount = items.length;
 
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:26px;">No products yet. Click "Add product", scan a barcode, or import a list.</td></tr>';
@@ -862,40 +1186,41 @@
       return;
     }
 
-    const fragment = document.createDocumentFragment();
-    items.forEach(p => {
+    // One HTML string instead of a node with two listeners per row. A shop can
+    // hold thousands of products, and clicks are handled by a single listener on
+    // the table body (see initStockView).
+    const shownRows = items.slice(0, stockRowLimit);
+    let rowsHtml = shownRows.map(p => {
       const low = p.stock <= DATA.settings.lowStockThreshold;
       const checked = selectedStockIds.has(p.id);
-      const tr = document.createElement('tr');
-      if (checked) tr.classList.add('stock-row-selected');
-      tr.innerHTML = `
-        <td class="checkbox-col"><input type="checkbox" class="stock-row-check" ${checked ? 'checked' : ''} /></td>
-        <td>${escapeHtml(p.name)}</td>
-        <td>${escapeHtml(p.sku || '—')}</td>
-        <td>${escapeHtml(p.category)}</td>
-        <td>${escapeHtml(p.supplier || '—')}</td>
-        <td class="num">${money(p.price)}</td>
-        <td class="num">${p.cost > 0 ? money(p.cost) : '<span class="cost-missing" title="No cost set — profit reporting will treat this as R0 cost">' + money(p.cost) + ' ⚠</span>'}</td>
-        <td class="num"><span class="stock-badge ${low ? 'low' : ''}">${p.stock}</span></td>
-        <td><span class="row-link">Edit</span></td>
-      `;
-      const checkbox = tr.querySelector('.stock-row-check');
-      checkbox.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (checkbox.checked) selectedStockIds.add(p.id);
-        else selectedStockIds.delete(p.id);
-        tr.classList.toggle('stock-row-selected', checkbox.checked);
-        updateStockBulkBar();
-      });
-      tr.addEventListener('click', (e) => {
-        if (e.target === checkbox) return;
-        openProductModal(p.id);
-      });
-      fragment.appendChild(tr);
-    });
-    body.innerHTML = '';
-    body.appendChild(fragment);
+      return `
+        <tr data-id="${p.id}"${checked ? ' class="stock-row-selected"' : ''}>
+          <td class="checkbox-col"><input type="checkbox" class="stock-row-check"${checked ? ' checked' : ''} /></td>
+          <td>${escapeHtml(p.name)}${p.alias ? ' <span class="row-sub">' + escapeHtml(p.alias) + '</span>' : ''}</td>
+          <td>${escapeHtml(p.sku || '—')}</td>
+          <td>${escapeHtml(p.category)}</td>
+          <td>${escapeHtml(p.supplier || '—')}</td>
+          <td class="num">${money(p.price)}</td>
+          <td class="num">${p.cost > 0 ? money(p.cost) : '<span class="cost-missing" title="No cost set — profit reporting will treat this as R0 cost">' + money(p.cost) + ' ⚠</span>'}</td>
+          <td class="num"><span class="stock-badge ${low ? 'low' : ''}">${p.stock}</span></td>
+          <td><span class="row-link">Edit</span></td>
+        </tr>`;
+    }).join('');
+    if (items.length > shownRows.length) {
+      rowsHtml += stockMoreRow(shownRows.length, items.length);
+    }
+    body.innerHTML = rowsHtml;
     updateStockBulkBar();
+  }
+
+  function stockMoreRow(shown, total) {
+    const hidden = total - shown;
+    const next = Math.min(MAX_STOCK_ROWS, hidden);
+    return `<tr class="table-more"><td colspan="9">
+      Showing the first ${shown} of ${total} products.
+      <button type="button" class="table-more-btn" data-more="stock">Show ${next} more</button>
+      <span class="table-more-hint">or search, or pick a category, to narrow the list.</span>
+    </td></tr>`;
   }
 
   function updateStockBulkBar() {
@@ -907,9 +1232,10 @@
     } else {
       bar.style.display = 'none';
     }
+    // Worked out from the selection and the row count, rather than by walking
+    // every checkbox in the table after each render.
     const selectAll = $('#stockSelectAll');
-    const rowChecks = $$('.stock-row-check');
-    selectAll.checked = rowChecks.length > 0 && rowChecks.every(cb => cb.checked);
+    selectAll.checked = visibleStockCount > 0 && n >= visibleStockCount;
     selectAll.indeterminate = n > 0 && !selectAll.checked;
   }
 
@@ -918,13 +1244,33 @@
     $('#stockSearch').addEventListener('input', debounce(renderStock, 120));
     $('#stockCategoryFilter').addEventListener('change', renderStock);
 
+    // One listener for the whole table: the checkbox toggles selection, anything
+    // else on the row opens that product.
+    $('#stockTableBody').addEventListener('click', (e) => {
+      if (e.target.closest('[data-more="stock"]')) {
+        stockRowLimit += MAX_STOCK_ROWS;
+        renderStock();
+        return;
+      }
+      const tr = e.target.closest('tr[data-id]');
+      if (!tr) return;
+      const id = tr.dataset.id;
+      const checkbox = e.target.closest('.stock-row-check');
+      if (checkbox) {
+        if (checkbox.checked) selectedStockIds.add(id);
+        else selectedStockIds.delete(id);
+        tr.classList.toggle('stock-row-selected', checkbox.checked);
+        updateStockBulkBar();
+        return;
+      }
+      openProductModal(id);
+    });
+
     $('#stockSelectAll').addEventListener('change', (e) => {
       const checked = e.target.checked;
       const q = ($('#stockSearch').value || '').toLowerCase();
       const cat = $('#stockCategoryFilter').value || 'All';
-      const items = DATA.products
-        .filter(p => (cat === 'All' || p.category === cat))
-        .filter(p => !q || p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q));
+      const items = DATA.products.filter(p => (cat === 'All' || p.category === cat) && matchesQuery(p, q));
 
       if (checked) items.forEach(p => selectedStockIds.add(p.id));
       else selectedStockIds.clear();
@@ -968,6 +1314,7 @@
       const p = DATA.products.find(pp => pp.id === productId);
       $('#pmName').value = p.name;
       $('#pmSku').value = p.sku || '';
+      $('#pmAlias').value = p.alias || '';
       $('#pmCategory').value = p.category;
       $('#pmPrice').value = p.price;
       $('#pmCost').value = p.cost;
@@ -976,6 +1323,7 @@
     } else {
       $('#pmName').value = '';
       $('#pmSku').value = '';
+      $('#pmAlias').value = '';
       $('#pmPrice').value = '';
       $('#pmCost').value = '';
       $('#pmStock').value = '';
@@ -994,14 +1342,15 @@
       const cost = parseFloat($('#pmCost').value) || 0;
       const stock = parseInt($('#pmStock').value, 10) || 0;
       const sku = $('#pmSku').value.trim();
+      const alias = $('#pmAlias').value.trim();
       const supplier = $('#pmSupplier').value.trim();
       const category = $('#pmCategory').value || DATA.categories[0] || 'General';
 
       if (editingProductId) {
         const p = DATA.products.find(pp => pp.id === editingProductId);
-        Object.assign(p, { name, sku, category, price, cost, stock, supplier });
+        Object.assign(p, { name, sku, alias, category, price, cost, stock, supplier });
       } else {
-        DATA.products.push({ id: nextProductId(), name, sku, category, price, cost, stock, supplier });
+        DATA.products.push({ id: nextProductId(), name, sku, alias, category, price, cost, stock, supplier });
       }
       await persist();
       closeModal('#productModalOverlay');
@@ -1032,28 +1381,42 @@
       return;
     }
 
-    const fragment = document.createDocumentFragment();
-    sales.forEach(sale => {
-      const tr = document.createElement('tr');
-      const itemCount = sale.items.reduce((s, i) => s + i.qty, 0);
+    // Built as one HTML string rather than a node per row with its own click
+    // listener: the Ledger grows forever, and this keeps it quick to open on a
+    // till with years of history. Clicks are handled by one listener (initLedger).
+    const renderKey = dateVal || '';
+    if (renderKey !== ledgerRenderKey) {
+      ledgerRenderKey = renderKey;
+      ledgerRowLimit = MAX_LEDGER_ROWS;
+    }
+    const shownSales = sales.slice(0, ledgerRowLimit);
+    let rowsHtml = shownSales.map(sale => {
+      const itemCount = sale.items.reduce((n, i) => n + i.qty, 0);
       const isReturn = sale.type === 'return';
-      tr.innerHTML = `
-        <td>${isReturn ? 'Refund ' : ''}#${sale.number}</td>
-        <td>${new Date(sale.date).toLocaleString()}</td>
-        <td>${itemCount}</td>
-        <td class="num" style="${isReturn ? 'color:var(--stamp-red);' : ''}">${money(sale.total)}</td>
-        <td>${escapeHtml(sale.paymentMethod)}</td>
-        <td><span class="row-link">View</span></td>
-      `;
-      tr.addEventListener('click', () => {
-        currentSaleForReceipt = sale;
-        currentReceiptIsHistorical = true;
-        showReceiptModal(sale);
-      });
-      fragment.appendChild(tr);
-    });
-    body.innerHTML = '';
-    body.appendChild(fragment);
+      const original = isReturn ? findSaleById(sale.refundOf) : null;
+      const originalNumber = isReturn ? (sale.refundOfNumber || (original && original.number)) : null;
+      const label = isReturn
+        ? 'Refund #' + sale.number + (originalNumber ? ' <span class="row-sub">of #' + originalNumber + '</span>' : '')
+        : '#' + sale.number;
+      return `
+        <tr data-id="${sale.id}">
+          <td>${label}</td>
+          <td>${new Date(sale.date).toLocaleString()}</td>
+          <td>${itemCount}</td>
+          <td class="num" style="${isReturn ? 'color:var(--stamp-red);' : ''}">${money(sale.total)}</td>
+          <td>${escapeHtml(sale.paymentMethod)}</td>
+          <td><span class="row-link" data-action="print">Reprint</span> <span class="row-link" data-action="view">View</span></td>
+        </tr>`;
+    }).join('');
+    if (sales.length > shownSales.length) {
+      const next = Math.min(MAX_LEDGER_ROWS, sales.length - shownSales.length);
+      rowsHtml += `<tr class="table-more"><td colspan="6">
+        Showing the newest ${shownSales.length} of ${sales.length} entries.
+        <button type="button" class="table-more-btn" data-more="ledger">Show ${next} more</button>
+        <span class="table-more-hint">or filter by date to narrow the list.</span>
+      </td></tr>`;
+    }
+    body.innerHTML = rowsHtml;
   }
 
   function initLedger() {
@@ -1061,6 +1424,25 @@
     $('#ledgerClearFilter').addEventListener('click', () => {
       $('#ledgerDateFilter').value = '';
       renderLedger();
+    });
+
+    // One listener for the whole table: "Reprint" prints straight away, clicking
+    // anywhere else on a row opens the receipt (which can refund it).
+    $('#ledgerTableBody').addEventListener('click', (e) => {
+      if (e.target.closest('[data-more="ledger"]')) {
+        ledgerRowLimit += MAX_LEDGER_ROWS;
+        renderLedger();
+        return;
+      }
+      const tr = e.target.closest('tr[data-id]');
+      if (!tr) return;
+      const sale = findSaleById(tr.dataset.id);
+      if (!sale) return;
+      const link = e.target.closest('.row-link');
+      if (link && link.dataset.action === 'print') { reprintReceipt(sale); return; }
+      currentSaleForReceipt = sale;
+      currentReceiptIsHistorical = true;
+      showReceiptModal(sale);
     });
   }
 
@@ -1119,7 +1501,8 @@
     const returnRecords = records.filter(s => s.type === 'return');
     const total = records.reduce((s, r) => s + r.total, 0);
     const profit = records.reduce((s, r) => s + saleProfit(r), 0);
-    const itemsSold = saleRecords.reduce((s, r) => s + r.items.reduce((a, i) => a + i.qty, 0), 0);
+    const itemsSold = saleRecords.reduce((s, r) => s + r.items.reduce((a, i) => a + i.qty, 0), 0) -
+      returnRecords.reduce((s, r) => s + r.items.reduce((a, i) => a + i.qty, 0), 0);
     const byMethod = (method) => records.filter(r => r.paymentMethod === method).reduce((s, r) => s + r.total, 0);
     return {
       key, period, total, profit, itemsSold,
@@ -1365,26 +1748,79 @@
     $('#setNewKey').value = '';
     $('#setConfirmKey').value = '';
     renderSettingsCategoryChips();
+    renderPrinterSetting();
+  }
+
+  // Fills Setup's receipt-printer dropdown from the printers Windows knows about.
+  async function renderPrinterSetting() {
+    const s = DATA.settings;
+    const saved = (s.receiptPrinter || '').trim();
+    $('#setCutPaper').checked = s.receiptCutPaper !== false;
+
+    let printers = [];
+    try { printers = await window.tally.listPrinters(); } catch (err) { printers = []; }
+
+    const options = ['<option value="">Ask me each time (print dialog)</option>'].concat(
+      printers.map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.displayName || p.name)}</option>`)
+    );
+    // If the saved printer is no longer installed, still list it so it is clear
+    // what the app is set to and that it needs changing.
+    if (saved && !printers.some(p => p.name === saved)) {
+      options.push(`<option value="${escapeHtml(saved)}">${escapeHtml(saved)} (not installed)</option>`);
+    }
+
+    const sel = $('#setPrinter');
+    sel.innerHTML = options.join('');
+    sel.value = saved;
   }
 
   function renderSettingsCategoryChips() {
     const row = $('#settingsCategoryChips');
     row.innerHTML = '';
+    if (!DATA.categories.length) DATA.categories.push('General');
+
     DATA.categories.forEach(c => {
+      const inUse = DATA.products.filter(p => p.category === c).length;
+      // The last category can't be removed: every product has to be filed somewhere.
+      const removable = DATA.categories.length > 1;
+
       const chip = document.createElement('span');
       chip.className = 'chip';
       chip.style.cursor = 'default';
-      const inUse = DATA.products.some(p => p.category === c);
-      chip.innerHTML = `${escapeHtml(c)} ${!inUse && DATA.categories.length > 1 ? '<span class="chip-remove" title="Remove">✕</span>' : ''}`;
-      if (!inUse && DATA.categories.length > 1) {
-        chip.querySelector('.chip-remove').addEventListener('click', async () => {
-          DATA.categories = DATA.categories.filter(cat => cat !== c);
-          await persist();
-          renderSettingsCategoryChips();
-        });
+      chip.innerHTML = `${escapeHtml(c)}` +
+        (inUse ? ` <span class="row-sub">${inUse} product${inUse > 1 ? 's' : ''}</span>` : '') +
+        (removable ? ' <span class="chip-remove" title="Remove">✕</span>' : '');
+
+      if (removable) {
+        chip.querySelector('.chip-remove').addEventListener('click', () => removeCategory(c, inUse));
       }
       row.appendChild(chip);
     });
+  }
+
+  // Deleting a category that products are filed under would leave them pointing
+  // at a category that no longer exists, so they are moved to another one first.
+  async function removeCategory(name, inUse) {
+    if (DATA.categories.length <= 1) { toast('At least one category is needed.'); return; }
+    const fallback = DATA.categories.find(c => c !== name);
+
+    if (inUse) {
+      const ok = await confirmDialog(
+        'Delete the "' + name + '" category?',
+        inUse + ' product' + (inUse > 1 ? 's are' : ' is') + ' filed under it. ' +
+        (inUse > 1 ? 'They' : 'It') + ' will be moved to "' + fallback + '".',
+        'Delete category'
+      );
+      if (!ok) return;
+      DATA.products.forEach(p => { if (p.category === name) p.category = fallback; });
+    }
+
+    DATA.categories = DATA.categories.filter(c => c !== name);
+    await persist();
+    renderSettingsCategoryChips();
+    if ($('#view-stock').classList.contains('active')) renderStock();
+    renderCatalog();
+    toast(inUse ? 'Category deleted, products moved to ' + fallback + '.' : 'Category deleted.');
   }
 
   function initSettingsView() {
@@ -1410,6 +1846,25 @@
       toast('Till settings saved.');
     });
 
+    $('#savePrinterBtn').addEventListener('click', async () => {
+      DATA.settings.receiptPrinter = $('#setPrinter').value;
+      DATA.settings.receiptCutPaper = $('#setCutPaper').checked;
+      await persist();
+      toast('Receipt printer saved.');
+    });
+
+    $('#testPrintBtn').addEventListener('click', async () => {
+      const printer = $('#setPrinter').value;
+      if (!printer) { toast('Pick a printer above first.'); return; }
+      const res = await window.tally.printReceiptRaw(
+        sampleReceiptText(),
+        printer,
+        { cut: $('#setCutPaper').checked }
+      );
+      if (res && res.ok) toast('Test receipt sent to ' + printer + '.');
+      else toast('Could not print: ' + ((res && res.error) || 'unknown error'));
+    });
+
     $('#changeAdminKeyBtn').addEventListener('click', async () => {
       const current = $('#setCurrentKey').value;
       const next = $('#setNewKey').value;
@@ -1427,11 +1882,17 @@
     $('#addCategoryBtn').addEventListener('click', async () => {
       const name = $('#newCategoryInput').value.trim();
       if (!name) return;
-      if (DATA.categories.includes(name)) { toast('That category already exists.'); return; }
+      if (DATA.categories.some(c => c.toLowerCase() === name.toLowerCase())) {
+        toast('That category already exists.');
+        return;
+      }
       DATA.categories.push(name);
       $('#newCategoryInput').value = '';
       await persist();
       renderSettingsCategoryChips();
+      if ($('#view-stock').classList.contains('active')) renderStock();
+      renderCatalog();
+      toast('Category added.');
     });
 
     $('#exportBackupBtn').addEventListener('click', async () => {
@@ -1670,6 +2131,7 @@
     initHeldSales();
     initChargeModal();
     initReceiptModal();
+    initRefundModal();
     initStockView();
     initProductModal();
     initLedger();
@@ -1679,6 +2141,25 @@
     initReportsView();
 
     $('#productSearch').addEventListener('input', debounce(renderCatalog, 80));
+    // Enter is handled document-wide by initBarcodeScanning, which reads the box
+    // as well as the keystroke buffer — so there is exactly one place that
+    // decides what an Enter press means and a scan can't be committed twice.
+    // One listener for the product grid, rather than one per card: a shop can
+    // hold thousands of products and re-binding every card on each keystroke is
+    // what makes the Till feel slow.
+    $('#productGrid').addEventListener('click', (e) => {
+      const card = e.target.closest('.product-card');
+      if (!card || card.disabled) return;
+      const product = DATA.products.find(p => p.id === card.dataset.id);
+      if (!product) return;
+      flyToCart(card);
+      pulseTapeBody();
+      const added = addToCart(product);
+      // Clear the search once the item is in the sale, so the next one can be
+      // typed straight away and the full list comes back.
+      const search = $('#productSearch');
+      if (added && search.value) { search.value = ''; renderCatalog(); }
+    });
     $('#clearCartBtn').addEventListener('click', () => { cart = []; renderCart(); });
 
     applyLockUI();

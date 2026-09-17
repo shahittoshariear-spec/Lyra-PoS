@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('tally', {
   resetAllData: () => ipcRenderer.invoke('data:resetAll'),
   resetSalesStock: () => ipcRenderer.invoke('data:resetSalesStock'),
   printReceipt: (html, deviceName) => ipcRenderer.invoke('receipt:print', html, deviceName),
+  printReceiptRaw: (text, printerName, options) => ipcRenderer.invoke('receipt:printRaw', text, printerName, options),
   listPrinters: () => ipcRenderer.invoke('printer:list')
 });

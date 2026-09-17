@@ -1,0 +1,483 @@
+// Headless smoke test. Runs the real renderer (src/index.html + src/app.js) in
+// an Electron window and drives it by clicking, exactly as a person would: ring
+// up a sale, reprint it from the Ledger, part-refund a single line, then refund
+// the rest, checking the saved sales, stock levels and totals as it goes.
+// Data is served in memory over the same IPC the app uses, so your shop's data
+// file is never touched.
+//
+// Run with:  npm run smoke
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('path');
+const crypto = require('crypto');
+
+// Point SMOKE_APP at another app folder — for example an installed bundle's
+// resources/app.asar — to check a built or installed copy instead of the
+// working one.
+const APP_DIR = process.env.SMOKE_APP || path.join(__dirname, '..');
+const ADMIN_KEY = '1234';
+const adminKeyHash = crypto.createHash('sha256').update(ADMIN_KEY, 'utf8').digest('hex');
+
+function freshData() {
+  return {
+    settings: {
+      shopName: 'Test Shop', address: '1 Test Road', phone: '555 0100',
+      currency: 'R', taxRate: 10, receiptFooter: 'Thank you',
+      lowStockThreshold: 5, adminKeyHash, receiptPrinter: '', receiptCutPaper: false
+    },
+    categories: ['General', 'Pet'],
+    products: [
+      { id: 'p1', name: 'Widget', sku: 'W1', category: 'General', price: 10, cost: 4, stock: 10, supplier: '' },
+      { id: 'p2', name: 'Gadget', sku: 'G1', category: 'General', price: 25, cost: 10, stock: 5, supplier: '' },
+      { id: 'p3', name: 'Sprocket', sku: 'S1', category: 'General', price: 5, cost: 1, stock: 0, supplier: '' },
+      { id: 'p4', name: 'Puppy Food 2kg', sku: 'PF2', alias: 'mp', category: 'Pet', price: 60, cost: 30, stock: 4, supplier: '' }
+    ],
+    sales: [], heldSales: [], nextProductId: 5, nextSaleNumber: 1001
+  };
+}
+
+let DATA = freshData();
+let printCalls = 0;
+const results = [];
+
+function check(name, pass, detail) {
+  results.push({ name, pass });
+  console.log((pass ? 'PASS  ' : 'FAIL  ') + name + (detail === undefined ? '' : '  [' + detail + ']'));
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const near = (a, b) => Math.abs(a - b) < 0.005;
+const stock = (id) => (DATA.products.find((p) => p.id === id) || {}).stock;
+const product = (id) => DATA.products.find((p) => p.id === id);
+
+ipcMain.handle('data:load', () => DATA);
+ipcMain.handle('data:save', (e, d) => { DATA = d; return true; });
+ipcMain.handle('data:resetAll', () => { DATA = freshData(); return DATA; });
+ipcMain.handle('data:resetSalesStock', () => DATA);
+ipcMain.handle('printer:list', () => [{ name: 'Fake Printer', displayName: 'Fake Printer', isDefault: true }]);
+ipcMain.handle('receipt:print', () => { printCalls++; return { ok: true }; });
+ipcMain.handle('receipt:printRaw', () => { printCalls++; return { ok: true, bytesWritten: 1 }; });
+
+async function run(win) {
+  const js = (code) => win.webContents.executeJavaScript(code, true);
+  const click = (sel) => js(`document.querySelector(${JSON.stringify(sel)}).click(); true`);
+
+  // ---- 1. ring up a sale: 2 x Widget + 1 x Gadget (subtotal 45, 10% tax) ----
+  await click('.product-card[data-id="p1"]');
+  await click('.product-card[data-id="p1"]');
+  await click('.product-card[data-id="p2"]');
+  check('out-of-stock product is offered but disabled',
+    await js(`document.querySelector('.product-card[data-id="p3"]').disabled === true`));
+
+  await click('.tape-actions .btn-charge');
+  await sleep(150);
+  await js(`document.querySelector('#tenderedInput').value = '50'; true`);
+  await click('#chargeConfirmBtn');
+  await sleep(250);
+
+  const sale = DATA.sales[0];
+  check('sale recorded', !!sale && sale.number === 1001, sale && sale.total);
+  check('sale total with tax', !!sale && near(sale.total, 49.5), sale && sale.total);
+  check('stock taken off the shelf', stock('p1') === 8 && stock('p2') === 4,
+    'p1=' + stock('p1') + ' p2=' + stock('p2'));
+  check('receipt modal shown after sale',
+    await js(`document.querySelector('#receiptModalOverlay').classList.contains('active')`));
+  check('receipt modal titled for a new sale',
+    (await js(`document.querySelector('#receiptModalTitle').textContent`)) === 'Sale complete');
+  await click('#receiptCloseBtn');
+  await sleep(250);
+  check('the barcode box has the keyboard back after a sale',
+    (await js(`document.activeElement.id`)) === 'productSearch',
+    await js(`document.activeElement.id || document.activeElement.tagName`));
+
+  // ---- 2. in Client mode, Stock and the Ledger can be used; Setup can't ----
+  await click('.nav-btn[data-view="stock"]');
+  await sleep(300);
+  check('Client mode opens Stock without the Admin Key',
+    await js(`document.querySelector('#view-stock').classList.contains('active')`));
+  check('Client mode sees the stock list',
+    (await js(`document.querySelectorAll('#stockTableBody tr[data-id]').length`)) > 0);
+
+  await click('#addProductBtn');
+  await sleep(300);
+  check('adding a product in Client mode needs no Admin Key',
+    await js(`document.querySelector('#productModalOverlay').classList.contains('active')`));
+  check('no Admin Key prompt appeared for it',
+    !(await js(`document.querySelector('#adminModalOverlay').classList.contains('active')`)));
+  await click('#pmCancelBtn');
+  await sleep(350);
+
+  // Editing an existing product, and the bulk delete, are open in Client mode too.
+  await click('#stockTableBody tr[data-id="p2"]');
+  await sleep(300);
+  check('editing a product in Client mode needs no Admin Key',
+    await js(`document.querySelector('#productModalOverlay').classList.contains('active')`));
+  check('the editor opened on the product that was clicked',
+    (await js(`document.querySelector('#pmSku').value`)) === 'G1',
+    await js(`document.querySelector('#pmSku').value`));
+  const deleteOffered = await js(`getComputedStyle(document.querySelector('#pmDeleteBtn')).display`);
+  check('deleting a product is offered too', deleteOffered !== 'none', deleteOffered);
+  await click('#pmCancelBtn');
+  await sleep(350);
+
+  await click('.nav-btn[data-view="ledger"]');
+  await sleep(300);
+  const ledgerText = await js(`document.querySelector('#ledgerTableBody').textContent`);
+  check('Client mode opens the Ledger without the Admin Key',
+    await js(`document.querySelector('#view-ledger').classList.contains('active')`));
+  check('ledger lists the sale', ledgerText.includes('#1001'), ledgerText.replace(/\s+/g, ' ').trim().slice(0, 40));
+  check('ledger row has a Reprint link',
+    await js(`!!document.querySelector('#ledgerTableBody .row-link[data-action="print"]')`));
+
+  // ... and it can hand money back without being unlocked.
+  await click('#ledgerTableBody tr[data-id="' + sale.id + '"] .row-link[data-action="view"]');
+  await sleep(300);
+  check('Client mode can refund without the Admin Key',
+    (await js(`getComputedStyle(document.querySelector('#receiptRefundBtn')).display`)) !== 'none');
+  await click('#receiptCloseBtn');
+  await sleep(300);
+
+  // ---- 2b. Setup still needs the key, and unlocking lands on the view asked for ----
+  await click('.nav-btn[data-view="settings"]');
+  await sleep(250);
+  check('Setup still asks for the Admin Key',
+    await js(`document.querySelector('#adminModalOverlay').classList.contains('active')`));
+  await js(`document.querySelector('#adminKeyInput').value = ${JSON.stringify(ADMIN_KEY)}; true`);
+  await click('#adminModalOverlay .btn-primary');
+  await sleep(400);
+  check('the Admin Key unlocks and opens the view it was asked for',
+    await js(`document.querySelector('#view-settings').classList.contains('active')`));
+
+  // Back to the Ledger, which is where the next steps carry on from.
+  await click('.nav-btn[data-view="ledger"]');
+  await sleep(300);
+
+  // ---- 3. reprint straight from the ledger ----
+  await click('#ledgerTableBody .row-link[data-action="print"]');
+  await sleep(300);
+  check('Reprint prints without opening the preview', printCalls === 1, 'printCalls=' + printCalls);
+  check('Reprint did not open the receipt modal',
+    !(await js(`document.querySelector('#receiptModalOverlay').classList.contains('active')`)));
+
+  // ---- 4. part-refund: one of the two Widgets ----
+  await click('#ledgerTableBody tr[data-id="' + sale.id + '"] .row-link[data-action="view"]');
+  await sleep(300);
+  check('past sale receipt is labelled a reprint',
+    (await js(`document.querySelector('#receiptPrintBtn').textContent`)) === 'Reprint receipt');
+  check('refund offered on a past sale',
+    (await js(`getComputedStyle(document.querySelector('#receiptRefundBtn')).display`)) !== 'none');
+
+  await click('#receiptRefundBtn');
+  await sleep(300);
+  check('refund modal opened',
+    await js(`document.querySelector('#refundModalOverlay').classList.contains('active')`));
+  const defaultsToAll = await js(`document.querySelector('#refundTotalValue').textContent`);
+  check('refund defaults to everything', defaultsToAll === 'R49.50', defaultsToAll);
+  check('full quantity is offered on each line',
+    (await js(`document.querySelectorAll('#refundLines .refund-line-qty-num')[0].textContent`)) === '2');
+
+  // Take one Widget off, and the Gadget right down to nothing, so this refunds
+  // only one line of a multi-line sale.
+  await js(`document.querySelectorAll('#refundLines .refund-line')[0].querySelector('[data-step="-1"]').click(); true`);
+  await sleep(150);
+  const oneSelected = await js(`document.querySelector('#refundTotalValue').textContent`);
+  check('refunding one of two items of a two-item sale is 35.00 + 3.50', oneSelected === 'R38.50', oneSelected);
+
+  await js(`document.querySelectorAll('#refundLines .refund-line')[1].querySelector('[data-step="-1"]').click(); true`);
+  await sleep(200);
+  const partialTotal = await js(`document.querySelector('#refundTotalValue').textContent`);
+  check('one Widget refunds 10.00 plus 1.00 tax', partialTotal === 'R11.00', partialTotal);
+  check('confirm enabled once something is selected',
+    !(await js(`document.querySelector('#refundConfirmBtn').disabled`)));
+
+  await click('#refundConfirmBtn');
+  await sleep(250);
+  check('refund asks for confirmation',
+    await js(`document.querySelector('#confirmModalOverlay').classList.contains('active')`));
+  await click('#confirmModalOkBtn');
+  await sleep(450);
+
+  const refund = DATA.sales[1];
+  check('refund stored as its own record', !!refund && refund.type === 'return' && refund.refundOf === sale.id);
+  check('refund total is negative', !!refund && near(refund.total, -11), refund && refund.total);
+  check('refund tax apportioned from the sale', !!refund && near(refund.tax, -1), refund && refund.tax);
+  check('refund holds only the handed-back item',
+    !!refund && refund.items.length === 1 && refund.items[0].qty === 1, refund && refund.items.length);
+  check('stock returned for that item', stock('p1') === 9, 'p1=' + stock('p1'));
+  check('untouched item keeps its stock', stock('p2') === 4, 'p2=' + stock('p2'));
+
+  const refundReceipt = await js(`document.querySelector('#receiptPreview').textContent`);
+  check('refund receipt names the original sale',
+    refundReceipt.includes('REFUND of Sale #1001'), JSON.stringify(refundReceipt.split('\n')[4]));
+  check('refund receipt marked as part of the sale', refundReceipt.includes('part of the sale above'));
+  check('refund receipt titled with the refund number',
+    (await js(`document.querySelector('#receiptModalTitle').textContent`)) === 'Refund #1002');
+  check('no refund button on a refund receipt',
+    (await js(`getComputedStyle(document.querySelector('#receiptRefundBtn')).display`)) === 'none');
+  await click('#receiptCloseBtn');
+  await sleep(300);
+
+  const ledgerAfter = await js(`document.querySelector('#ledgerTableBody').textContent`);
+  check('ledger shows the refund against its sale',
+    ledgerAfter.includes('Refund #1002') && ledgerAfter.includes('of #1001'),
+    ledgerAfter.replace(/\s+/g, ' ').trim().slice(0, 60));
+
+  // ---- 5. refund the rest of the sale ----
+  await click('#ledgerTableBody tr[data-id="' + sale.id + '"] .row-link[data-action="view"]');
+  await sleep(300);
+  check('partly refunded sale can still be refunded',
+    (await js(`getComputedStyle(document.querySelector('#receiptRefundBtn')).display`)) !== 'none');
+  await click('#receiptRefundBtn');
+  await sleep(300);
+  const remainder = await js(`document.querySelector('#refundTotalValue').textContent`);
+  check('only the remainder is refundable (38.50)', remainder === 'R38.50', remainder);
+  check('already refunded line shows 1 of 2 refundable',
+    (await js(`document.querySelectorAll('#refundLines .refund-line-meta')[0].textContent`)).includes('1 of 2'));
+  await click('#refundConfirmBtn');
+  await sleep(250);
+  await click('#confirmModalOkBtn');
+  await sleep(450);
+
+  check('all stock is back', stock('p1') === 10 && stock('p2') === 5,
+    'p1=' + stock('p1') + ' p2=' + stock('p2'));
+  check('final record closes the sale off',
+    DATA.sales.length === 3 && near(DATA.sales[2].total, -38.5),
+    DATA.sales.length + ' records, last ' + (DATA.sales[2] && DATA.sales[2].total));
+  await click('#receiptCloseBtn');
+  await sleep(300);
+
+  await click('#ledgerTableBody tr[data-id="' + sale.id + '"] .row-link[data-action="view"]');
+  await sleep(300);
+  check('fully refunded sale offers no more refunds',
+    (await js(`getComputedStyle(document.querySelector('#receiptRefundBtn')).display`)) === 'none');
+  await click('#receiptCloseBtn');
+  await sleep(300);
+
+  // ---- 6. the till reflects it ----
+  await click('.nav-btn[data-view="till"]');
+  await sleep(400);
+  const dsTotal = await js(`document.querySelector('#dsTotal').textContent`);
+  check('day summary nets the refunds back to zero', dsTotal === 'R0.00', dsTotal);
+  check('product cost untouched by refunds', near(product('p1').cost, 4));
+
+  // ---- 7. search names: typing "mp" should find Puppy Food ----
+  // Each executeJavaScript runs in the page's global scope, so anything declared
+  // here has to be scoped to an IIFE or the second call collides with the first.
+  const typeSearch = (box, text) => js(`(() => { const el = document.querySelector('${box}'); el.value = ${JSON.stringify(text)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  const gridIds = () => js(`Array.from(document.querySelectorAll('#productGrid .product-card')).map(c => c.dataset.id).join()`);
+
+  await typeSearch('#productSearch', 'mp');
+  await sleep(300);
+  check('an alias finds its product', (await gridIds()) === 'p4', await gridIds());
+
+  await typeSearch('#productSearch', 'm');
+  await sleep(300);
+  check('part of an alias is enough', (await gridIds()) === 'p4', await gridIds());
+
+  await typeSearch('#productSearch', 'PF2');
+  await sleep(300);
+  check('the SKU still finds it', (await gridIds()) === 'p4', await gridIds());
+
+  await typeSearch('#productSearch', 'mp');
+  await sleep(300);
+  await click('.product-card[data-id="p4"]');
+  await sleep(300);
+  check('the search box empties once the item is added',
+    (await js(`document.querySelector('#productSearch').value`)) === '');
+  check('the whole list comes back after adding',
+    (await js(`document.querySelectorAll('#productGrid .product-card').length`)) === 4,
+    await js(`document.querySelectorAll('#productGrid .product-card').length`));
+  check('the item went into the sale',
+    (await js(`document.querySelector('.tape-items').textContent`)).includes('Puppy Food'));
+
+  // ---- 8. the shop can set its own search name ----
+  await click('.nav-btn[data-view="stock"]');
+  await sleep(400);
+  await typeSearch('#stockSearch', 'Puppy');
+  await sleep(300);
+  await click('#stockTableBody tr[data-id="p4"]');
+  await sleep(350);
+  check('editor opens with the current search name',
+    (await js(`document.querySelector('#pmAlias').value`)) === 'mp');
+  await js(`document.querySelector('#pmAlias').value = 'puppy'; true`);
+  await click('#pmSaveBtn');
+  await sleep(400);
+  check('search name saved', (product('p4') || {}).alias === 'puppy');
+  check('search name shown in the stock list',
+    (await js(`document.querySelector('#stockTableBody tr[data-id="p4"]').textContent`)).includes('puppy'));
+
+  // ---- 9. categories: delete one that is in use, then add one ----
+  await click('.nav-btn[data-view="settings"]');
+  await sleep(450);
+  check('settings lists the categories',
+    (await js(`document.querySelector('#settingsCategoryChips').textContent`)).includes('Pet'));
+  await js(`Array.from(document.querySelectorAll('#settingsCategoryChips .chip')).find(c => c.textContent.includes('Pet')).querySelector('.chip-remove').click(); true`);
+  await sleep(300);
+  check('deleting a category in use asks first',
+    await js(`document.querySelector('#confirmModalOverlay').classList.contains('active')`));
+  await click('#confirmModalOkBtn');
+  await sleep(450);
+  check('category deleted', DATA.categories.indexOf('Pet') === -1 && DATA.categories.includes('General'),
+    DATA.categories.join());
+  check('its products moved to another category',
+    (product('p4') || {}).category === 'General', (product('p4') || {}).category);
+  check('moved products kept the rest of their details',
+    (product('p4') || {}).alias === 'puppy' && near((product('p4') || {}).price, 60));
+  check('the deleted category is gone from settings',
+    !(await js(`document.querySelector('#settingsCategoryChips').textContent`)).includes('Pet'));
+
+  await js(`document.querySelector('#newCategoryInput').value = 'Hardware'; true`);
+  await click('#addCategoryBtn');
+  await sleep(450);
+  check('a category can be added', DATA.categories.includes('Hardware'), DATA.categories.join());
+  await js(`document.querySelector('#newCategoryInput').value = 'hardware'; true`);
+  await click('#addCategoryBtn');
+  await sleep(300);
+  check('a duplicate category is refused',
+    DATA.categories.filter(c => c.toLowerCase() === 'hardware').length === 1, DATA.categories.join());
+  check('both categories can be removed while there are two',
+    (await js(`document.querySelectorAll('#settingsCategoryChips .chip-remove').length`)) === 2,
+    DATA.categories.join());
+
+  await js(`Array.from(document.querySelectorAll('#settingsCategoryChips .chip')).find(c => c.textContent.includes('Hardware')).querySelector('.chip-remove').click(); true`);
+  await sleep(400);
+  check('an unused category deletes without asking', DATA.categories.join() === 'General', DATA.categories.join());
+  check('the last category offers no remove button',
+    (await js(`document.querySelectorAll('#settingsCategoryChips .chip-remove').length`)) === 0);
+
+  // ---- 10. scanning into the barcode box ----
+  await click('.nav-btn[data-view="till"]');
+  await sleep(400);
+
+  const boxValue = () => js(`document.querySelector('#productSearch').value`);
+  const tapeText = () => js(`document.querySelector('.tape-items').textContent`);
+  const toastText = () => js(`document.querySelector('#toast').textContent`);
+  const pressEnter = () => js(`document.querySelector('#productSearch').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
+
+  // Types a code into the box the way a scanner would, with a delay between
+  // keystrokes if asked for, then sends the Enter a scanner always sends.
+  const scanType = async (text, gapMs) => {
+    await js(`(() => { const el = document.querySelector('#productSearch'); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    await sleep(150);
+    for (const ch of text) {
+      await js(`(() => { const el = document.querySelector('#productSearch'); el.value += ${JSON.stringify(ch)}; el.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(ch)}, bubbles: true })); return true; })()`);
+      if (gapMs) await sleep(gapMs);
+    }
+    await pressEnter();
+  };
+
+  // Like scanType, but the characters never reach the barcode box — which is what
+  // actually happens when the box has lost focus (straight after a sale, or after
+  // clicking anywhere). The app has to go by the keystrokes alone. They are sent
+  // inside one call so the timing is a scanner's, not the test's.
+  const scanUnfocused = async (text, enterGapMs) => {
+    await js(`(() => { const el = document.querySelector('#productSearch'); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.blur(); return true; })()`);
+    await sleep(150);
+    await js(`(() => {
+      const send = (key) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      ${text.split('').map(ch => `send(${JSON.stringify(ch)});`).join(' ')}
+      return true;
+    })()`);
+    if (enterGapMs) await sleep(enterGapMs);
+    await js(`document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
+  };
+
+  await scanType('PF2', 0);
+  await sleep(400);
+  check('a scanned barcode is added to the sale', (await tapeText()).includes('Puppy Food'));
+  check('the barcode box is left empty after a scan', (await boxValue()) === '', JSON.stringify(await boxValue()));
+
+  // Slower than the burst detector allows, which is what a scanner on a busy
+  // till can look like: it must still add the item and still clear the box.
+  await scanType('G1', 120);
+  await sleep(400);
+  check('a slow scan still adds the item', (await tapeText()).includes('Gadget'));
+  check('the box is empty after a slow scan too', (await boxValue()) === '', JSON.stringify(await boxValue()));
+
+  // The box is not always focused: after a sale, or after clicking a product,
+  // the scanner's characters never reach it. This used to drop scans outright.
+  await scanUnfocused('PF2');
+  await sleep(400);
+  check('a scan with the box unfocused still adds the item',
+    (await tapeText()).includes('Puppy Food'), await tapeText());
+  check('the box is empty after an unfocused scan', (await boxValue()) === '', JSON.stringify(await boxValue()));
+
+  // A slow scanner's Enter can land a moment after its last character.
+  await scanUnfocused('G1', 250);
+  await sleep(400);
+  check('a slow Enter still adds the item', (await tapeText()).includes('Gadget'), await tapeText());
+
+  // Scanning something with nothing left must not leave its code sitting in the
+  // box, waiting to be glued onto the front of the next scan.
+  await scanType('S1', 0);
+  await sleep(400);
+  check('an out-of-stock scan says why', (await toastText()).includes('Not enough stock'), await toastText());
+  check('an out-of-stock scan leaves the box empty', (await boxValue()) === '', JSON.stringify(await boxValue()));
+  await scanType('W1', 0);
+  await sleep(400);
+  check('the very next scan still lands', (await tapeText()).includes('Widget'), await tapeText());
+
+  await js(`(() => { const el = document.querySelector('#productSearch'); el.value = 'puppy'; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  await sleep(250);
+  await pressEnter();
+  await sleep(300);
+  check('a search name can be committed with Enter', (await toastText()).includes('Added: Puppy Food'), await toastText());
+  check('the box is empty after committing a search name', (await boxValue()) === '');
+
+  await scanType('NOPE-999', 0);
+  await sleep(400);
+  check('an unknown code stays on screen so it can be read',
+    (await boxValue()) === 'NOPE-999', JSON.stringify(await boxValue()));
+  check('an unknown code says so', (await toastText()).includes('No product matches'), await toastText());
+  check('an unknown code is left selected, so the next scan replaces it',
+    (await js(`(() => { const el = document.querySelector('#productSearch'); return el.value === 'NOPE-999' && el.selectionStart === 0 && el.selectionEnd === 8; })()`)) === true,
+    await js(`(() => { const el = document.querySelector('#productSearch'); return el.value + ' sel ' + el.selectionStart + '-' + el.selectionEnd; })()`));
+
+  // The next scan types over that selection, the way a focused box does, so the
+  // old code is replaced rather than glued onto the front of the new one.
+  await js(`(() => {
+    const el = document.querySelector('#productSearch');
+    const start = el.selectionStart, end = el.selectionEnd;
+    el.value = el.value.slice(0, start) + 'W1' + el.value.slice(end);
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'W', bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    return true;
+  })()`);
+  await pressEnter();
+  await sleep(400);
+  check('the scan after an unknown code replaces it and lands',
+    (await tapeText()).includes('Widget'), JSON.stringify(await boxValue()));
+}
+
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({
+    show: false,
+    width: 1360,
+    height: 860,
+    webPreferences: {
+      preload: path.join(APP_DIR, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  });
+  const errors = [];
+  win.webContents.on('console-message', (e, level, message) => {
+    if (level >= 2) errors.push(message);
+  });
+  try {
+    await win.loadFile(path.join(APP_DIR, 'src', 'index.html'));
+    await sleep(2200);
+    const cards = await win.webContents.executeJavaScript(`document.querySelectorAll('.product-card').length`, true);
+    console.log('booted with ' + cards + ' product cards\n');
+    await run(win);
+  } catch (err) {
+    console.log('HARNESS ERROR: ' + err.message);
+    results.push({ name: 'harness', pass: false });
+  }
+  if (errors.length) {
+    console.log('\nrenderer console errors:');
+    errors.slice(0, 10).forEach((m) => console.log('  ' + m));
+  }
+  const failed = results.filter((r) => !r.pass).length;
+  console.log('\n' + (results.length - failed) + ' passed, ' + failed + ' failed');
+  app.exit(failed ? 1 : 0);
+});

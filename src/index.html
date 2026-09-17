@@ -35,11 +35,11 @@
         <button class="nav-btn active" data-view="till">
           <span class="nav-icon">◎</span> Till
         </button>
-        <button class="nav-btn nav-protected" data-view="stock">
-          <span class="nav-icon">▤</span> Stock <span class="nav-lock">🔒</span>
+        <button class="nav-btn" data-view="stock">
+          <span class="nav-icon">▤</span> Stock
         </button>
-        <button class="nav-btn nav-protected" data-view="ledger">
-          <span class="nav-icon">▦</span> Ledger <span class="nav-lock">🔒</span>
+        <button class="nav-btn" data-view="ledger">
+          <span class="nav-icon">▦</span> Ledger
         </button>
         <button class="nav-btn nav-protected" data-view="dashboard">
           <span class="nav-icon">◈</span> Overview <span class="nav-lock">🔒</span>
@@ -90,7 +90,7 @@
 
           <div class="till-catalog">
             <div class="till-toolbar">
-              <input type="text" id="productSearch" class="search-input" placeholder="Search products, or scan a barcode…" autocomplete="off" />
+              <input type="text" id="productSearch" class="search-input" placeholder="Search by name, code, or scan a barcode…" autocomplete="off" />
               <button class="btn btn-ghost" id="heldSalesBtn" style="display:none;">Held <span id="heldCount">0</span></button>
             </div>
             <div class="chip-row" id="categoryChips"></div>
@@ -136,7 +136,7 @@
         </div>
 
         <div class="toolbar-row">
-          <input type="text" id="stockSearch" class="search-input" placeholder="Filter by name or SKU…" />
+          <input type="text" id="stockSearch" class="search-input" placeholder="Filter by name, search name or SKU…" />
           <select id="stockCategoryFilter" class="select-input"></select>
         </div>
 
@@ -354,7 +354,25 @@
           </div>
 
           <div class="panel">
+            <h2>Receipt printer</h2>
+            <p class="panel-note">Choose your thermal receipt printer and receipts print straight to it as you finish a sale — no dialog. The receipt is sent to the printer directly rather than through its Windows driver, so this works with printers whose driver can't drive them (USB-to-parallel cables are the usual culprit). Choose “Ask me each time” to go back to the normal print dialog.</p>
+            <label class="field">
+              <span>Printer</span>
+              <select id="setPrinter"></select>
+            </label>
+            <label class="field field-check">
+              <input type="checkbox" id="setCutPaper" />
+              <span>Cut the paper after each receipt</span>
+            </label>
+            <div class="field-inline">
+              <button class="btn btn-primary" id="savePrinterBtn">Save printer</button>
+              <button class="btn btn-ghost" id="testPrintBtn">Test print</button>
+            </div>
+          </div>
+
+          <div class="panel">
             <h2>Categories</h2>
+            <p class="panel-note">Add a category below. Remove one with the ✕ — if products are filed under it you'll be asked which category they should move to.</p>
             <div class="chip-row" id="settingsCategoryChips"></div>
             <div class="field-inline">
               <input type="text" id="newCategoryInput" placeholder="New category name" />
@@ -417,6 +435,7 @@
     <div class="modal">
       <h2 id="productModalTitle">Add product</h2>
       <label class="field"><span>Name</span><input type="text" id="pmName" /></label>
+      <label class="field"><span>Search name or code</span><input type="text" id="pmAlias" placeholder="e.g. mp for Puppy Food, bre1 for Breeders 1kg" /></label>
       <div class="field-row">
         <label class="field"><span>SKU / barcode</span><input type="text" id="pmSku" /></label>
         <label class="field"><span>Category</span><select id="pmCategory"></select></label>
@@ -540,13 +559,33 @@
   <!-- Receipt preview modal -->
   <div class="modal-overlay" id="receiptModalOverlay">
     <div class="modal modal-narrow">
-      <h2>Sale complete</h2>
+      <h2 id="receiptModalTitle">Sale complete</h2>
       <div class="receipt-preview" id="receiptPreview"></div>
       <div class="modal-actions">
-        <button class="btn btn-danger" id="receiptRefundBtn" style="display:none;">Refund this sale</button>
+        <button class="btn btn-danger" id="receiptRefundBtn" style="display:none;">Refund items…</button>
         <div class="modal-actions-right">
           <button class="btn btn-ghost" id="receiptCloseBtn">Close</button>
           <button class="btn btn-primary" id="receiptPrintBtn">Print receipt</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Refund modal: choose how many of each item goes back -->
+  <div class="modal-overlay" id="refundModalOverlay">
+    <div class="modal modal-narrow">
+      <h2 id="refundModalTitle">Refund items</h2>
+      <p class="panel-note">Choose how many of each item to refund. Stock goes back on the shelf automatically and the refund is recorded in the Ledger. Part of a sale can be refunded now, and the rest later.</p>
+      <div class="refund-lines" id="refundLines"></div>
+      <div class="refund-total">
+        <span>Refund total</span>
+        <span id="refundTotalValue">R0.00</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="refundAllBtn">Refund everything</button>
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="refundCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="refundConfirmBtn">Refund selected</button>
         </div>
       </div>
     </div>

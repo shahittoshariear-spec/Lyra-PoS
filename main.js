@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
+const { buildReceipt } = require('./escpos');
+const { sendRawToPrinter } = require('./rawprint');
 
 const DATA_FILE = path.join(app.getPath('userData'), 'immaculate-pos-data.json');
 
@@ -14,7 +16,12 @@ const DEFAULT_DATA = {
     taxRate: 0,
     receiptFooter: "Thank you for your business!",
     lowStockThreshold: 5,
-    adminKeyHash: ""
+    adminKeyHash: "",
+    receiptPrinter: "",
+    // Off by default. Cutting is the one step we cannot verify from the app, and
+    // a printer that errors on a cut refuses every later receipt, so it waits
+    // until Setup has shown a cut working on this printer.
+    receiptCutPaper: false
   },
   categories: ["General"],
   products: [],
@@ -32,8 +39,12 @@ function loadData() {
     }
     const raw = fs.readFileSync(DATA_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
-    // Backfill any missing top-level keys for forward-compatibility.
-    return { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...parsed };
+    // Backfill any missing top-level keys for forward-compatibility. Settings are
+    // merged key by key so that settings added in later versions (the receipt
+    // printer, for instance) appear for shops that already have a data file.
+    const merged = { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...parsed };
+    merged.settings = { ...DEFAULT_DATA.settings, ...(parsed.settings || {}) };
+    return merged;
   } catch (err) {
     console.error('Failed to load data, backing up corrupt file and starting fresh.', err);
     try {
@@ -174,6 +185,21 @@ ipcMain.handle('receipt:print', async (evt, html, deviceName) => {
       resolve({ ok: success, error: success ? null : failureReason });
     });
   });
+});
+
+// ---- IPC: printing a receipt straight to a thermal printer ----
+// Sends the receipt text to the chosen printer as raw ESC/POS bytes. Because
+// the spooler's RAW data type is used, the printer's Windows driver is never
+// involved: this works for a printer that Windows can see but cannot print
+// through, which is what happens with USB-to-parallel cables and Epson's APD.
+// Setup stores the chosen printer in settings.receiptPrinter; when that is
+// empty the dialog path above is used instead.
+ipcMain.handle('receipt:printRaw', async (evt, text, printerName, options) => {
+  const name = String(printerName || '').trim();
+  if (!name) return { ok: false, error: 'No receipt printer selected in Setup.' };
+  const opts = options || {};
+  const data = buildReceipt(text, { cut: opts.cut !== false });
+  return sendRawToPrinter(name, data);
 });
 
 // ---- IPC: listing installed printers, so Setup can offer a dropdown ----
