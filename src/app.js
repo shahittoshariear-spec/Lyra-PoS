@@ -149,7 +149,7 @@
     const target = $('#view-' + view);
     target.classList.add('active', 'dir-' + dir);
 
-    if (view === 'stock') renderStock();
+    if (view === 'stock') { renderStock(); focusStockFilter(); }
     if (view === 'ledger') renderLedger();
     if (view === 'dashboard') renderDashboard();
     if (view === 'reports') renderReports();
@@ -1154,6 +1154,16 @@
   let ledgerRowLimit = MAX_LEDGER_ROWS;
   let ledgerRenderKey = null;
 
+  // Switching to Stock puts the caret in the filter, so a product can be typed
+  // or scanned straight away. Same guard as the till's search box: never take
+  // the keyboard away from a modal.
+  function focusStockFilter() {
+    const el = $('#stockSearch');
+    if (el && document.activeElement !== el) {
+      if (!$$('.modal-overlay.active').length) el.focus({ preventScroll: true });
+    }
+  }
+
   function renderStock() {
     const filterSel = $('#stockCategoryFilter');
     const prevVal = filterSel.value || 'All';
@@ -1242,6 +1252,20 @@
   function initStockView() {
     $('#addProductBtn').addEventListener('click', () => openProductModal(null));
     $('#stockSearch').addEventListener('input', debounce(renderStock, 120));
+
+    // With the caret already at the start of the box there is nowhere further
+    // left to go, so a left arrow clears the filter instead of doing nothing.
+    // Anywhere else in the box it still just moves the caret, so a half-typed
+    // filter can be edited as usual.
+    $('#stockSearch').addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft') return;
+      const box = e.currentTarget;
+      if (!box.value) return;
+      if (box.selectionStart !== 0 || box.selectionEnd !== 0) return;
+      e.preventDefault();
+      box.value = '';
+      renderStock();
+    });
     $('#stockCategoryFilter').addEventListener('change', renderStock);
 
     // One listener for the whole table: the checkbox toggles selection, anything
@@ -1283,20 +1307,33 @@
     });
 
     $('#stockBulkDeleteBtn').addEventListener('click', async () => {
-      const n = selectedStockIds.size;
+      const n = await deleteProductsByIds(selectedStockIds);
       if (!n) return;
-      const ok = await confirmDialog(
-        `Delete ${n} product${n > 1 ? 's' : ''}?`,
-        `This removes ${n} product${n > 1 ? 's' : ''} from Stock permanently. Past sales already recorded are not affected. This can't be undone.`,
-        'Delete selected'
-      );
-      if (!ok) return;
-      DATA.products = DATA.products.filter(p => !selectedStockIds.has(p.id));
       selectedStockIds.clear();
-      await persist();
       renderStock();
-      toast(`${n} product${n > 1 ? 's' : ''} deleted.`);
     });
+  }
+
+  // Deleting products is the same job from either screen — the Stock table or
+  // the Overview's low-stock list — so the confirmation, the removal, the save
+  // and the toast live in one place. Callers clear their own selection and
+  // redraw what they own. Returns how many went, or 0 if it was called off.
+  async function deleteProductsByIds(ids) {
+    const list = Array.from(ids || []).filter(Boolean);
+    if (!list.length) return 0;
+    const n = list.length;
+    const plural = n > 1 ? 's' : '';
+    const ok = await confirmDialog(
+      `Delete ${n} product${plural}?`,
+      `This removes ${n} product${plural} from Stock permanently. Past sales already recorded are not affected. This can't be undone.`,
+      n > 1 ? 'Delete selected' : 'Delete'
+    );
+    if (!ok) return 0;
+    const doomed = new Set(list);
+    DATA.products = DATA.products.filter(p => !doomed.has(p.id));
+    await persist();
+    toast(`${n} product${plural} deleted.`);
+    return n;
   }
 
   function populateCategorySelect(sel) {
@@ -1309,6 +1346,10 @@
     $('#productModalTitle').textContent = isEdit ? 'Edit product' : 'Add product';
     populateCategorySelect($('#pmCategory'));
     $('#pmDeleteBtn').style.display = isEdit ? 'inline-flex' : 'none';
+    // The search name is a shortcut for a product that already exists — a short
+    // code to type at the till — so it is offered when editing, and the add form
+    // asks only for the fields a product cannot be saved without.
+    $('#pmAlias').closest('label').style.display = isEdit ? '' : 'none';
 
     if (isEdit) {
       const p = DATA.products.find(pp => pp.id === productId);
@@ -1574,6 +1615,8 @@
   // ---------------- Dashboard ----------------
 
   let dashboardPeriod = 'day';
+  // Low-stock rows ticked in the Overview, waiting on "Delete selected".
+  let selectedLowStockIds = new Set();
 
   function initPeriodTabs() {
     $$('#periodTabs .seg-btn').forEach(btn => {
@@ -1583,6 +1626,79 @@
         dashboardPeriod = btn.dataset.period;
         renderDashboard();
       });
+    });
+  }
+
+  function lowStockProducts() {
+    return DATA.products.filter(p => p.stock <= DATA.settings.lowStockThreshold);
+  }
+
+  // The low-stock list is a place to act on stock, not only read it: a row can
+  // be deleted on its own, or ticked and deleted with the others. Rows are drawn
+  // as one string with a single listener on the list (see initLowStockPanel),
+  // the same way the Stock table stays quick with thousands of products.
+  function renderLowStockList(lowStockItems) {
+    const list = $('#lowStockList');
+    // The same pruning the Stock table does: a tick left on a product that is no
+    // longer low on stock must not linger.
+    const stillLow = new Set(lowStockItems.map(p => p.id));
+    selectedLowStockIds.forEach(id => { if (!stillLow.has(id)) selectedLowStockIds.delete(id); });
+
+    list.innerHTML = lowStockItems.length
+      ? lowStockItems.map(p => {
+        const checked = selectedLowStockIds.has(p.id);
+        return `<li data-id="${p.id}">
+          <span class="low-stock-name"><input type="checkbox" class="low-stock-check" data-id="${p.id}"${checked ? ' checked' : ''} />${escapeHtml(p.name)}</span>
+          <span class="low-stock-side"><span class="stock-badge low">${p.stock} left</span><span class="row-link" data-del="${p.id}">Delete</span></span>
+        </li>`;
+      }).join('')
+      : '<li class="plain-empty">Everything is well stocked.</li>';
+
+    updateLowStockBulkBar();
+  }
+
+  function updateLowStockBulkBar() {
+    const bar = $('#lowStockBulkBar');
+    const n = selectedLowStockIds.size;
+    if (n > 0) {
+      bar.style.display = 'flex';
+      $('#lowStockBulkCount').textContent = `${n} selected`;
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  // Deleting from here has to redraw both screens: the Stock table holds the same
+  // products, and every figure that counts them — the low-stock number, the
+  // inventory values — is drawn on this one.
+  async function deleteFromLowStock(ids) {
+    const n = await deleteProductsByIds(ids);
+    if (!n) return;
+    selectedLowStockIds.clear();
+    renderStock();
+    renderDashboard();
+  }
+
+  function initLowStockPanel() {
+    $('#lowStockList').addEventListener('click', (e) => {
+      const del = e.target.closest('[data-del]');
+      if (del) { deleteFromLowStock([del.dataset.del]); return; }
+      const check = e.target.closest('.low-stock-check');
+      if (check) {
+        if (check.checked) selectedLowStockIds.add(check.dataset.id);
+        else selectedLowStockIds.delete(check.dataset.id);
+        updateLowStockBulkBar();
+      }
+    });
+
+    $('#lowStockBulkClearBtn').addEventListener('click', () => {
+      selectedLowStockIds.clear();
+      $$('#lowStockList .low-stock-check').forEach(c => { c.checked = false; });
+      updateLowStockBulkBar();
+    });
+
+    $('#lowStockBulkDeleteBtn').addEventListener('click', () => {
+      deleteFromLowStock(Array.from(selectedLowStockIds));
     });
   }
 
@@ -1608,8 +1724,23 @@
     animateStatNumber('#statTodayCount', t.transactions, (v) => Math.round(v).toString());
     animateStatNumber('#statTodayItems', t.itemsSold, (v) => Math.round(v).toString());
 
-    const lowStockItems = DATA.products.filter(p => p.stock <= DATA.settings.lowStockThreshold);
+    const lowStockItems = lowStockProducts();
     $('#statLowStock').textContent = lowStockItems.length;
+
+    // What the shelf is worth: every product's stock at its cost, and at its
+    // price. Both are a snapshot of right now rather than of the chosen period,
+    // so like the low-stock count they do not move with the tabs. A negative
+    // count is a data-entry accident rather than stock owed back to someone, so
+    // it is worth nothing here.
+    let stockValueAtCost = 0;
+    let stockValueAtSell = 0;
+    DATA.products.forEach(p => {
+      const qty = Math.max(0, p.stock || 0);
+      stockValueAtCost += qty * (p.cost || 0);
+      stockValueAtSell += qty * (p.price || 0);
+    });
+    $('#statStockValueCost').textContent = money(stockValueAtCost);
+    $('#statStockValueSell').textContent = money(stockValueAtSell);
 
     renderPaymentSplit('#paymentSplitToday', t, 'No sales in this period yet.');
 
@@ -1622,10 +1753,7 @@
       ? ranked.map(([name, qty], i) => `<li><span class="rank-num">${i + 1}.</span>${escapeHtml(name)} — ${qty} sold</li>`).join('')
       : `<li class="plain-empty">No sales ${phrase} yet.</li>`;
 
-    const lowList = $('#lowStockList');
-    lowList.innerHTML = lowStockItems.length
-      ? lowStockItems.map(p => `<li><span>${escapeHtml(p.name)}</span><span class="stock-badge low">${p.stock} left</span></li>`).join('')
-      : '<li class="plain-empty">Everything is well stocked.</li>';
+    renderLowStockList(lowStockItems);
 
     renderHistory(period, currentKey);
   }
@@ -2138,6 +2266,7 @@
     initSettingsView();
     initImportModal();
     initPeriodTabs();
+    initLowStockPanel();
     initReportsView();
 
     $('#productSearch').addEventListener('input', debounce(renderCatalog, 80));

@@ -791,6 +791,11 @@ summary:focus-visible {
 .plain-list li { display: flex; justify-content: space-between; padding: var(--space-2) 0; border-top: 1px solid var(--paper-dim); font-variant-numeric: tabular-nums; }
 .plain-list li:first-child { border-top: none; }
 .plain-empty { color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); }
+/* A low-stock row can be worked on: the checkbox and the name sit at the left
+   edge, the badge and the Delete link at the right, so the row keeps the
+   spacing it had before it gained its controls. */
+.low-stock-name { display: flex; align-items: center; gap: var(--space-3); }
+.low-stock-side { display: flex; align-items: center; gap: var(--space-3); }
 
 /* ---------------- Forms ---------------- */
 

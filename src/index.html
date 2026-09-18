@@ -237,6 +237,14 @@
             <div class="stat-label">Low stock</div>
             <div class="stat-value" id="statLowStock">0</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-label" title="Every product's stock multiplied by its cost">Inventory at cost</div>
+            <div class="stat-value" id="statStockValueCost">0.00</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label" title="Every product's stock multiplied by its price">Inventory at sell</div>
+            <div class="stat-value" id="statStockValueSell">0.00</div>
+          </div>
         </div>
 
         <div class="panel-row">
@@ -253,6 +261,13 @@
         <div class="panel-row">
           <div class="panel">
             <h2>Low stock</h2>
+            <div class="bulk-bar" id="lowStockBulkBar" style="display:none;">
+              <span id="lowStockBulkCount">0 selected</span>
+              <div class="bulk-bar-actions">
+                <button class="btn btn-ghost" id="lowStockBulkClearBtn">Clear selection</button>
+                <button class="btn btn-danger" id="lowStockBulkDeleteBtn">Delete selected</button>
+              </div>
+            </div>
             <ul class="plain-list" id="lowStockList"></ul>
           </div>
           <div class="panel">

@@ -18,7 +18,8 @@ sales) is saved to a file on the computer it runs on.
   you typed (a search name, say), so you never have to reach for the mouse.
 - **Search names** — give a product a short name of your own and typing that
   brings it up: "mp" for Puppy Food, "bre1" for Breeders 1kg. Set it in the
-  product editor (Stock → open the product → **Search name or code**). The Till
+  product editor (Stock → open the product → **Search name or code**; the add
+  form leaves the field out). The Till
   and Stock both match it alongside the product's name and SKU, and adding an
   item to a sale clears the search box, ready for the next one.
 - **Categories** — add them in Setup → Categories and remove one with the ✕.
@@ -40,7 +41,10 @@ sales) is saved to a file on the computer it runs on.
   a sale can be refunded now and the rest later, until nothing is left on it,
   and the refund receipt is shown ready to print.
 - **Stock** — add, edit, and delete products (name, SKU/barcode, category,
-  price, cost, quantity on hand).
+  price, cost, quantity on hand). Opening Stock puts the caret straight into the
+  filter box, so a product can be typed or scanned without clicking first, and a
+  left arrow with the cursor already at the start of that box clears the filter,
+  walking left off the edge to empty it without a trip to the mouse.
 - **Ledger** — every past sale and refund, filterable by date, with a
   reprintable receipt. Each row has **Reprint** to print a copy without opening
   anything, and **View** to see the receipt — reprint it, or refund items from
@@ -51,8 +55,13 @@ sales) is saved to a file on the computer it runs on.
 - **Overview** — Day / Week / Month / Year tabs, each showing sales, profit,
   transactions, items sold, top sellers, a cash/card payment split, and a
   matching sales history table (previous days, weeks, months, or years) so
-  trends are easy to spot at any zoom level. Low-stock warnings are always
-  current regardless of the tab selected.
+  trends are easy to spot at any zoom level. Low-stock warnings, and the two
+  inventory value figures — what the shelf is worth at cost and at sell — are
+  always current regardless of the tab selected.
+- **Clearing out stock** — the Overview's low-stock list deletes as well as
+  reports: **Delete** on a line removes that product, or tick several and use
+  **Delete selected**. Both ask before anything goes, and neither touches sales
+  already recorded.
 - **Profit** is sales minus cost of goods sold, using each product's Cost
   field at the time of sale. If Profit ever looks identical to Sales for a
   period, it means the products sold in that period have no Cost set —
@@ -280,13 +289,13 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 `npm run smoke` opens the app's own screens in a hidden window and drives them
 by clicking: ring up a sale, reprint it from the Ledger, refund a single line of
 it, then refund the rest. It checks the saved sales, stock levels, till totals
-and receipt text as it goes, printing a pass/fail line for each — 86 checks at
+and receipt text as it goes, printing a pass/fail line for each — 109 checks at
 the time of writing. It runs against its own throwaway data held in memory, so
 your shop's data file is never touched.
 
 Run it before building an installer, or after changing anything to do with the
-Till, the Ledger, refunds or receipts. It exits non-zero if anything fails, so
-it is safe to use as a build gate.
+Till, Stock, the Ledger, refunds or receipts. It exits non-zero if anything
+fails, so it is safe to use as a build gate.
 
 `npm run bench` measures how long the slow parts take on the machine it runs on,
 using a made-up shop of 2448 products and 62 sales (set `BENCH_PRODUCTS` and

@@ -96,12 +96,40 @@ async function run(win) {
   check('Client mode sees the stock list',
     (await js(`document.querySelectorAll('#stockTableBody tr[data-id]').length`)) > 0);
 
+  // Switching to Stock hands the keyboard to the filter box, and a left arrow at
+  // the start of that box clears it — while a left arrow anywhere else still
+  // moves the caret, so editing a half-typed filter is unaffected.
+  check('switching to Stock puts the caret in the stock filter',
+    (await js(`document.activeElement.id`)) === 'stockSearch',
+    await js(`document.activeElement.id || document.activeElement.tagName`));
+
+  await js(`(() => { const el = document.querySelector('#stockSearch'); el.value = 'Widget'; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  await sleep(300);
+  const leftAway = await js(`(() => { const b = document.querySelector('#stockSearch');
+    b.focus(); b.setSelectionRange(3, 3);
+    b.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    return b.value; })()`);
+  check('a left arrow away from the start of the filter still moves the caret',
+    leftAway === 'Widget', JSON.stringify(leftAway));
+
+  const leftAtStart = await js(`(() => { const b = document.querySelector('#stockSearch');
+    b.setSelectionRange(0, 0);
+    b.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    return [b.value, document.querySelectorAll('#stockTableBody tr[data-id]').length]; })()`);
+  check('a left arrow with the caret at the start clears the stock filter',
+    leftAtStart[0] === '', JSON.stringify(leftAtStart[0]));
+  check('the whole list is back once the filter is cleared',
+    leftAtStart[1] === 4, leftAtStart[1]);
+
   await click('#addProductBtn');
   await sleep(300);
   check('adding a product in Client mode needs no Admin Key',
     await js(`document.querySelector('#productModalOverlay').classList.contains('active')`));
   check('no Admin Key prompt appeared for it',
     !(await js(`document.querySelector('#adminModalOverlay').classList.contains('active')`)));
+  check('the add form leaves out the search name',
+    (await js(`getComputedStyle(document.querySelector('#pmAlias').closest('label')).display`)) === 'none',
+    await js(`getComputedStyle(document.querySelector('#pmAlias').closest('label')).display`));
   await click('#pmCancelBtn');
   await sleep(350);
 
@@ -115,6 +143,8 @@ async function run(win) {
     await js(`document.querySelector('#pmSku').value`));
   const deleteOffered = await js(`getComputedStyle(document.querySelector('#pmDeleteBtn')).display`);
   check('deleting a product is offered too', deleteOffered !== 'none', deleteOffered);
+  check('the editor still offers the search name',
+    (await js(`getComputedStyle(document.querySelector('#pmAlias').closest('label')).display`)) !== 'none');
   await click('#pmCancelBtn');
   await sleep(350);
 
@@ -445,6 +475,103 @@ async function run(win) {
   await sleep(400);
   check('the scan after an unknown code replaces it and lands',
     (await tapeText()).includes('Widget'), JSON.stringify(await boxValue()));
+
+  // ---- 11. overview: what the stock on the shelf is worth ----
+  await click('.nav-btn[data-view="dashboard"]');
+  await sleep(450);
+  const worthAtCost = DATA.products.reduce((s, p) => s + Math.max(0, p.stock || 0) * (p.cost || 0), 0);
+  const worthAtSell = DATA.products.reduce((s, p) => s + Math.max(0, p.stock || 0) * (p.price || 0), 0);
+  const shownAtCost = await js(`document.querySelector('#statStockValueCost').textContent`);
+  const shownAtSell = await js(`document.querySelector('#statStockValueSell').textContent`);
+  check('overview values the stock at cost',
+    shownAtCost === DATA.settings.currency + worthAtCost.toFixed(2),
+    shownAtCost + ' vs ' + DATA.settings.currency + worthAtCost.toFixed(2));
+  check('overview values the stock at sell',
+    shownAtSell === DATA.settings.currency + worthAtSell.toFixed(2),
+    shownAtSell + ' vs ' + DATA.settings.currency + worthAtSell.toFixed(2));
+
+  // ---- 12. a product added from the add form carries no search name with it ----
+  await click('.nav-btn[data-view="stock"]');
+  await sleep(400);
+  await click('#addProductBtn');
+  await sleep(400);
+  await js(`(() => { document.querySelector('#pmName').value = 'Added Test';
+    document.querySelector('#pmPrice').value = '5';
+    document.querySelector('#pmCost').value = '2';
+    document.querySelector('#pmStock').value = '3';
+    return true; })()`);
+  await click('#pmSaveBtn');
+  await sleep(500);
+  const addedProduct = DATA.products.find(p => p.name === 'Added Test');
+  check('a product can be added with the search name left off the form', !!addedProduct);
+  check('the added product carries no search name over from a previous edit',
+    !!addedProduct && (addedProduct.alias || '') === '', addedProduct && JSON.stringify(addedProduct.alias));
+
+  // ---- 13. the low-stock list deletes: one row, or several at once ----
+  await click('.nav-btn[data-view="dashboard"]');
+  await sleep(450);
+  const lowRowIds = async () => (await js(`Array.from(document.querySelectorAll('#lowStockList li[data-id]')).map(li => li.dataset.id).join()`)).split(',').filter(Boolean);
+  const catalogueBefore = DATA.products.length;
+  const lowRowsBefore = await lowRowIds();
+  check('the low-stock list offers a delete on every row',
+    (await js(`document.querySelectorAll('#lowStockList li[data-id] .row-link[data-del]').length`)) === lowRowsBefore.length,
+    lowRowsBefore.length + ' rows');
+
+  const singleId = lowRowsBefore[0];
+  await click(`#lowStockList li[data-id="${singleId}"] .row-link[data-del]`);
+  await sleep(300);
+  check('deleting a low-stock row asks first',
+    await js(`document.querySelector('#confirmModalOverlay').classList.contains('active')`));
+  await click('#confirmModalOkBtn');
+  await sleep(500);
+  check('the row is deleted from the catalogue',
+    DATA.products.length === catalogueBefore - 1 && !product(singleId), singleId);
+  check('it leaves the low-stock list',
+    !(await lowRowIds()).includes(singleId));
+
+  const twoIds = (await lowRowIds()).slice(0, 2);
+  check('there are rows left to multi-select', twoIds.length === 2, twoIds.join());
+  await js(`Array.from(document.querySelectorAll('#lowStockList .low-stock-check')).slice(0, 2).forEach(c => c.click()); true`);
+  await sleep(250);
+  check('ticking rows brings up the delete bar',
+    (await js(`getComputedStyle(document.querySelector('#lowStockBulkBar')).display`)) !== 'none');
+  check('the bar counts what is ticked',
+    (await js(`document.querySelector('#lowStockBulkCount').textContent`)) === '2 selected',
+    await js(`document.querySelector('#lowStockBulkCount').textContent`));
+
+  await click('#lowStockBulkDeleteBtn');
+  await sleep(300);
+  await click('#confirmModalOkBtn');
+  await sleep(500);
+  check('deleting several at once removes them all',
+    twoIds.every(id => !product(id)) && DATA.products.length === catalogueBefore - 3,
+    twoIds.join() + ' -> ' + DATA.products.length + ' left');
+  check('the delete bar goes away once nothing is ticked',
+    (await js(`getComputedStyle(document.querySelector('#lowStockBulkBar')).display`)) === 'none');
+
+  // ---- 14. the Stock table's own bulk delete, which shares that code path ----
+  await click('.nav-btn[data-view="stock"]');
+  await sleep(450);
+  // The filter is still holding "Puppy" from section 8, and that product was
+  // deleted in section 13 — so clear it first, or there are no rows to tick.
+  await js(`(() => { const el = document.querySelector('#stockSearch'); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  await sleep(300);
+  const stockBefore = DATA.products.length;
+  check('the stock table has a row for every product left',
+    (await js(`document.querySelectorAll('#stockTableBody .stock-row-check').length`)) === stockBefore,
+    stockBefore + ' products');
+  await js(`Array.from(document.querySelectorAll('#stockTableBody .stock-row-check')).slice(0, 2).forEach(c => c.click()); true`);
+  await sleep(250);
+  check('ticking stock rows brings up the bulk bar',
+    (await js(`getComputedStyle(document.querySelector('#stockBulkBar')).display`)) !== 'none');
+  await click('#stockBulkDeleteBtn');
+  await sleep(300);
+  check('the stock bulk delete asks first',
+    await js(`document.querySelector('#confirmModalOverlay').classList.contains('active')`));
+  await click('#confirmModalOkBtn');
+  await sleep(500);
+  check('the stock bulk delete removes the ticked products',
+    DATA.products.length === stockBefore - 2, stockBefore + ' -> ' + DATA.products.length);
 }
 
 app.whenReady().then(async () => {
