@@ -1,7 +1,7 @@
 {
-  "name": "immaculate-pos",
-  "productName": "Immaculate POS",
-  "version": "1.8.1",
+  "name": "end-pos",
+  "productName": "End PoS",
+  "version": "1.8.2",
   "description": "Offline point-of-sale app for small shops, built with Electron.",
   "main": "main.js",
   "author": "",
@@ -21,8 +21,8 @@
     "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.shop.immaculatepos",
-    "productName": "Immaculate POS",
+    "appId": "com.shop.endpos",
+    "productName": "End PoS",
     "icon": "build/icon",
     "files": [
       "main.js",

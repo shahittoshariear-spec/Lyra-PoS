@@ -1,4 +1,25 @@
-# Immaculate POS
+# End PoS
+
+> ## Please don't rebrand this app
+>
+> **End PoS is a personal project by Shariear's Software (S.S.), and I'm asking
+> you not to change its identity.** If you use it, fork it, or ship it in your
+> own shop, please keep all four of these as they are:
+>
+> 1. **Do not rename the app** — it's *End PoS*, not your shop's name.
+> 2. **Do not remove the S.S. / “Shariear's Software” credit** shown on the
+>    splash screen and in the app window.
+> 3. **Do not replace the app icon** (the blue/ocean-cyan wave mark in
+>    `build/` and `src/app-icon.png`).
+> 4. **Do not jump the version number.** Versions move in single `0.01` steps
+>    — one `0.01` update per release and nothing more. A release may never
+>    increase the version *above* a `0.01` change: for example, going from
+>    `v1.8` to `v1.9`, or `v1.9` to `v2.0`, is not allowed. `v1.8.1` →
+>    `v1.8.2` is the pattern to follow.
+>
+> Everything else — shop name, address, prices, categories, receipts — is
+> yours to change in **Setup**. Just leave the name, credit, icon, and version
+> numbering alone. Thank you.
 
 A simple, offline point-of-sale app for a small shop — built with Electron.
 No internet connection needed once it's installed. All data (products, stock,
@@ -81,7 +102,7 @@ sales) is saved to a file on the computer it runs on.
   export/import, and bulk product import.
 - **Import products from POS Maid (or any spreadsheet)** — bring in a
   product list exported from POS Maid's Excel/CSV export, or any spreadsheet
-  with name/SKU/price/stock columns. Immaculate guesses which column is which
+  with name/SKU/price/stock columns. End PoS guesses which column is which
   and lets you fix the mapping before importing; existing products are
   matched and updated by SKU, everything else is added new. See "Importing a
   product list" below.
@@ -103,9 +124,9 @@ of products across without re-scanning them all:
 
 1. In POS Maid, export the product/inventory list to Excel (or save it as
    CSV if that's offered).
-2. In Immaculate POS, go to **Setup → Import products → Import from Excel /
+2. In End PoS, go to **Setup → Import products → Import from Excel /
    CSV…** and pick that file.
-3. Immaculate shows you the columns it found and its best guess at matching
+3. End PoS shows you the columns it found and its best guess at matching
    them to Name, SKU/barcode, Category, Price, Cost, and Stock — check the
    preview table and fix any dropdown that guessed wrong.
 4. Click **Import products**. Anything with a SKU that already exists gets
@@ -168,9 +189,9 @@ automatically — nothing extra to configure.
 
 ## Where the data lives
 
-The app stores everything in a single `immaculate-pos-data.json` file in the
+The app stores everything in a single `end-pos-data.json` file in the
 computer's standard app-data folder (e.g. on Windows,
-`%APPDATA%\Immaculate POS\immaculate-pos-data.json`). Use **Setup → Backup →
+`%APPDATA%\End PoS\end-pos-data.json`). Use **Setup → Backup →
 Export backup…** regularly, especially before reinstalling Windows or moving
 to a new computer — copy the exported file somewhere safe (a USB drive or
 cloud folder). **Import backup…** restores from that file. The Admin Key is
@@ -178,6 +199,13 @@ stored as a one-way hash in that same file — nobody, including you, can look
 it up from the file itself, so if it's forgotten there's no built-in
 recovery short of restoring an older backup, using Setup → Danger Zone →
 Reset all data, or editing the data file by hand.
+
+Upgrading from the old **Immaculate POS** name keeps your data: because
+renaming the app moves its data folder, the app copies
+`%APPDATA%\Immaculate POS\immaculate-pos-data.json` into the new location the
+first time it runs without finding a data file of its own. An existing data
+file is never overwritten by this, and an unreadable old file is skipped rather
+than guessed at.
 
 ## Printing receipts
 

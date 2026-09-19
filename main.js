@@ -5,7 +5,32 @@ const XLSX = require('xlsx');
 const { buildReceipt } = require('./escpos');
 const { sendRawToPrinter } = require('./rawprint');
 
-const DATA_FILE = path.join(app.getPath('userData'), 'immaculate-pos-data.json');
+const DATA_FILE = path.join(app.getPath('userData'), 'end-pos-data.json');
+
+// The app was renamed (Immaculate POS -> End PoS), which moves Electron's
+// userData folder and would otherwise hide an existing shop's data. Look in
+// the old location once, so an upgrade never looks like a fresh install.
+const LEGACY_DATA_FILES = [
+  path.join(app.getPath('appData'), 'Immaculate POS', 'immaculate-pos-data.json'),
+  path.join(app.getPath('appData'), 'Immaculate POS', 'end-pos-data.json'),
+  path.join(app.getPath('appData'), 'End PoS', 'immaculate-pos-data.json')
+];
+
+function adoptLegacyDataFile() {
+  if (fs.existsSync(DATA_FILE)) return false;
+  for (const legacy of LEGACY_DATA_FILES) {
+    try {
+      if (!fs.existsSync(legacy)) continue;
+      JSON.parse(fs.readFileSync(legacy, 'utf-8')); // only ever copy a valid file
+      fs.copyFileSync(legacy, DATA_FILE);
+      console.log('Imported existing data from', legacy);
+      return true;
+    } catch (err) {
+      console.error('Skipped unusable legacy data file', legacy, err);
+    }
+  }
+  return false;
+}
 
 const DEFAULT_DATA = {
   settings: {
@@ -33,6 +58,7 @@ const DEFAULT_DATA = {
 
 function loadData() {
   try {
+    if (!fs.existsSync(DATA_FILE)) adoptLegacyDataFile();
     if (!fs.existsSync(DATA_FILE)) {
       fs.writeFileSync(DATA_FILE, JSON.stringify(DEFAULT_DATA, null, 2));
       return JSON.parse(JSON.stringify(DEFAULT_DATA));
@@ -72,7 +98,7 @@ function createWindow() {
     minHeight: 680,
     backgroundColor: '#16241F',
     autoHideMenuBar: true,
-    title: 'Immaculate POS',
+    title: 'End PoS',
     icon: path.join(__dirname, 'src', 'app-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -121,7 +147,7 @@ ipcMain.handle('data:resetSalesStock', () => {
 ipcMain.handle('data:exportBackup', async () => {
   const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
     title: 'Export backup',
-    defaultPath: `immaculate-pos-backup-${new Date().toISOString().slice(0, 10)}.json`,
+    defaultPath: `end-pos-backup-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: 'JSON', extensions: ['json'] }]
   });
   if (canceled || !filePath) return { ok: false };

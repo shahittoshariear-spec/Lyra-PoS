@@ -21,7 +21,7 @@ const os = require('os');
 const path = require('path');
 
 // The document name is used to recognise our own job in the queue afterwards.
-const DOCUMENT_NAME = 'Immaculate POS Receipt';
+const DOCUMENT_NAME = 'End PoS Receipt';
 
 const CS_HELPER = `
 using System;
@@ -66,7 +66,7 @@ public class RawPrinterHelper
             return -1;
         int written = 0;
         DOCINFOA di = new DOCINFOA();
-        di.pDocName = "Immaculate POS Receipt";
+        di.pDocName = "End PoS Receipt";
         di.pDataType = "RAW";
         if (StartDocPrinter(hPrinter, 1, di))
         {
@@ -163,7 +163,7 @@ function sendRawToPrinter(printerName, data, timeoutMs) {
 
     let tmpFile;
     try {
-      tmpFile = path.join(os.tmpdir(), 'immaculate-receipt-' + process.pid + '-' + Date.now() + '.prn');
+      tmpFile = path.join(os.tmpdir(), 'end-pos-receipt-' + process.pid + '-' + Date.now() + '.prn');
       fs.writeFileSync(tmpFile, buffer);
     } catch (err) {
       resolve({ ok: false, error: 'Could not stage the receipt: ' + err.message });
