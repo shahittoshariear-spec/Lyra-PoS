@@ -1,7 +1,7 @@
 {
   "name": "immaculate-pos",
   "productName": "Immaculate POS",
-  "version": "1.7.0",
+  "version": "1.8.1",
   "description": "Offline point-of-sale app for small shops, built with Electron.",
   "main": "main.js",
   "author": "",
