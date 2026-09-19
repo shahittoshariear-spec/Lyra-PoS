@@ -127,9 +127,8 @@ async function run(win) {
     await js(`document.querySelector('#productModalOverlay').classList.contains('active')`));
   check('no Admin Key prompt appeared for it',
     !(await js(`document.querySelector('#adminModalOverlay').classList.contains('active')`)));
-  check('the add form leaves out the search name',
-    (await js(`getComputedStyle(document.querySelector('#pmAlias').closest('label')).display`)) === 'none',
-    await js(`getComputedStyle(document.querySelector('#pmAlias').closest('label')).display`));
+  check('the add form has no search name field',
+    (await js(`document.querySelector('#pmAlias') === null`)) === true);
   await click('#pmCancelBtn');
   await sleep(350);
 
@@ -143,10 +142,13 @@ async function run(win) {
     await js(`document.querySelector('#pmSku').value`));
   const deleteOffered = await js(`getComputedStyle(document.querySelector('#pmDeleteBtn')).display`);
   check('deleting a product is offered too', deleteOffered !== 'none', deleteOffered);
-  check('the editor still offers the search name',
-    (await js(`getComputedStyle(document.querySelector('#pmAlias').closest('label')).display`)) !== 'none');
+  check('the edit form has no search name field either',
+    (await js(`document.querySelector('#pmAlias') === null`)) === true);
   await click('#pmCancelBtn');
   await sleep(350);
+  check('closing the product editor hands the keyboard back to the filter',
+    (await js(`document.activeElement.id`)) === 'stockSearch',
+    await js(`document.activeElement.id || document.activeElement.tagName`));
 
   await click('.nav-btn[data-view="ledger"]');
   await sleep(300);
@@ -288,6 +290,82 @@ async function run(win) {
   check('day summary nets the refunds back to zero', dsTotal === 'R0.00', dsTotal);
   check('product cost untouched by refunds', near(product('p1').cost, 4));
 
+  // ---- 6b. Enter completes a sale, from the payment dialog ----
+  const toastMsg = () => js(`document.querySelector('#toast').textContent`);
+  const salesBefore = DATA.sales.length;
+  await click('.product-card[data-id="p1"]');
+  await sleep(250);
+  await click('.tape-actions .btn-charge');
+  await sleep(350);
+
+  // Too little cash is refused, exactly as the button refuses it.
+  await js(`(() => { const el = document.querySelector('#tenderedInput'); el.value = '1'; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  await sleep(200);
+  await js(`document.querySelector('#tenderedInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
+  await sleep(400);
+  check('Enter with too little cash does not complete the sale',
+    DATA.sales.length === salesBefore && (await toastMsg()).includes('less than the total'),
+    DATA.sales.length + ' sales | toast: ' + (await toastMsg()));
+
+  await js(`(() => { const el = document.querySelector('#tenderedInput'); el.value = '20'; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  await sleep(250);
+  check('the change due is shown before Enter completes',
+    (await js(`document.querySelector('#changeAmount').textContent`)) === '9.00',
+    await js(`document.querySelector('#changeAmount').textContent`));
+
+  await js(`document.querySelector('#tenderedInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
+  await sleep(500);
+  check('Enter completes the sale', DATA.sales.length === salesBefore + 1, DATA.sales.length);
+  const enteredSale = DATA.sales[DATA.sales.length - 1];
+  check('the sale keeps what was tendered and the change',
+    !!enteredSale && near(enteredSale.tendered, 20) && near(enteredSale.change, 9),
+    enteredSale && (enteredSale.tendered + ' tendered, ' + enteredSale.change + ' change'));
+  check('stock comes off the shelf for it', stock('p1') === 9, 'p1=' + stock('p1'));
+  await click('#receiptCloseBtn');
+  await sleep(300);
+
+  // Enter arrives in pairs when a cashier is in a hurry: one sale, not two.
+  const salesBeforeDouble = DATA.sales.length;
+  await click('.product-card[data-id="p1"]');
+  await sleep(250);
+  await click('.tape-actions .btn-charge');
+  await sleep(350);
+  await js(`(() => { const el = document.querySelector('#tenderedInput'); el.value = '20'; el.dispatchEvent(new Event('input', { bubbles: true }));
+    const send = () => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    send(); send(); return true; })()`);
+  await sleep(800);
+  check('pressing Enter twice records one sale, not two',
+    DATA.sales.length === salesBeforeDouble + 1, DATA.sales.length + ' sales');
+  check('and takes the stock off once', stock('p1') === 8, 'p1=' + stock('p1'));
+  await click('#receiptCloseBtn');
+  await sleep(300);
+
+  // ---- 6c. payment is cash or card, nothing else ----
+  const salesBeforeCard = DATA.sales.length;
+  await click('.product-card[data-id="p1"]');
+  await sleep(250);
+  await click('.tape-actions .btn-charge');
+  await sleep(350);
+  const methods = await js(`Array.from(document.querySelectorAll('#paymentMethodSeg .seg-btn')).map(b => b.dataset.method).join()`);
+  check('the payment dialog offers only cash and card', methods === 'Cash,Card', methods);
+
+  await click('#paymentMethodSeg .seg-btn[data-method="Card"]');
+  await sleep(250);
+  check('choosing card hides the amount tendered',
+    (await js(`getComputedStyle(document.querySelector('#tenderedField')).display`)) === 'none',
+    await js(`getComputedStyle(document.querySelector('#tenderedField')).display`));
+
+  // Enter from anywhere in the dialog: card needs no amount typed.
+  await js(`document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
+  await sleep(700);
+  const cardSale = DATA.sales[DATA.sales.length - 1];
+  check('Enter completes a card sale with no amount typed',
+    DATA.sales.length === salesBeforeCard + 1 && !!cardSale && cardSale.paymentMethod === 'Card'
+      && near(cardSale.tendered, cardSale.total) && near(cardSale.change, 0),
+    cardSale && (cardSale.paymentMethod + ', ' + cardSale.tendered + ' tendered, ' + cardSale.change + ' change'));
+  await click('#receiptCloseBtn');
+  await sleep(300);
+
   // ---- 7. search names: typing "mp" should find Puppy Food ----
   // Each executeJavaScript runs in the page's global scope, so anything declared
   // here has to be scoped to an IIFE or the second call collides with the first.
@@ -318,21 +396,25 @@ async function run(win) {
   check('the item went into the sale',
     (await js(`document.querySelector('.tape-items').textContent`)).includes('Puppy Food'));
 
-  // ---- 8. the shop can set its own search name ----
+  // ---- 8. a product that already carries a search name keeps it through an edit ----
   await click('.nav-btn[data-view="stock"]');
   await sleep(400);
   await typeSearch('#stockSearch', 'Puppy');
   await sleep(300);
   await click('#stockTableBody tr[data-id="p4"]');
   await sleep(350);
-  check('editor opens with the current search name',
-    (await js(`document.querySelector('#pmAlias').value`)) === 'mp');
-  await js(`document.querySelector('#pmAlias').value = 'puppy'; true`);
+  check('the editor opens without a search name field',
+    (await js(`document.querySelector('#pmAlias') === null`)) === true);
+  // Renamed as well as saved, so a save that quietly did nothing cannot pass the
+  // next check by leaving the search name untouched.
+  await js(`document.querySelector('#pmName').value = 'Puppy Food 2kg (edited)'; true`);
   await click('#pmSaveBtn');
-  await sleep(400);
-  check('search name saved', (product('p4') || {}).alias === 'puppy');
-  check('search name shown in the stock list',
-    (await js(`document.querySelector('#stockTableBody tr[data-id="p4"]').textContent`)).includes('puppy'));
+  await sleep(450);
+  check('editing a product keeps its search name',
+    (product('p4') || {}).alias === 'mp' && (product('p4') || {}).name === 'Puppy Food 2kg (edited)',
+    (product('p4') || {}).alias + ' / ' + (product('p4') || {}).name);
+  const searchNameBadge = await js(`(() => { const b = document.querySelector('#stockTableBody tr[data-id="p4"] .row-sub'); return b ? b.textContent.trim() : ''; })()`);
+  check('the search name is still shown in the stock list', searchNameBadge === 'mp', searchNameBadge);
 
   // ---- 9. categories: delete one that is in use, then add one ----
   await click('.nav-btn[data-view="settings"]');
@@ -350,7 +432,7 @@ async function run(win) {
   check('its products moved to another category',
     (product('p4') || {}).category === 'General', (product('p4') || {}).category);
   check('moved products kept the rest of their details',
-    (product('p4') || {}).alias === 'puppy' && near((product('p4') || {}).price, 60));
+    (product('p4') || {}).alias === 'mp' && near((product('p4') || {}).price, 60));
   check('the deleted category is gone from settings',
     !(await js(`document.querySelector('#settingsCategoryChips').textContent`)).includes('Pet'));
 
@@ -516,6 +598,9 @@ async function run(win) {
   check('the low-stock list offers a delete on every row',
     (await js(`document.querySelectorAll('#lowStockList li[data-id] .row-link[data-del]').length`)) === lowRowsBefore.length,
     lowRowsBefore.length + ' rows');
+  check('a low-stock row shows the product barcode beside Delete',
+    (await js(`document.querySelector('#lowStockList li[data-id="${lowRowsBefore[0]}"] .low-stock-code').textContent`)) === (product(lowRowsBefore[0]) || {}).sku,
+    await js(`document.querySelector('#lowStockList li[data-id="${lowRowsBefore[0]}"] .low-stock-code').textContent`));
 
   const singleId = lowRowsBefore[0];
   await click(`#lowStockList li[data-id="${singleId}"] .row-link[data-del]`);
@@ -572,6 +657,35 @@ async function run(win) {
   await sleep(500);
   check('the stock bulk delete removes the ticked products',
     DATA.products.length === stockBefore - 2, stockBefore + ' -> ' + DATA.products.length);
+
+  // ---- 15. a big number is grouped, so it can be counted ----
+  await click('.nav-btn[data-view="stock"]');
+  await sleep(400);
+  await click('#addProductBtn');
+  await sleep(400);
+  await js(`(() => { document.querySelector('#pmName').value = 'Bulk Dog Food 40kg';
+    document.querySelector('#pmPrice').value = '12345.67';
+    document.querySelector('#pmCost').value = '1000';
+    document.querySelector('#pmStock').value = '100';
+    return true; })()`);
+  await click('#pmSaveBtn');
+  await sleep(500);
+  await click('.nav-btn[data-view="dashboard"]');
+  await sleep(500);
+
+  // Grouped here independently, so the check is not simply the app agreeing with
+  // itself: 100 x 1000 = 100,000 and 100 x 12345.67 = 1,234,567.
+  const group = (n) => {
+    const parts = n.toFixed(2).split('.');
+    return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + parts[1];
+  };
+  const bulk = DATA.products.find(p => p.name === 'Bulk Dog Food 40kg');
+  const wantCost = DATA.settings.currency + group(bulk ? Math.max(0, bulk.stock) * bulk.cost : 0);
+  const wantSell = DATA.settings.currency + group(bulk ? Math.max(0, bulk.stock) * bulk.price : 0);
+  const gotCost = await js(`document.querySelector('#statStockValueCost').textContent`);
+  const gotSell = await js(`document.querySelector('#statStockValueSell').textContent`);
+  check('inventory at cost is grouped every three digits', gotCost === wantCost, gotCost + ' vs ' + wantCost);
+  check('inventory at sell is grouped every three digits', gotSell === wantSell, gotSell + ' vs ' + wantSell);
 }
 
 app.whenReady().then(async () => {

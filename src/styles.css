@@ -794,8 +794,11 @@ summary:focus-visible {
 /* A low-stock row can be worked on: the checkbox and the name sit at the left
    edge, the badge and the Delete link at the right, so the row keeps the
    spacing it had before it gained its controls. */
-.low-stock-name { display: flex; align-items: center; gap: var(--space-3); }
-.low-stock-side { display: flex; align-items: center; gap: var(--space-3); }
+.low-stock-name { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.low-stock-side { display: flex; align-items: center; gap: var(--space-3); flex-shrink: 0; }
+/* The barcode beside Delete: muted, and kept to one line, because half a barcode
+   is no use to anyone reading one out. */
+.low-stock-code { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------------- Forms ---------------- */
 

@@ -20,6 +20,14 @@
     const v = Number(n || 0);
     return DATA.settings.currency + v.toFixed(2);
   }
+
+  // The same as money(), with a comma every three digits — "R1,234,567.00"
+  // rather than "R1234567.00" — for figures that are read rather than rung up.
+  function moneyGrouped(n) {
+    const v = Number(n || 0);
+    const parts = Math.abs(v).toFixed(2).split('.');
+    return DATA.settings.currency + (v < 0 ? '-' : '') + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + parts[1];
+  }
   function fmt(n) { return Number(n || 0).toFixed(2); }
   function uid(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function nextProductId() { return 'p' + (DATA.nextProductId++); }
@@ -77,7 +85,12 @@
       // that usually happens is a scan — so hand the keyboard back to the
       // barcode box rather than leaving it wherever the modal left it. This is
       // what stopped scans landing in the tendered-amount field after a sale.
+      // Stock has the same problem and the same answer: after adding, editing or
+      // deleting a product the next thing is usually a search, and without this
+      // the caret was left on a button inside a dialog that had just been hidden,
+      // so typing went nowhere at all.
       if ($('#view-till').classList.contains('active')) focusScanTarget();
+      if ($('#view-stock').classList.contains('active')) focusStockFilter();
     }, MODAL_CLOSE_MS);
   }
 
@@ -366,6 +379,16 @@
   }
 
   function handleScanEnter(burst, evt) {
+    // Taking payment: Enter completes the sale, and is never read as a scan here,
+    // so a code left in the barcode box cannot add an item to a sale that is
+    // being paid for. Nothing happens while the dialog is animating shut either,
+    // so an Enter right after Cancel cannot complete it by accident.
+    const chargeOverlay = $('#chargeModalOverlay');
+    if (chargeOverlay.classList.contains('active') && !chargeOverlay.classList.contains('closing')) {
+      evt.preventDefault();
+      completeSale();
+      return;
+    }
     // Somewhere else entirely is being typed into; leave it alone.
     if (isForeignTypingField(document.activeElement)) return;
     commitScan(bestScanText(burst));
@@ -773,7 +796,17 @@
     }
   }
 
+  // True while a sale is being written. The payment dialog stays open while it
+  // animates shut and Enter arrives in pairs, so without this a second press
+  // writes the same sale into the Ledger twice and takes the stock off the shelf
+  // twice. Cleared in a finally, so a failed save cannot leave the till unable to
+  // take money.
+  let completingSale = false;
+
   async function completeSale() {
+    if (completingSale) return;
+    // Nothing to sell: never write a zero-value sale into the Ledger.
+    if (!cart.length) return;
     const t = cartTotals();
     const method = currentPaymentMethod();
     let tendered = t.total, change = 0;
@@ -800,23 +833,30 @@
       change: change
     };
 
-    sale.items.forEach(li => {
-      const p = DATA.products.find(pp => pp.id === li.productId);
-      if (p) p.stock = Math.max(0, p.stock - li.qty);
-    });
+    // Everything below waits on the save, so the flag goes up first — a second
+    // Enter arriving during that await is refused at the top of the function.
+    completingSale = true;
+    try {
+      sale.items.forEach(li => {
+        const p = DATA.products.find(pp => pp.id === li.productId);
+        if (p) p.stock = Math.max(0, p.stock - li.qty);
+      });
 
-    DATA.sales.push(sale);
-    await persist();
+      DATA.sales.push(sale);
+      await persist();
 
-    cart = [];
-    renderCart();
-    renderCatalog();
-    renderDaySummary();
-    closeModal('#chargeModalOverlay');
+      cart = [];
+      renderCart();
+      renderCatalog();
+      renderDaySummary();
+      closeModal('#chargeModalOverlay');
 
-    currentSaleForReceipt = sale;
-    currentReceiptIsHistorical = false;
-    showReceiptModal(sale);
+      currentSaleForReceipt = sale;
+      currentReceiptIsHistorical = false;
+      showReceiptModal(sale);
+    } finally {
+      completingSale = false;
+    }
   }
 
   // ---------------- Refunds ----------------
@@ -1346,16 +1386,11 @@
     $('#productModalTitle').textContent = isEdit ? 'Edit product' : 'Add product';
     populateCategorySelect($('#pmCategory'));
     $('#pmDeleteBtn').style.display = isEdit ? 'inline-flex' : 'none';
-    // The search name is a shortcut for a product that already exists — a short
-    // code to type at the till — so it is offered when editing, and the add form
-    // asks only for the fields a product cannot be saved without.
-    $('#pmAlias').closest('label').style.display = isEdit ? '' : 'none';
 
     if (isEdit) {
       const p = DATA.products.find(pp => pp.id === productId);
       $('#pmName').value = p.name;
       $('#pmSku').value = p.sku || '';
-      $('#pmAlias').value = p.alias || '';
       $('#pmCategory').value = p.category;
       $('#pmPrice').value = p.price;
       $('#pmCost').value = p.cost;
@@ -1364,7 +1399,6 @@
     } else {
       $('#pmName').value = '';
       $('#pmSku').value = '';
-      $('#pmAlias').value = '';
       $('#pmPrice').value = '';
       $('#pmCost').value = '';
       $('#pmStock').value = '';
@@ -1383,7 +1417,12 @@
       const cost = parseFloat($('#pmCost').value) || 0;
       const stock = parseInt($('#pmStock').value, 10) || 0;
       const sku = $('#pmSku').value.trim();
-      const alias = $('#pmAlias').value.trim();
+      // The form no longer offers a search name. One the product already carries
+      // is kept — an edit must not quietly wipe it — and a new product starts
+      // without one.
+      const alias = editingProductId
+        ? (DATA.products.find(pp => pp.id === editingProductId) || {}).alias || ''
+        : '';
       const supplier = $('#pmSupplier').value.trim();
       const category = $('#pmCategory').value || DATA.categories[0] || 'General';
 
@@ -1649,7 +1688,7 @@
         const checked = selectedLowStockIds.has(p.id);
         return `<li data-id="${p.id}">
           <span class="low-stock-name"><input type="checkbox" class="low-stock-check" data-id="${p.id}"${checked ? ' checked' : ''} />${escapeHtml(p.name)}</span>
-          <span class="low-stock-side"><span class="stock-badge low">${p.stock} left</span><span class="row-link" data-del="${p.id}">Delete</span></span>
+          <span class="low-stock-side"><span class="stock-badge low">${p.stock} left</span><span class="low-stock-code">${escapeHtml(p.sku || '—')}</span><span class="row-link" data-del="${p.id}">Delete</span></span>
         </li>`;
       }).join('')
       : '<li class="plain-empty">Everything is well stocked.</li>';
@@ -1739,8 +1778,8 @@
       stockValueAtCost += qty * (p.cost || 0);
       stockValueAtSell += qty * (p.price || 0);
     });
-    $('#statStockValueCost').textContent = money(stockValueAtCost);
-    $('#statStockValueSell').textContent = money(stockValueAtSell);
+    $('#statStockValueCost').textContent = moneyGrouped(stockValueAtCost);
+    $('#statStockValueSell').textContent = moneyGrouped(stockValueAtSell);
 
     renderPaymentSplit('#paymentSplitToday', t, 'No sales in this period yet.');
 

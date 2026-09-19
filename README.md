@@ -7,8 +7,11 @@ sales) is saved to a file on the computer it runs on.
 ## What it does
 
 - **Till** — search, tap, or scan a barcode to build a sale; hold a sale to
-  serve another customer and resume it later; take cash/card/other payment
-  with automatic change calculation; print or save a receipt.
+  serve another customer and resume it later; take cash or card payment
+  with automatic change calculation; print or save a receipt. In the payment
+  dialog, Enter completes the sale — type what the customer handed over and
+  press Enter, and the change is worked out for you. Pressing Enter twice in a
+  hurry still records the sale once.
 - **Barcode scanning** — plug in any USB or Bluetooth barcode scanner (the
   cheap kind that "types" like a keyboard). Scan a product at the till to add
   it straight to the cart; scan while adding/editing a product to fill in its
@@ -16,12 +19,11 @@ sales) is saved to a file on the computer it runs on.
   ends with Enter, and the box empties itself as soon as the item goes into the
   sale, ready for the next one. Pressing Enter in that box also adds whatever
   you typed (a search name, say), so you never have to reach for the mouse.
-- **Search names** — give a product a short name of your own and typing that
-  brings it up: "mp" for Puppy Food, "bre1" for Breeders 1kg. Set it in the
-  product editor (Stock → open the product → **Search name or code**; the add
-  form leaves the field out). The Till
-  and Stock both match it alongside the product's name and SKU, and adding an
-  item to a sale clears the search box, ready for the next one.
+- **Search names** — the product form used to offer a **Search name or code**
+  field: a short code of your own, like "mp" for Puppy Food, that the Till and
+  Stock match alongside the product's name and SKU. The form no longer asks for
+  one, so nothing sets one now, but a product that already carries a search name
+  still matches on it.
 - **Categories** — add them in Setup → Categories and remove one with the ✕.
   Deleting a category that products are filed under asks which category those
   products should move to, so nothing is ever left pointing at a category that
@@ -44,7 +46,9 @@ sales) is saved to a file on the computer it runs on.
   price, cost, quantity on hand). Opening Stock puts the caret straight into the
   filter box, so a product can be typed or scanned without clicking first, and a
   left arrow with the cursor already at the start of that box clears the filter,
-  walking left off the edge to empty it without a trip to the mouse.
+  walking left off the edge to empty it without a trip to the mouse. The keyboard
+  comes back to that box when a product is added, edited or deleted, so the next
+  search can be typed straight away.
 - **Ledger** — every past sale and refund, filterable by date, with a
   reprintable receipt. Each row has **Reprint** to print a copy without opening
   anything, and **View** to see the receipt — reprint it, or refund items from
@@ -57,11 +61,13 @@ sales) is saved to a file on the computer it runs on.
   matching sales history table (previous days, weeks, months, or years) so
   trends are easy to spot at any zoom level. Low-stock warnings, and the two
   inventory value figures — what the shelf is worth at cost and at sell — are
-  always current regardless of the tab selected.
+  always current regardless of the tab selected, and carry a comma every three
+  digits, so a big number can be counted at a glance.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales
-  already recorded.
+  already recorded. Each line also shows the product's barcode beside Delete,
+  ready to read out or copy when reordering.
 - **Profit** is sales minus cost of goods sold, using each product's Cost
   field at the time of sale. If Profit ever looks identical to Sales for a
   period, it means the products sold in that period have no Cost set —
@@ -273,6 +279,10 @@ never put the wrong thing in the sale. The box empties itself after every scan,
 including one that fails, so the next scan never gets stuck onto the front of
 the last one.
 
+While the payment dialog is open, Enter completes the sale instead — it is never
+read as a scan there, so a code left in the box cannot add an item to a sale that
+is being paid for.
+
 A code that matches nothing stays on screen, selected, so you can read it — and
 the next scan replaces it rather than adding to it.
 
@@ -289,7 +299,7 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 `npm run smoke` opens the app's own screens in a hidden window and drives them
 by clicking: ring up a sale, reprint it from the Ledger, refund a single line of
 it, then refund the rest. It checks the saved sales, stock levels, till totals
-and receipt text as it goes, printing a pass/fail line for each — 109 checks at
+and receipt text as it goes, printing a pass/fail line for each — 123 checks at
 the time of writing. It runs against its own throwaway data held in memory, so
 your shop's data file is never touched.
 
