@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Everything the main window needs: no plugin commands beyond the file dialogs the app itself raises from Rust.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

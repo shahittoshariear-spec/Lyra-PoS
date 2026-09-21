@@ -1,4 +1,11 @@
-node_modules/
-release/
+# Rust build output
+/target
+
+# Tauri's generated schemas (only produced when the Tauri CLI is used)
+/gen
+
+# Installed app bundles
+/release
+
 *.log
 .DS_Store

@@ -1,29 +1,51 @@
-# End PoS
+# Lyra PoS
 
-> ## Please don't rebrand this app
+> ## A note on the name
 >
-> **End PoS is a personal project by Shariear's Software (S.S.), and I'm asking
-> you not to change its identity.** If you use it, fork it, or ship it in your
-> own shop, please keep all four of these as they are:
+> **Lyra PoS is the same app as *End PoS* (formerly *Immaculate POS*) by
+> Shariear's Software (S.S.), rebuilt in Rust.** The rebuild was asked for by its
+> author, and the rename from *End PoS* to *Lyra PoS* came with it. Everything
+> else is deliberately unchanged:
 >
-> 1. **Do not rename the app** — it's *End PoS*, not your shop's name.
-> 2. **Do not remove the S.S. / “Shariear's Software” credit** shown on the
->    splash screen and in the app window.
-> 3. **Do not replace the app icon** (the blue/ocean-cyan wave mark in
->    `build/` and `src/app-icon.png`).
-> 4. **Do not jump the version number.** Versions move in single `0.01` steps
->    — one `0.01` update per release and nothing more. A release may never
->    increase the version *above* a `0.01` change: for example, going from
->    `v1.8` to `v1.9`, or `v1.9` to `v2.0`, is not allowed. `v1.8.1` →
->    `v1.8.2` is the pattern to follow.
+> 1. **The S.S. / “Shariear's Software” credit** still shows on the splash screen
+>    and in the app window.
+> 2. **The app icon** is the same blue/ocean-cyan wave mark (`icons/`).
+> 3. **Versions still move in single `0.01` steps** — this build is `v1.8.2`,
+>    the version it was rebuilt from. No jumping to `v1.9` or `v2.0`.
+> 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
-> Everything else — shop name, address, prices, categories, receipts — is
-> yours to change in **Setup**. Just leave the name, credit, icon, and version
-> numbering alone. Thank you.
+> If you fork it, please leave 1–4 alone. Everything else — shop name, address,
+> prices, categories, receipts — is yours to change in **Setup**.
 
-A simple, offline point-of-sale app for a small shop — built with Electron.
-No internet connection needed once it's installed. All data (products, stock,
-sales) is saved to a file on the computer it runs on.
+> ## Built on Rust from here on
+>
+> From this version, Lyra PoS is built in Rust rather than on Electron. Nothing
+> in the shop changes — same screens, same data file, same receipts — but it is
+> built for **performance**, **consistency** and **security**:
+>
+> - **Performance.** No browser engine is bundled and no Node.js runs behind the
+>   screens. The window is the system's own webview, every machine-facing job
+>   (files, backups, printing, spreadsheets) is compiled Rust, and the app is a
+>   single ~10 MB executable instead of a folder of hundreds.
+> - **Consistency.** One binary that behaves the same on every machine, with the
+>   data file written atomically, so an interrupted save can never leave a
+>   half-written file behind. It always opens: a file it cannot read is set aside
+>   rather than being a reason to fail.
+> - **Security.** The screens can reach exactly the eleven commands the app
+>   defines, and nothing else. There is no remote content, no network access at
+>   all, and no scripting bridge into the operating system.
+>
+> Your data comes with you — see "Where the data lives" below.
+
+A simple, offline point-of-sale app for a small shop. No internet connection is
+needed once it's installed. All data (products, stock, sales) is saved to a file
+on the computer it runs on.
+
+It is built in two halves: the screens are plain HTML, CSS and JavaScript, and
+everything that touches the machine — the data file, backups, spreadsheet
+imports, and printing — is Rust, behind [Tauri](https://tauri.app). On Windows
+the window is rendered by the WebView2 runtime that ships with Windows 10 and 11,
+so there is no browser to install and no Node.js to install.
 
 ## What it does
 
@@ -66,10 +88,9 @@ sales) is saved to a file on the computer it runs on.
 - **Stock** — add, edit, and delete products (name, SKU/barcode, category,
   price, cost, quantity on hand). Opening Stock puts the caret straight into the
   filter box, so a product can be typed or scanned without clicking first, and a
-  left arrow with the cursor already at the start of that box clears the filter,
-  walking left off the edge to empty it without a trip to the mouse. The keyboard
-  comes back to that box when a product is added, edited or deleted, so the next
-  search can be typed straight away.
+  left arrow with the cursor already at the start of that box clears the filter.
+  The keyboard comes back to that box when a product is added, edited or
+  deleted, so the next search can be typed straight away.
 - **Ledger** — every past sale and refund, filterable by date, with a
   reprintable receipt. Each row has **Reprint** to print a copy without opening
   anything, and **View** to see the receipt — reprint it, or refund items from
@@ -102,7 +123,7 @@ sales) is saved to a file on the computer it runs on.
   export/import, and bulk product import.
 - **Import products from POS Maid (or any spreadsheet)** — bring in a
   product list exported from POS Maid's Excel/CSV export, or any spreadsheet
-  with name/SKU/price/stock columns. End PoS guesses which column is which
+  with name/SKU/price/stock columns. Lyra PoS guesses which column is which
   and lets you fix the mapping before importing; existing products are
   matched and updated by SKU, everything else is added new. See "Importing a
   product list" below.
@@ -124,9 +145,9 @@ of products across without re-scanning them all:
 
 1. In POS Maid, export the product/inventory list to Excel (or save it as
    CSV if that's offered).
-2. In End PoS, go to **Setup → Import products → Import from Excel /
+2. In Lyra PoS, go to **Setup → Import products → Import from Excel /
    CSV…** and pick that file.
-3. End PoS shows you the columns it found and its best guess at matching
+3. Lyra PoS shows you the columns it found and its best guess at matching
    them to Name, SKU/barcode, Category, Price, Cost, and Stock — check the
    preview table and fix any dropdown that guessed wrong.
 4. Click **Import products**. Anything with a SKU that already exists gets
@@ -136,6 +157,8 @@ of products across without re-scanning them all:
 This also works for a plain CSV/Excel export from almost any other POS or
 even a hand-built spreadsheet — it doesn't have to come from POS Maid
 specifically, as long as it has columns for at least a name and a price.
+
+The `.xlsx`, `.xls`, `.xlsb`, `.ods` and `.csv` formats are all read.
 
 ## Resetting data
 
@@ -159,39 +182,44 @@ using either.
 
 ## Running it
 
-You'll need [Node.js](https://nodejs.org) installed (the free "LTS" version
-is fine). Then, from this folder:
+You'll need [Rust](https://rustup.rs) (the stable toolchain). Then, from this
+folder:
 
 ```bash
-npm install
-npm start
+cargo run
 ```
 
-That opens the app in its own window.
+The first run compiles everything, which takes a few minutes; after that it is
+quick. That opens the app in its own window.
+
+On Windows you also need the **WebView2 runtime**, which is preinstalled on
+Windows 10 and 11. On a machine that hasn't got it, the installer below will
+offer to fetch it.
 
 ## Building an installer (a double-click app icon instead of the command line)
 
 ```bash
-npm install
-npm run dist
+cargo install tauri-cli --version "^2"
+cargo tauri build
 ```
 
-This creates an installer in the `release/` folder:
-- Windows → an `.exe` installer
+This creates an installer in `target/release/bundle/`:
+
+- Windows → an `.exe` installer (NSIS) and an `.msi`
 - macOS → a `.dmg`
-- Linux → an `.AppImage`
+- Linux → a `.deb` and an `.AppImage`
 
 Build it on the same type of computer it will run on (build the Windows
 installer on Windows, etc.) unless you set up cross-building separately. The
-app's icon (`build/icon.ico` / `.icns` / `.png`) is already wired up in
-`package.json`, so the installer and the installed app will carry it
+app's icon (`icons/icon.ico` / `.icns` / `.png`) is already wired up in
+`tauri.conf.json`, so the installer and the installed app carry it
 automatically — nothing extra to configure.
 
 ## Where the data lives
 
-The app stores everything in a single `end-pos-data.json` file in the
-computer's standard app-data folder (e.g. on Windows,
-`%APPDATA%\End PoS\end-pos-data.json`). Use **Setup → Backup →
+The app stores everything in a single `lyra-pos-data.json` file in the
+computer's standard app-data folder (on Windows,
+`%APPDATA%\Lyra PoS\lyra-pos-data.json`). Use **Setup → Backup →
 Export backup…** regularly, especially before reinstalling Windows or moving
 to a new computer — copy the exported file somewhere safe (a USB drive or
 cloud folder). **Import backup…** restores from that file. The Admin Key is
@@ -200,12 +228,26 @@ it up from the file itself, so if it's forgotten there's no built-in
 recovery short of restoring an older backup, using Setup → Danger Zone →
 Reset all data, or editing the data file by hand.
 
-Upgrading from the old **Immaculate POS** name keeps your data: because
-renaming the app moves its data folder, the app copies
-`%APPDATA%\Immaculate POS\immaculate-pos-data.json` into the new location the
-first time it runs without finding a data file of its own. An existing data
-file is never overwritten by this, and an unreadable old file is skipped rather
-than guessed at.
+**Upgrading keeps your data.** Renaming the app moves its data folder, which
+would otherwise hide an existing shop's data, so the first time it runs without
+finding a data file of its own it looks for one left by an earlier name — first
+`%APPDATA%\End PoS\end-pos-data.json`, then the `Immaculate POS` folders — and
+copies the first valid one into place. An existing data file is never
+overwritten by this, and an unreadable old file is skipped rather than guessed
+at.
+
+Two details worth knowing if you go looking at that file:
+
+- It is written to a temporary file and then moved into place, so a crash or a
+  full disk part-way through a save can never leave a half-written data file
+  behind — the previous good one survives until the new one is whole.
+- If the file is ever unreadable, it is renamed to
+  `lyra-pos-data.json.bak-<timestamp>` and a fresh one is started, rather than
+  the app refusing to open. Nothing is silently deleted, so a damaged file can
+  still be repaired by hand.
+
+The Admin Key hash is computed by the same SHA-256 the app has always used, so a
+key set in *End PoS* or *Immaculate POS* unlocks *Lyra PoS* unchanged.
 
 ## Printing receipts
 
@@ -228,6 +270,7 @@ queue — which driver is attached to it makes no difference.
 
 Leave the dropdown on **Ask me each time** to keep the normal print dialog —
 handy for saving a receipt as a PDF, or when no thermal printer is connected.
+That dialog is the system's own, so it also offers **Microsoft Print to PDF**.
 Either way every receipt is saved in the Ledger and can be reprinted later.
 
 ### If receipts don't print
@@ -240,8 +283,8 @@ Either way every receipt is saved in the Ledger and can be reprinted later.
 - The printer must be switched on and have paper; a job sent to a printer that
   is not responding is reported as such rather than failing silently.
 - Only plain text and the accented characters listed at the top of
-  `escpos.js` can be printed. Anything else prints as `?` — extend that table
-  if your shop name needs more.
+  `src/escpos.rs` can be printed. Anything else prints as `?` — extend that
+  table if your shop name needs more.
 
 ## What's not in this build
 
@@ -286,11 +329,11 @@ again even when you're already unlocked, so a stray click can't wipe anything.
 
 If you would rather staff could *not* change stock or issue refunds without you,
 say so: refunds are gated in `canRefundSale` and stock changes would be gated by
-re-adding the check at the Stock entry points, both in `src/app.js`.
+re-adding the check at the Stock entry points, both in `ui/app.js`.
 
 Choosing a locked view raises the Admin Key prompt and then opens the view you
 asked for, so nothing is more than one password away. The list of locked views
-is `PROTECTED_VIEWS` in `src/app.js`.
+is `PROTECTED_VIEWS` in `ui/app.js`.
 
 ## Scanning barcodes
 
@@ -322,38 +365,63 @@ manual's barcode for "CR suffix" or "Enter suffix" fixes it. You can also slow a
 scanner down if it's typing too fast for the till; the app copes with gaps up to
 150ms between characters.
 
+## What's where
+
+| Path | What's in it |
+|---|---|
+| `ui/` | The screens: `index.html`, `styles.css`, `app.js`, `bridge.js` |
+| `src/main.rs` | The commands the screens can call, and the window setup |
+| `src/data.rs` | The shape of the saved data, and reading/writing it |
+| `src/escpos.rs` | Turning a receipt's text into the bytes a thermal printer wants |
+| `src/printing.rs` | Listing printers, and sending a receipt to one |
+| `src/import.rs` | Reading a product list, and guessing which column is which |
+| `src/bridge.js` | The one place the screens talk to the machine |
+
+Everything a shop actually sees is in `ui/`. The Rust half deliberately holds no
+prices, no totals and no receipt layout — it moves bytes and files, and the
+arithmetic stays where it can be read alongside the screen that shows it.
+
 ## Checking your changes
 
-`npm run smoke` opens the app's own screens in a hidden window and drives them
-by clicking: ring up a sale, reprint it from the Ledger, refund a single line of
-it, then refund the rest. It checks the saved sales, stock levels, till totals
-and receipt text as it goes, printing a pass/fail line for each — 123 checks at
-the time of writing. It runs against its own throwaway data held in memory, so
-your shop's data file is never touched.
+```bash
+cargo test
+```
 
-Run it before building an installer, or after changing anything to do with the
-Till, Stock, the Ledger, refunds or receipts. It exits non-zero if anything
-fails, so it is safe to use as a build gate.
+This runs the tests for the Rust half — the data file (including that a file
+written by an older version still loads, and that a return round-trips as
+`"type":"return"`), the ESC/POS builder (accents, line endings, the cut, and
+that a combining accent prints as `é` rather than `?`), and the column-matching
+for spreadsheet imports (including that a "SupplyPrice" column becomes Cost
+rather than Price). It exits non-zero if anything fails, so it is safe to use as
+a build gate.
 
-`npm run bench` measures how long the slow parts take on the machine it runs on,
-using a made-up shop of 2448 products and 62 sales (set `BENCH_PRODUCTS` and
-`BENCH_SALES` to try other sizes). Run it before and after a performance change
-so the numbers are comparable, and only compare runs made one after the other —
-a busy machine can double every number in the list.
+The shop's own arithmetic — totals, tax, refund apportioning, period buckets and
+the receipt layout — lives in `ui/app.js`, and the earlier build drove that with
+a scripted smoke test (`npm run smoke`, 123 checks) that clicked through the real
+screens in a hidden window. That harness was built on Electron and does not carry
+over as it stands. Two ways to get it back, if you want one of them:
 
-Two things worth knowing when reading the results. A view switch is timed from
-the click until the browser has laid the new screen out, because the app's
-renders are synchronous but the browser lays out lazily; a measurement that
-skips the forced layout counts only the JavaScript and quietly charges the
-layout to whatever runs next. And each switch is measured four times, keeping
-the best, so one slow moment can't decide the number.
+- **Run the real screens in a headless browser.** Serve `ui/` over HTTP, stub
+  `window.pos` with an in-memory data object, and drive the screens with
+  Playwright. This is closest to the old smoke test and would keep checking the
+  DOM, the animations and the click paths as well as the arithmetic.
+- **Move the arithmetic into its own file.** Lift the pure functions — `money`,
+  `cartTotals`, `receiptText`, `computePeriodTotals`, `refundSelectionTotals` —
+  into something like `ui/core.js` and test them directly with Node. Cheaper,
+  and it covers the numbers, but not the screens.
 
 ## Long lists
 
-A shop can hold thousands of products, and every row in the page is another row
-the browser has to lay out. So the Stock table and the Ledger draw the first 500
-rows and put a **Show more** button at the bottom of the list, rather than
-drawing everything at once. Nothing is out of reach: "Show more" reveals the
-next 500, searching filters the whole list, and *Select all* still means every
-matching product. The cap is `MAX_STOCK_ROWS` / `MAX_LEDGER_ROWS` in
-`src/app.js` if the numbers ever need changing.
+A shop can hold thousands of products and years of sales, so the Till draws only
+the first 120 matching products (typing narrows them), and the Stock and Ledger
+tables draw a page of 500 rows at a time with a **Show more** button. Searching,
+picking a category, or **Select all** still covers every matching record, not
+just the rows on screen.
+
+Two things the rebuild tightened up here:
+
+- Product cards only play their entrance animation when the list of products
+  actually changes. Before, every redraw restarted the animation on all 120
+  cards, so adding an item to a sale made the whole grid flicker.
+- The Till's search box and the Stock filter each keep their own debounce, so
+  typing stays responsive while the list is redrawn behind it.

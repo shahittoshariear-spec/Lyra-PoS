@@ -32,7 +32,7 @@
   function uid(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function nextProductId() { return 'p' + (DATA.nextProductId++); }
 
-  async function persist() { await window.tally.saveData(DATA); }
+  async function persist() { await window.pos.saveData(DATA); }
 
   function toast(msg) {
     const t = $('#toast');
@@ -124,13 +124,27 @@
     });
   }
 
-  async function sha256Hex(text) {
-    const enc = new TextEncoder().encode(text);
-    const buf = await crypto.subtle.digest('SHA-256', enc);
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
+  // The Admin Key is hashed on the Rust side, so the stored hash is exactly the
+  // one this app has always written and a key set in an earlier build still
+  // unlocks the till here.
+  function hashAdminKey(text) { return window.pos.hashAdminKey(text); }
 
   // ---------------- Navigation ----------------
+
+  // Tucking the product list away gives the receipt the whole window, which is
+  // what a shop wants when the customer is watching the tape rather than the
+  // catalogue. The running total then sits in the same place on the screen.
+  function initCatalogToggle() {
+    const btn = $('#hideItemsBtn');
+    const grid = document.querySelector('.till-grid');
+    if (!btn || !grid) return;
+    btn.addEventListener('click', () => {
+      const hidden = grid.classList.toggle('catalog-hidden');
+      btn.textContent = hidden ? 'Show items' : 'Hide items';
+      btn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+      if (!hidden) { renderCatalog(); focusScanTarget(); }
+    });
+  }
 
   function initNav() {
     $$('.nav-btn').forEach(btn => {
@@ -265,7 +279,7 @@
         const confirm = $('#adminKeyConfirmInput').value;
         if (!key || key.length < 4) { toast('Admin Key should be at least 4 characters.'); return; }
         if (key !== confirm) { toast("Those don't match. Try again."); return; }
-        DATA.settings.adminKeyHash = await sha256Hex(key);
+        DATA.settings.adminKeyHash = await hashAdminKey(key);
         await persist();
         closeModal(overlay);
         unlocked = true;
@@ -273,7 +287,7 @@
         toast('Admin Key saved. You are unlocked for this session.');
       } else {
         const key = $('#adminKeyInput').value;
-        const hash = await sha256Hex(key || '');
+        const hash = await hashAdminKey(key || '');
         if (hash !== DATA.settings.adminKeyHash) { toast('Incorrect Admin Key.'); return; }
         closeModal(overlay);
         unlocked = true;
@@ -472,6 +486,12 @@
     });
   }
 
+  // Which products the grid drew last time, so the cards only animate in when
+  // the list itself changes. Without this the pop-in ran again on every redraw
+  // — adding one item to the sale was enough — and a screenful of cards
+  // restarting their animation is exactly what makes a till feel jittery.
+  let catalogueSignature = null;
+
   function renderCatalog() {
     renderCategoryChips();
     const q = ($('#productSearch').value || '').trim().toLowerCase();
@@ -484,6 +504,7 @@
     ).sort((a, b) => a.name.localeCompare(b.name));
 
     if (!items.length) {
+      catalogueSignature = null;
       grid.innerHTML = '<div class="tape-empty" style="grid-column:1/-1;">No products match. Add stock from the Stock tab, or scan a barcode.</div>';
       return;
     }
@@ -492,6 +513,9 @@
     // every keystroke is what makes the Till feel slow. Only the first screenful
     // is drawn once the list gets long — typing in the search box narrows it.
     const shown = items.slice(0, MAX_CATALOG_CARDS);
+    const signature = shown.map(p => p.id).join(',');
+    grid.classList.toggle('grid-settled', signature === catalogueSignature);
+    catalogueSignature = signature;
     let html = '';
     shown.forEach(p => {
       const outOfStock = p.stock <= 0;
@@ -1087,14 +1111,6 @@
     return ' '.repeat(pad) + text;
   }
 
-  function receiptHtml(sale) {
-    const text = receiptText(sale);
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-      body { font-family: 'Courier New', monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 12px 0; white-space: pre-wrap; }
-      @media print { @page { margin: 6mm; } }
-    </style></head><body>${escapeHtml(text)}</body></html>`;
-  }
-
   // A short receipt for Setup's "Test print" button. Built the same way as a
   // real one, so it also proves the shop's own details fit the paper.
   function sampleReceiptText() {
@@ -1121,7 +1137,7 @@
   // Windows driver is not used at all, so this works with printers that cannot
   // print through their own driver.
   async function printReceiptToPrinter(sale, printer) {
-    const res = await window.tally.printReceiptRaw(
+    const res = await window.pos.printReceiptRaw(
       receiptText(sale),
       printer,
       { cut: DATA.settings.receiptCutPaper !== false }
@@ -1140,8 +1156,9 @@
   async function reprintReceipt(sale) {
     const printer = (DATA.settings.receiptPrinter || '').trim();
     if (printer) { await printReceiptToPrinter(sale, printer); return; }
-    const res = await window.tally.printReceipt(receiptHtml(sale));
+    const res = await window.pos.printReceipt(receiptText(sale));
     if (res && res.ok) toast('Sent to printer.');
+    else if (res && res.error) toast('Could not print: ' + res.error);
   }
 
   function showReceiptModal(sale) {
@@ -1165,8 +1182,9 @@
         await printReceiptToPrinter(currentSaleForReceipt, printer);
         return;
       }
-      const res = await window.tally.printReceipt(receiptHtml(currentSaleForReceipt));
+      const res = await window.pos.printReceipt(receiptText(currentSaleForReceipt));
       if (res && res.ok) toast('Sent to printer.');
+      else if (res && res.error) toast('Could not print: ' + res.error);
     });
     $('#receiptRefundBtn').addEventListener('click', () => {
       if (currentSaleForReceipt) openRefundModal(currentSaleForReceipt);
@@ -1925,7 +1943,7 @@
     $('#setCutPaper').checked = s.receiptCutPaper !== false;
 
     let printers = [];
-    try { printers = await window.tally.listPrinters(); } catch (err) { printers = []; }
+    try { printers = await window.pos.listPrinters(); } catch (err) { printers = []; }
 
     const options = ['<option value="">Ask me each time (print dialog)</option>'].concat(
       printers.map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.displayName || p.name)}</option>`)
@@ -2023,7 +2041,7 @@
     $('#testPrintBtn').addEventListener('click', async () => {
       const printer = $('#setPrinter').value;
       if (!printer) { toast('Pick a printer above first.'); return; }
-      const res = await window.tally.printReceiptRaw(
+      const res = await window.pos.printReceiptRaw(
         sampleReceiptText(),
         printer,
         { cut: $('#setCutPaper').checked }
@@ -2036,11 +2054,11 @@
       const current = $('#setCurrentKey').value;
       const next = $('#setNewKey').value;
       const confirmVal = $('#setConfirmKey').value;
-      const currentHash = await sha256Hex(current || '');
+      const currentHash = await hashAdminKey(current || '');
       if (currentHash !== DATA.settings.adminKeyHash) { toast('Current Admin Key is incorrect.'); return; }
       if (!next || next.length < 4) { toast('New Admin Key should be at least 4 characters.'); return; }
       if (next !== confirmVal) { toast("New keys don't match."); return; }
-      DATA.settings.adminKeyHash = await sha256Hex(next);
+      DATA.settings.adminKeyHash = await hashAdminKey(next);
       await persist();
       $('#setCurrentKey').value = ''; $('#setNewKey').value = ''; $('#setConfirmKey').value = '';
       toast('Admin Key updated.');
@@ -2063,24 +2081,24 @@
     });
 
     $('#exportBackupBtn').addEventListener('click', async () => {
-      const res = await window.tally.exportBackup();
+      const res = await window.pos.exportBackup();
       if (res.ok) toast('Backup saved to ' + res.filePath);
+      else if (res.error) toast('Could not save the backup: ' + res.error);
     });
 
     $('#importBackupBtn').addEventListener('click', async () => {
-      try {
-        const res = await window.tally.importBackup();
-        if (res.ok) {
-          DATA = res.data;
-          if (!DATA.heldSales) DATA.heldSales = [];
-          applyShopIdentity();
-          refreshHeldButton();
-          switchView('dashboard');
-          toast('Backup imported.');
-        }
-      } catch (e) {
-        toast('That file could not be read as a backup.');
+      const res = await window.pos.importBackup();
+      // Dismissing the dialog is not a failure; a file we could not read is.
+      if (!res.ok) {
+        if (res.error) toast('That file could not be read as a backup.');
+        return;
       }
+      DATA = res.data;
+      if (!DATA.heldSales) DATA.heldSales = [];
+      applyShopIdentity();
+      refreshHeldButton();
+      switchView('dashboard');
+      toast('Backup imported.');
     });
 
     $('#importProductsBtn').addEventListener('click', startProductImport);
@@ -2117,7 +2135,7 @@
   }
 
   async function performResetSalesStock() {
-    const fresh = await window.tally.resetSalesStock();
+    const fresh = await window.pos.resetSalesStock();
     DATA = fresh;
     cart = [];
     renderCart();
@@ -2129,7 +2147,7 @@
   }
 
   async function performResetAll() {
-    const fresh = await window.tally.resetAllData();
+    const fresh = await window.pos.resetAllData();
     DATA = fresh;
     cart = [];
     unlocked = false;
@@ -2148,56 +2166,21 @@
 
   // ---------------- Product import (POS Maid / Excel / CSV) ----------------
 
-  // Each field's keyword list, most-specific-first. Matching is resolved
-  // globally (see guessColumnMapping) rather than by greedily claiming
-  // columns field-by-field, so a generic word like "price" inside
-  // "SupplyPrice" can't steal a column that's actually a much better match
-  // for Cost.
+  // The fields the column-mapping dialog offers, in the order it shows them.
+  // Which column each one starts on is guessed on the Rust side, where the
+  // rules can be tested against a real POS Maid export.
   const IMPORT_FIELDS = [
-    { key: 'mapName', label: 'name', guesses: ['itemdescription', 'productname', 'itemname', 'description', 'name', 'product', 'item'] },
-    { key: 'mapSku', label: 'sku', guesses: ['sku', 'barcode', 'upc', 'ean', 'itemid', 'itemcode', 'productcode', 'plu', 'code'] },
-    { key: 'mapCategory', label: 'category', guesses: ['category', 'department', 'class', 'group', 'dept'] },
-    { key: 'mapPrice', label: 'price', guesses: ['saleprice', 'retailprice', 'sellprice', 'unitprice', 'price', 'retail'] },
-    { key: 'mapCost', label: 'cost', guesses: ['supplyprice', 'unitcost', 'wholesale', 'buyprice', 'costprice', 'cost'] },
-    { key: 'mapStock', label: 'stock', guesses: ['qtyonhand', 'stockqty', 'onhand', 'quantity', 'inventory', 'stock', 'qty'] },
-    { key: 'mapSupplier', label: 'supplier', guesses: ['suppliername', 'supplierid', 'supplier', 'vendor', 'distributor'] }
+    { key: 'mapName', label: 'name' },
+    { key: 'mapSku', label: 'sku' },
+    { key: 'mapCategory', label: 'category' },
+    { key: 'mapPrice', label: 'price' },
+    { key: 'mapCost', label: 'cost' },
+    { key: 'mapStock', label: 'stock' },
+    { key: 'mapSupplier', label: 'supplier' }
   ];
 
-  function normHeader(h) { return h.toLowerCase().replace(/[^a-z0-9]/g, ''); }
-
-  // Score every (header, field, keyword) combination that matches at all,
-  // then greedily assign the highest-scoring pairs first. Exact matches
-  // always outrank substring matches, and longer/more specific keywords
-  // outrank shorter generic ones — so "SupplyPrice" exact-matching Cost's
-  // "supplyprice" keyword (score ~111) wins over it merely containing
-  // Price's generic "price" substring (score ~15).
-  function guessColumnMapping(headers) {
-    const candidates = [];
-    headers.forEach(h => {
-      const norm = normHeader(h);
-      IMPORT_FIELDS.forEach(f => {
-        f.guesses.forEach(g => {
-          if (norm === g) candidates.push({ header: h, field: f.key, score: 100 + g.length });
-          else if (norm.includes(g)) candidates.push({ header: h, field: f.key, score: 10 + g.length });
-        });
-      });
-    });
-    candidates.sort((a, b) => b.score - a.score);
-
-    const result = {};
-    const claimedHeaders = new Set();
-    const claimedFields = new Set();
-    candidates.forEach(c => {
-      if (claimedHeaders.has(c.header) || claimedFields.has(c.field)) return;
-      result[c.field] = c.header;
-      claimedHeaders.add(c.header);
-      claimedFields.add(c.field);
-    });
-    return result;
-  }
-
   async function startProductImport() {
-    const res = await window.tally.importProductsFile();
+    const res = await window.pos.importProductsFile();
     if (!res) return;
     if (!res.ok) { if (res.error) toast(res.error); return; }
     importParsed = res;
@@ -2207,7 +2190,7 @@
     const headerOptions = '<option value="">— Not in file —</option>' +
       res.headers.map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('');
 
-    const guessed = guessColumnMapping(res.headers);
+    const guessed = res.suggested || {};
     IMPORT_FIELDS.forEach(f => {
       const sel = $('#' + f.key);
       sel.innerHTML = headerOptions;
@@ -2285,7 +2268,7 @@
   // ---------------- Boot ----------------
 
   async function boot() {
-    DATA = await window.tally.loadData();
+    DATA = await window.pos.loadData();
     if (!DATA.heldSales) DATA.heldSales = [];
     if (!DATA.settings.adminKeyHash) DATA.settings.adminKeyHash = '';
     applyShopIdentity();
@@ -2295,6 +2278,7 @@
     initClock();
     initAdminModal();
     initBarcodeScanning();
+    initCatalogToggle();
     initHeldSales();
     initChargeModal();
     initReceiptModal();

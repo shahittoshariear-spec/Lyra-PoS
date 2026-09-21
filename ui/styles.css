@@ -1,36 +1,36 @@
 :root {
   /* Ink & paper */
-  --ink: #0A2246;
-  --ink-soft: #12305C;
-  --ink-softer: #1C4076;
-  --paper: #F2F7FA;
-  --paper-dim: #E7EFF5;
-  --paper-line: #CBDCE7;
-  --paper-line-strong: #A9C4D6;
-  --paper-tape: #FBFDFF;
-  --paper-bright: #FFFFFF;
+  --ink: #04060E;
+  --ink-soft: #0A1020;
+  --ink-softer: #141C33;
+  --paper: #070B16;
+  --paper-dim: #0E1425;
+  --paper-line: #1C2540;
+  --paper-line-strong: #2E3A5C;
+  --paper-tape: #0C1223;
+  --paper-bright: #0D1424;
 
   /* Brand palette */
-  --till-blue: #1A6FD4;
-  --till-blue-dark: #12559F;
-  --till-blue-light: #6FB6EE;
-  --till-blue-tint: rgba(26,111,212,0.08);
-  --stamp-red: #B23A2E;
-  --stamp-red-soft: rgba(178,58,46,0.35);
-  --coin-cyan: #2AC7C9;
-  --coin-cyan-text: #0E7C86;
-  --coin-cyan-light: #7FE3E4;
+  --till-blue: #6C9CFF;
+  --till-blue-dark: #4E7FE0;
+  --till-blue-light: #A9C4FF;
+  --till-blue-tint: rgba(108,156,255,0.10);
+  --stamp-red: #FF6B5E;
+  --stamp-red-soft: rgba(255,107,94,0.35);
+  --coin-cyan: #6FE3F0;
+  --coin-cyan-text: #8FEDF7;
+  --coin-cyan-light: #B6F4FA;
 
   /* Text — all values below meet WCAG AA on their intended surface */
-  --text-ink: #102A43;
-  --text-muted: #55697C;
-  --text-on-ink: #EAF4FA;
-  --text-on-ink-muted: #9FBBD6;
+  --text-ink: #E6ECFA;
+  --text-muted: #93A1C0;
+  --text-on-ink: #EEF3FF;
+  --text-on-ink-muted: #8E9CBB;
 
   /* Data accents (readouts drawn on ink) */
-  --accent-cash: #5FD9C6;
-  --accent-card: #A9C9F5;
-  --bar-card: #1A6FD4;
+  --accent-cash: #7FE7C4;
+  --accent-card: #A9C4FF;
+  --bar-card: #6C9CFF;
 
   --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -77,20 +77,20 @@
   --radius: var(--radius-md);
 
   /* Elevation — light surfaces, then dark chrome */
-  --shadow-1: 0 1px 2px rgba(10,34,70,0.06);
-  --shadow-2: 0 1px 2px rgba(10,34,70,0.06), 0 4px 12px rgba(10,34,70,0.07);
-  --shadow-3: 0 2px 4px rgba(10,34,70,0.07), 0 10px 22px rgba(10,34,70,0.10);
-  --shadow-4: 0 4px 10px rgba(10,34,70,0.08), 0 16px 34px rgba(10,34,70,0.12);
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.45);
+  --shadow-2: 0 1px 2px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.50);
+  --shadow-3: 0 2px 4px rgba(0,0,0,0.50), 0 10px 22px rgba(0,0,0,0.55);
+  --shadow-4: 0 4px 10px rgba(0,0,0,0.55), 0 16px 34px rgba(0,0,0,0.60);
   --shadow-ink-1: 0 1px 2px rgba(0,0,0,0.22);
   --shadow-ink-2: 0 2px 8px rgba(0,0,0,0.24);
   --shadow-ink-3: 0 12px 30px rgba(0,0,0,0.35);
-  --shadow-modal: 0 20px 60px rgba(10,34,70,0.32);
+  --shadow-modal: 0 20px 60px rgba(0,0,0,0.70);
   --shadow-card: var(--shadow-2); /* legacy alias — existing usages keep working */
 
   /* Focus */
   --focus-ring: 2px solid var(--till-blue-dark);
   --focus-ring-on-ink: 2px solid var(--coin-cyan-light);
-  --focus-halo: 0 0 0 3px rgba(26,111,212,0.18);
+  --focus-halo: 0 0 0 3px rgba(108,156,255,0.28);
 
   /* Layout constants */
   --till-grid-offset: 114px;
@@ -548,6 +548,12 @@ summary:focus-visible {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Once the grid is showing the same products as it drew last time, the cards have
+   already arrived. Re-running the pop-in on every redraw — which adding one item
+   to the sale was enough to trigger — restarts a screenful of animations at once,
+   and that is what makes the Till feel jittery while a sale is being built. */
+.product-grid.grid-settled .product-card { animation: none; }
+
 .product-card-name { font-size: var(--text-sm); font-weight: 600; line-height: var(--leading-snug); width: 100%; }
 .product-card-meta { display: flex; justify-content: space-between; align-items: baseline; margin-top: auto; width: 100%; gap: var(--space-2); }
 .product-card-price { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--till-blue-dark); }
@@ -711,7 +717,7 @@ summary:focus-visible {
 
 /* ---------------- Dashboard ---------------- */
 
-.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-6); margin-bottom: var(--space-10); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--space-6); margin-bottom: var(--space-10); }
 .stat-card {
   background: var(--paper-bright); border: 1px solid var(--paper-line); border-radius: var(--radius);
   padding: var(--space-7) var(--space-8); box-shadow: var(--shadow-2);
@@ -730,7 +736,7 @@ summary:focus-visible {
 }
 .stat-card-warn { border-color: var(--stamp-red-soft); }
 .stat-label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.05em; line-height: var(--leading-tight); color: var(--text-muted); margin-bottom: var(--space-2); }
-.stat-value { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700; line-height: var(--leading-tight); font-variant-numeric: tabular-nums; transition: color var(--dur-base) var(--ease-out); }
+.stat-value { font-family: var(--font-mono); font-size: var(--text-xl); overflow-wrap: anywhere; font-weight: 700; line-height: var(--leading-tight); font-variant-numeric: tabular-nums; transition: color var(--dur-base) var(--ease-out); }
 .stat-card-warn .stat-value { color: var(--stamp-red); }
 .stat-card-profit .stat-value { color: var(--till-blue-dark); }
 
@@ -814,7 +820,7 @@ summary:focus-visible {
 
 .modal-overlay {
   display: flex;
-  position: fixed; inset: 0; background: rgba(10,34,70,0.5);
+  position: fixed; inset: 0; background: rgba(2,5,14,0.72);
   align-items: center; justify-content: center; z-index: 50;
   opacity: 0; visibility: hidden; pointer-events: none;
   backdrop-filter: blur(0px);
@@ -1068,3 +1074,92 @@ summary:focus-visible {
 .table-more-btn:active { transform: translateY(1px); }
 
 .table-more-hint { display: inline-block; margin-left: var(--space-4); }
+
+
+/* ---------------- Night sky ----------------
+
+   A scatter of faint stars behind everything. Drawn as background gradients
+   rather than an image, so it costs nothing to load and stays sharp on any
+   display. Panels sit on top of it; it shows in the gaps between them. */
+
+html {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 18%, rgba(255,255,255,0.55) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 27% 62%, rgba(200,220,255,0.42) 50%, transparent 51%),
+    radial-gradient(1.8px 1.8px at 41% 12%, rgba(255,255,255,0.60) 50%, transparent 51%),
+    radial-gradient(1.1px 1.1px at 58% 44%, rgba(180,210,255,0.38) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 67% 79%, rgba(255,255,255,0.50) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 79% 27%, rgba(200,230,255,0.44) 50%, transparent 51%),
+    radial-gradient(1.9px 1.9px at 88% 66%, rgba(255,255,255,0.58) 50%, transparent 51%),
+    radial-gradient(1.1px 1.1px at 34% 88%, rgba(180,210,255,0.34) 50%, transparent 51%),
+    radial-gradient(1.4px 1.4px at 72% 8%, rgba(255,255,255,0.46) 50%, transparent 51%),
+    radial-gradient(1.3px 1.3px at 5% 47%, rgba(200,220,255,0.40) 50%, transparent 51%),
+    radial-gradient(1400px 900px at 78% -12%, rgba(108,156,255,0.10), transparent 62%),
+    radial-gradient(1100px 800px at 8% 108%, rgba(111,227,240,0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* The tape is the brightest thing on the till screen, so it keeps a little glow
+   of its own. */
+.receipt-tape { position: relative; }
+.tape-body { border-color: var(--paper-line-strong); }
+
+/* ---------------- Hiding the product list ----------------
+
+   Hiding the catalogue gives the receipt the whole window: one column, with the
+   tape centred, so the running total stays in the same place once the cashier
+   is looking at it rather than at the products. */
+
+.till-grid.catalog-hidden { grid-template-columns: 1fr; }
+.till-grid.catalog-hidden .till-catalog { display: none; }
+.till-grid.catalog-hidden .receipt-tape { max-width: 460px; margin: 0 auto; width: 100%; }
+
+/* ---------------- Printing ----------------
+
+   A receipt is already 32-column plain text, which is what a thermal printer
+   wants and what the system's own print dialog should put on paper. When no
+   thermal printer is chosen in Setup, the receipt is put in #printRoot and the
+   print dialog is opened: this stylesheet makes that element the only thing on
+   the page, so none of the till goes with it. */
+
+#printRoot { display: none; }
+
+@media print {
+  @page { margin: 6mm; }
+
+  /* Everything hidden, then the receipt shown again. `visibility` rather than
+     `display` on the app shell, so the layout around the receipt still exists
+     and the receipt cannot be pushed onto a second sheet. */
+  body { background: #fff !important; }
+  body * { visibility: hidden !important; }
+  #printRoot, #printRoot * { visibility: visible !important; }
+
+  #printRoot {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.25;
+    /* Receipts are laid out in columns, so they wrap as whole lines or not at
+       all — never mid-figure. */
+    white-space: pre-wrap;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  /* Nothing on paper should move, shimmer, or print a half-finished fade. */
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+}
