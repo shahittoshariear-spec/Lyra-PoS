@@ -27,7 +27,6 @@
         <img class="brand-mark" src="app-icon.png" alt="Lyra PoS" />
         <div class="brand-text">
           <div class="brand-name">Lyra PoS</div>
-          <div class="brand-sub">Point of Sale</div>
         </div>
       </div>
 
@@ -86,6 +85,8 @@
             <span class="day-summary-label">Other</span>
             <span class="day-summary-value" id="dsOther">R0.00</span>
           </div>
+          <button class="btn btn-ghost btn-sm ds-toggle" id="hideItemsBtn" aria-pressed="false"
+                  title="Hide the product list and give the receipt the whole window">Hide items</button>
         </div>
         <div class="till-grid">
 
@@ -93,7 +94,6 @@
             <div class="till-toolbar">
               <input type="text" id="productSearch" class="search-input" placeholder="Search by name, code, or scan a barcode…" autocomplete="off" />
               <button class="btn btn-ghost" id="heldSalesBtn" style="display:none;">Held <span id="heldCount">0</span></button>
-              <button class="btn btn-ghost" id="hideItemsBtn" aria-pressed="false" title="Hide the product list and give the receipt the whole window">Hide items</button>
             </div>
             <div class="chip-row" id="categoryChips"></div>
             <div class="product-grid" id="productGrid"></div>
