@@ -100,11 +100,12 @@ so there is no browser to install and no Node.js to install.
   narrows the list instantly. Stock and Ledger tables are drawn in one pass.
 - **Overview** — Day / Week / Month / Year tabs, each showing sales, profit,
   transactions, items sold, top sellers, a cash/card payment split, and a
-  matching sales history table (previous days, weeks, months, or years) so
-  trends are easy to spot at any zoom level. Low-stock warnings, and the two
-  inventory value figures — what the shelf is worth at cost and at sell — are
-  always current regardless of the tab selected, and carry a comma every three
-  digits, so a big number can be counted at a glance.
+  matching sales history table (previous days, weeks, months, or years) that
+  splits each line's sales into cash and card the same way, so trends are easy
+  to spot at any zoom level. Low-stock warnings, and the two inventory value
+  figures — what the shelf is worth at cost and at sell — are always current
+  regardless of the tab selected, and carry a comma every three digits, so a
+  big number can be counted at a glance.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales

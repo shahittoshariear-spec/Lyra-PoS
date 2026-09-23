@@ -1,6 +1,6 @@
 [package]
 name = "lyra-pos"
-version = "1.8.3"
+version = "1.8.4"
 edition = "2024"
 description = "Offline point-of-sale app for small shops. A Rust + Tauri rebuild of End PoS (formerly Immaculate POS) by Shariear's Software."
 license = "MIT"

@@ -1824,21 +1824,32 @@
     const keys = new Set(DATA.sales.map(s => periodKeyFromDayKey(s.date.slice(0, 10), period)));
     keys.delete(currentKey);
     const sorted = Array.from(keys).sort((a, b) => b.localeCompare(a)).slice(0, HISTORY_LIMITS[period] || 30);
+    const rows = sorted.map(key => ({ key, totals: computePeriodTotals(key, period) }));
 
-    if (!sorted.length) {
-      body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:22px;">No previous ${period === 'day' ? 'days' : period === 'week' ? 'weeks' : period === 'month' ? 'months' : 'years'} yet — history builds up as sales come in.</td></tr>`;
+    // Sales split into cash and card — the two payments this build records.
+    // Data restored from an older build can still hold an "Other" payment, so
+    // the split grows a third column when one turns up rather than leaving that
+    // money out of the two.
+    const splitOther = rows.some(r => r.totals.other !== 0);
+    const columns = splitOther ? 8 : 7;
+    $('#historyOtherHeader').style.display = splitOther ? '' : 'none';
+
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="${columns}" style="text-align:center;color:var(--text-muted);padding:22px;">No previous ${period === 'day' ? 'days' : period === 'week' ? 'weeks' : period === 'month' ? 'months' : 'years'} yet — history builds up as sales come in.</td></tr>`;
       return;
     }
 
     const fragment = document.createDocumentFragment();
-    sorted.forEach(key => {
-      const dt = computePeriodTotals(key, period);
+    rows.forEach(({ key, totals: dt }) => {
       const label = periodLabel(key, period);
       const margin = dt.total !== 0 ? (dt.profit / dt.total) * 100 : 0;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${label}</td>
         <td class="num">${money(dt.total)}</td>
+        <td class="num">${money(dt.cash)}</td>
+        <td class="num">${money(dt.card)}</td>${splitOther ? `
+        <td class="num">${money(dt.other)}</td>` : ''}
         <td class="num" style="${dt.profit < 0 ? 'color:var(--stamp-red);' : ''}">${money(dt.profit)}</td>
         <td class="num" style="${margin < 0 ? 'color:var(--stamp-red);' : ''}">${margin.toFixed(1)}%</td>
         <td class="num">${dt.transactions}${dt.refunds ? ` <span class="text-muted-inline">(${dt.refunds} refund${dt.refunds > 1 ? 's' : ''})</span>` : ''}</td>

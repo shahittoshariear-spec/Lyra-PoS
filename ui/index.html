@@ -260,7 +260,7 @@
           </div>
         </div>
 
-        <div class="panel-row">
+        <div class="panel-row panel-row-history">
           <div class="panel">
             <h2>Low stock</h2>
             <div class="bulk-bar" id="lowStockBulkBar" style="display:none;">
@@ -277,7 +277,7 @@
             <div class="table-wrap history-wrap">
               <table class="data-table" id="historyTable">
                 <thead>
-                  <tr><th id="historyDateHeader">Date</th><th class="num">Sales</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Txns</th></tr>
+                  <tr><th id="historyDateHeader">Date</th><th class="num">Sales</th><th class="num">Cash</th><th class="num">Card</th><th class="num" id="historyOtherHeader" style="display:none;">Other</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Txns</th></tr>
                 </thead>
                 <tbody id="historyTableBody"></tbody>
               </table>
@@ -573,7 +573,7 @@
 
   <!-- Receipt preview modal -->
   <div class="modal-overlay" id="receiptModalOverlay">
-    <div class="modal modal-narrow">
+    <div class="modal modal-narrow modal-receipt">
       <h2 id="receiptModalTitle">Sale complete</h2>
       <div class="receipt-preview" id="receiptPreview"></div>
       <div class="modal-actions">
