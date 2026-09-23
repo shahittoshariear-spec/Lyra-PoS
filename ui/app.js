@@ -1621,7 +1621,11 @@
     const duration = 480;
     const start = performance.now();
     function tick(now) {
-      const p = Math.min(1, (now - start) / duration);
+      // Held inside 0…1 on purpose. The frame clock and performance.now() are
+      // the same clock on every machine this runs on, so the clamp should never
+      // bite — but a figure that has counted past its own total (or below zero)
+      // would be read out loud to a customer, and it costs nothing to be sure.
+      const p = Math.min(1, Math.max(0, (now - start) / duration));
       const eased = 1 - Math.pow(1 - p, 3);
       const val = prev + (targetValue - prev) * eased;
       el.textContent = formatter(val);
@@ -1774,8 +1778,11 @@
     $('#historyDateHeader').textContent = period === 'day' ? 'Date' : period === 'week' ? 'Week' : period === 'month' ? 'Month' : 'Year';
 
     const t = computePeriodTotals(currentKey, period);
-    animateStatNumber('#statTodaySales', t.total, money);
-    animateStatNumber('#statTodayProfit', t.profit, money);
+    // Sales and profit are read rather than rung up, and a month or a year of
+    // takings runs to six figures: both are grouped with a comma every three
+    // digits, the way Inventory at cost and Inventory at sell beside them are.
+    animateStatNumber('#statTodaySales', t.total, moneyGrouped);
+    animateStatNumber('#statTodayProfit', t.profit, moneyGrouped);
     const marginPct = t.total !== 0 ? (t.profit / t.total) * 100 : 0;
     animateStatNumber('#statTodayMargin', marginPct, (v) => v.toFixed(1) + '%');
     animateStatNumber('#statTodayCount', t.transactions, (v) => Math.round(v).toString());

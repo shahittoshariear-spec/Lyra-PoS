@@ -1,42 +1,106 @@
+/* ===========================================================================
+   Lyra PoS — interface theme
+
+   Midnight navy surfaces, glass panels, electric-blue accents and small rust
+   highlights. Everything here is presentation: the markup, the ids, the class
+   names and the animations app.js hooks into (grid-settled, card-tapped, pulse,
+   flash, line-enter, line-exit, receiving, shake-error, dir-forward …) are all
+   exactly what the screens already expect, so the till behaves identically.
+
+   Two rules shaped this file, because this screen is read for a whole shift:
+
+   1. Figures come first. Every value is monospaced, tabular and high-contrast
+      against its own surface; decoration never sits behind a number.
+   2. Blur is spent, not scattered. `backdrop-filter` is used on the handful of
+      large, static surfaces (sidebar, summary bar, table frames, dialogs,
+      toasts) where it reads as glass. Cards and rows — of which there can be
+      hundreds on screen — get layered gradients and hairline borders instead,
+      which look the same and cost nothing to scroll.
+   =========================================================================== */
+
 :root {
-  /* Ink & paper */
-  --ink: #0A2547;
-  --ink-soft: #123357;
-  --ink-softer: #1C446E;
-  --paper: #F0F5FB;
-  --paper-dim: #E3ECF7;
-  --paper-line: #C6D8EA;
-  --paper-line-strong: #A3BFDA;
-  --paper-tape: #FFFFFF;
-  --paper-bright: #FFFFFF;
+  color-scheme: dark;
 
-  /* Brand palette */
-  --till-blue: #1A6FD4;
-  --till-blue-dark: #12559F;
-  --till-blue-light: #6FB6EE;
-  --till-blue-tint: rgba(26,111,212,0.08);
-  --stamp-red: #B23A2E;
-  --stamp-red-soft: rgba(178,58,46,0.35);
-  --coin-cyan: #0E8F9E;
-  --coin-cyan-text: #0B6E7A;
-  --coin-cyan-light: #7FE3E4;
+  /* ---- Midnight surfaces, deepest first ---- */
+  --bg-deep: #04060D;          /* window behind everything */
+  --bg: #070B16;               /* the page */
+  --bg-1: #0B1222;             /* raised surface */
+  --bg-2: #101A31;             /* panel */
+  --bg-3: #16203C;             /* rows, hover */
+  --bg-4: #1E2A4C;             /* pressed, strong rules */
 
-  /* Text — all values below meet WCAG AA on their intended surface */
-  --text-ink: #0F2744;
-  --text-muted: #4E6B88;
-  --text-on-ink: #EAF4FA;
-  --text-on-ink-muted: #9FBBD6;
+  /* ---- Glass ---- */
+  --glass: rgba(19, 28, 50, 0.62);
+  --glass-soft: rgba(255, 255, 255, 0.035);
+  --glass-lift: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.15);
 
-  /* Data accents (readouts drawn on ink) */
-  --accent-cash: #6FE0B4;
-  --accent-card: #A9C9F5;
-  --bar-card: #1A6FD4;
+  /* ---- Electric blue ---- */
+  --blue: #2F6AE4;
+  --blue-bright: #7FB0FF;
+  --blue-soft: #A9C9FF;
+  --blue-deep: #2456C4;
+  --blue-tint: rgba(77, 141, 255, 0.12);
+  --blue-tint-strong: rgba(77, 141, 255, 0.2);
+  --blue-glow: rgba(77, 141, 255, 0.38);
 
-  --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
+  /* ---- Rust orange: warnings, the danger zone, a little light in the corner ---- */
+  --rust: #F97316;
+  --rust-soft: #FBA968;
+  --rust-deep: #C2452F;
+  --rust-tint: rgba(249, 115, 22, 0.14);
 
-  /* Type scale */
+  /* ---- Money readouts ---- */
+  --mint: #5FE0B0;
+  --cyan: #6FE0E2;
+  --violet: #9D8CFF;
+
+  /* ---- Type on ink ---- */
+  --text-ink: #E8EEFA;
+  --text-muted: #9AA9C7;
+  --text-dim: #7C8DB0;
+  --text-on-ink: #E8EEFA;        /* legacy name, now the same as the page ink */
+  --text-on-ink-muted: #9AA9C7;
+
+  /* ---- Legacy aliases ----
+     app.js writes two of these inline (`color:var(--stamp-red)` on a refund or
+     a negative margin, `color:var(--text-muted)` in an empty table) and the rest
+     are kept so any rule that still reaches for an older name lands on the
+     right colour rather than on nothing. */
+  --ink: var(--bg-1);
+  --ink-soft: var(--bg-2);
+  --ink-softer: var(--bg-3);
+  --ink-rule: var(--line-strong);
+  --paper: var(--bg);
+  --paper-warm: var(--bg-2);
+  --paper-dim: var(--bg-3);
+  --paper-line: var(--line);
+  --paper-line-strong: var(--line-strong);
+  --paper-bright: var(--bg-1);
+  --paper-tape: var(--bg-1);
+  --stamp-red: var(--rust-deep);
+  --stamp-red-soft: rgba(194, 69, 47, 0.45);
+  --till-blue: var(--blue);
+  --till-blue-dark: var(--blue-deep);
+  --till-blue-light: var(--blue-bright);
+  --till-blue-tint: var(--blue-tint);
+  --coin-cyan: var(--cyan);
+  --coin-cyan-text: var(--cyan);
+  --coin-cyan-light: #9BF0F1;
+  --accent-cash: var(--mint);
+  --accent-card: var(--blue-soft);
+  --bar-card: var(--blue);
+
+  /* ---- Faces ----
+     No webfont is bundled and none may be fetched (the app is offline and the
+     CSP allows nothing but 'self'), so this leans on what Windows 11 ships:
+     Segoe UI Variable for the chrome, Cascadia Mono for every figure. */
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-body: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ---- Type scale ---- */
   --text-3xs: 11px;
   --text-2xs: 12px;
   --text-xs: 12.5px;
@@ -52,7 +116,7 @@
   --leading-snug: 1.35;
   --leading-normal: 1.5;
 
-  /* Spacing (4px rhythm, half-steps for the till layout) */
+  /* ---- Spacing (4px rhythm, half-steps for the till layout) ---- */
   --space-1: 4px;
   --space-2: 6px;
   --space-3: 8px;
@@ -67,33 +131,42 @@
   --space-12: 30px;
   --space-13: 40px;
 
-  /* Radii */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  /* ---- Radii ---- */
+  --radius-xs: 5px;
+  --radius-sm: 9px;
+  --radius-md: 11px;
+  --radius-lg: 15px;
+  --radius-xl: 20px;
   --radius-pill: 999px;
   --radius: var(--radius-md);
 
-  /* Elevation — light surfaces, then dark chrome */
-  --shadow-1: 0 1px 2px rgba(10,34,70,0.07);
-  --shadow-2: 0 1px 2px rgba(10,34,70,0.07), 0 4px 12px rgba(10,34,70,0.08);
-  --shadow-3: 0 2px 4px rgba(10,34,70,0.08), 0 10px 22px rgba(10,34,70,0.11);
-  --shadow-4: 0 4px 10px rgba(10,34,70,0.09), 0 16px 34px rgba(10,34,70,0.13);
-  --shadow-ink-1: 0 1px 2px rgba(0,0,0,0.22);
-  --shadow-ink-2: 0 2px 8px rgba(0,0,0,0.24);
-  --shadow-ink-3: 0 12px 30px rgba(0,0,0,0.35);
-  --shadow-modal: 0 20px 60px rgba(10,34,70,0.34);
-  --shadow-card: var(--shadow-2); /* legacy alias — existing usages keep working */
+  /* ---- Elevation ---- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.38), 0 10px 24px rgba(0, 0, 0, 0.28);
+  --shadow-3: 0 6px 14px rgba(0, 0, 0, 0.42), 0 18px 40px rgba(0, 0, 0, 0.34);
+  --shadow-4: 0 10px 22px rgba(0, 0, 0, 0.46), 0 26px 60px rgba(0, 0, 0, 0.4);
+  --shadow-ink-1: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-ink-2: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-ink-3: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 30px 80px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-card: var(--shadow-2);            /* legacy alias */
+  --shadow-inner-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 
-  /* Focus */
-  --focus-ring: 2px solid var(--till-blue-dark);
-  --focus-ring-on-ink: 2px solid var(--coin-cyan-light);
-  --focus-halo: 0 0 0 3px rgba(26,111,212,0.18);
+  /* ---- Focus ---- */
+  --focus-ring: 2px solid var(--blue-bright);
+  --focus-ring-on-ink: 2px solid var(--blue-bright);
+  --focus-halo: 0 0 0 3px rgba(77, 141, 255, 0.22);
+  --focus-glow: 0 0 0 3px rgba(77, 141, 255, 0.22), 0 0 18px rgba(77, 141, 255, 0.22);
 
-  /* Layout constants */
+  /* ---- Layout constants ---- */
   --till-grid-offset: 114px;
+
+  /* Receipt tape. The app-wide defaults are the small sizes; .receipt-tape
+     raises them for the counter, and the same classes appear elsewhere (the
+     empty state in the product grid) where the small size is right. */
+  --tape-font: var(--text-sm);
+  --tape-font-small: var(--text-sm);
+  --tape-cut: var(--bg);
 
   --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -117,22 +190,36 @@
 
 * { box-sizing: border-box; }
 
-html, body {
+html {
+  height: 100%;
+  background-color: var(--bg-deep);
+}
+
+/* The sky behind the shop. Kept very faint and pushed away from the receipt, so
+   the panels in front of it stay the brightest thing on screen. */
+body {
   height: 100%;
   margin: 0;
   padding: 0;
-  background: var(--paper);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(1100px 760px at 4% -10%, rgba(77, 141, 255, 0.16), transparent 62%),
+    radial-gradient(900px 680px at 26% 112%, rgba(124, 92, 255, 0.11), transparent 62%),
+    radial-gradient(520px 420px at 96% 4%, rgba(249, 115, 22, 0.07), transparent 66%),
+    linear-gradient(180deg, #080D1B 0%, #05080F 100%);
+  background-attachment: fixed;
   color: var(--text-ink);
   font-family: var(--font-body);
   font-size: var(--text-sm);
   line-height: var(--leading-snug);
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  overflow: hidden;
 }
 
 button, input, select { font-family: inherit; }
 
-::selection { background: var(--coin-cyan-light); color: var(--ink); }
+::selection { background: rgba(77, 141, 255, 0.35); color: #FFFFFF; }
 
 /* Keyboard-only focus ring. Rules further down override the colour where the
    surface is dark (.nav-btn, .lock-toggle, .bulk-bar) or clipped (.seg-btn). */
@@ -144,9 +231,25 @@ summary:focus-visible {
   outline-offset: 2px;
 }
 
+/* ---------------- Starfield ----------------
+   The canvas is painted by starfield.js: a slow drift of particles with the
+   Lyra figure over them. It sits behind the whole app, never takes a pointer
+   event, and draws nothing at all when the window is hidden or the person has
+   asked for less motion. */
+
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  display: block;
+}
+
 .app {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 236px 1fr;
   height: 100vh;
   overflow: hidden;
 }
@@ -154,14 +257,30 @@ summary:focus-visible {
 /* ---------------- Sidebar ---------------- */
 
 .sidebar {
-  background: var(--ink);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(14, 21, 39, 0.9) 0%, rgba(7, 11, 22, 0.78) 100%);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  border-right: 1px solid var(--line);
   color: var(--text-on-ink);
   display: flex;
   flex-direction: column;
   padding: var(--space-9) var(--space-6);
 }
 
+/* A cold light from the top of the sidebar, as if the sky were above it. */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: -60px -40% auto -40%;
+  height: 320px;
+  background: radial-gradient(50% 60% at 50% 40%, rgba(77, 141, 255, 0.22), transparent 70%);
+  pointer-events: none;
+}
+
 .brand {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -171,17 +290,25 @@ summary:focus-visible {
 .brand-text { min-width: 0; }
 
 .brand-mark {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-sm);
   object-fit: cover;
   display: block;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), 0 0 22px rgba(77, 141, 255, 0.28);
 }
 
 .brand-name {
   font-family: var(--font-display);
   font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: var(--leading-tight);
+  background: linear-gradient(100deg, #FFFFFF 10%, var(--blue-soft) 60%, #FFFFFF 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .brand-sub {
@@ -193,27 +320,47 @@ summary:focus-visible {
 }
 
 .nav-group {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin-top: var(--space-2);
-  position: relative;
 }
 
+/* The travelling highlight. app.js moves it with a transform and sets its
+   height — nothing here may change its geometry. */
 .nav-pill {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
-  height: 38px;
-  background: var(--till-blue-dark);
+  height: 44px;
   border-radius: var(--radius-sm);
+  background: linear-gradient(100deg, rgba(77, 141, 255, 0.26), rgba(77, 141, 255, 0.08) 70%);
+  border: 1px solid rgba(127, 176, 255, 0.34);
+  box-shadow: 0 10px 26px rgba(36, 86, 196, 0.34), var(--shadow-inner-hairline);
   z-index: 0;
   transition: transform var(--dur-slower) var(--ease-spring-soft), height var(--dur-slow) var(--ease-out);
-  box-shadow: var(--shadow-ink-2);
+}
+
+/* A sliver of light on the left edge of the highlight, so the eye is led to the
+   active row even out of the corner of one's eye. */
+.nav-pill::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--blue-bright), var(--blue));
+  box-shadow: 0 0 14px var(--blue-glow);
 }
 
 .nav-btn {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -224,33 +371,93 @@ summary:focus-visible {
   padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
+  font-weight: 500;
   line-height: var(--leading-snug);
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
-  position: relative;
-  z-index: 1;
 }
 
-.nav-btn:hover { color: var(--text-on-ink); background: rgba(255,255,255,0.05); }
+.nav-btn:hover { color: var(--text-on-ink); background: rgba(255, 255, 255, 0.04); }
 .nav-btn:active { transform: scale(0.98); }
 .nav-btn:focus-visible { outline: var(--focus-ring-on-ink); outline-offset: 2px; }
 
-.nav-btn.active {
-  color: var(--text-on-ink);
+.nav-btn.active { color: #FFFFFF; }
+
+.nav-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-base);
+  opacity: 0.85;
+  transition: transform var(--dur-slow) var(--ease-spring), background-color var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
 }
 
-.nav-icon { font-size: var(--text-base); width: 18px; text-align: center; opacity: 0.9; display: inline-block; transition: transform var(--dur-slow) var(--ease-spring); }
-.nav-btn.active .nav-icon { transform: scale(1.1); }
+.nav-icon svg { width: 17px; height: 17px; display: block; }
 
-.nav-lock { margin-left: auto; font-size: var(--text-3xs); opacity: 0.7; display: none; transition: transform var(--dur-slow) var(--ease-spring); }
-.nav-protected.locked .nav-lock { display: inline; }
-.nav-protected.locked { opacity: 0.85; }
+.nav-btn:hover .nav-icon { opacity: 1; background: rgba(255, 255, 255, 0.05); }
+.nav-btn.active .nav-icon {
+  opacity: 1;
+  color: var(--blue-bright);
+  background: rgba(77, 141, 255, 0.18);
+  border-color: rgba(127, 176, 255, 0.32);
+  box-shadow: 0 0 18px rgba(77, 141, 255, 0.3);
+  transform: scale(1.04);
+}
+
+.nav-lock {
+  margin-left: auto;
+  display: none;
+  align-items: center;
+  color: var(--rust);
+  transition: transform var(--dur-slow) var(--ease-spring);
+}
+.nav-lock svg { width: 12px; height: 12px; display: block; }
+.nav-protected.locked .nav-lock { display: inline-flex; }
+.nav-protected.locked { opacity: 0.82; }
 .nav-protected:not(.locked) .nav-lock { transform: rotate(-25deg) scale(0); }
 
+/* Lyra herself, drawn quietly behind the nav column. Static SVG: no work for
+   the terminal, and it never drifts under the buttons. */
+.sidebar-constellation {
+  position: absolute;
+  left: 50%;
+  bottom: 168px;
+  width: 150px;
+  transform: translateX(-50%);
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity var(--dur-slower) var(--ease-out);
+}
+.sidebar:hover .sidebar-constellation { opacity: 0.6; }
+
+.constellation-line {
+  fill: none;
+  stroke: rgba(127, 176, 255, 0.5);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.constellation-star { fill: #DCE9FF; }
+.constellation-star-star { fill: #FFFFFF; filter: drop-shadow(0 0 5px rgba(127, 176, 255, 0.9)); }
+.constellation-star-warm { fill: var(--rust-soft); filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.55)); }
+
+.sidebar .constellation-star-star { animation: starTwinkle 5.5s ease-in-out infinite; }
+@keyframes starTwinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 .sidebar-foot {
+  position: relative;
   margin-top: auto;
   padding: var(--space-5) var(--space-3) var(--space-1) var(--space-3);
-  border-top: 1px solid var(--ink-softer);
+  border-top: 1px solid var(--line);
 }
 
 .lock-toggle {
@@ -258,8 +465,8 @@ summary:focus-visible {
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  background: var(--ink-soft);
-  border: 1px solid var(--ink-softer);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
   color: var(--text-on-ink-muted);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
@@ -267,19 +474,27 @@ summary:focus-visible {
   line-height: var(--leading-snug);
   cursor: pointer;
   margin-bottom: var(--space-4);
-  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
 }
-.lock-toggle:hover { background: var(--ink-softer); color: var(--text-on-ink); }
+.lock-toggle:hover { background: var(--glass-lift); color: var(--text-on-ink); border-color: var(--line-strong); }
 .lock-toggle:active { transform: scale(0.98); }
 .lock-toggle:focus-visible { outline: var(--focus-ring-on-ink); outline-offset: 2px; }
-.lock-toggle.is-locked { color: var(--coin-cyan-light); }
+.lock-toggle.is-locked {
+  color: var(--rust-soft);
+  border-color: rgba(249, 115, 22, 0.32);
+  background: var(--rust-tint);
+}
 
 .clock {
   font-family: var(--font-mono);
   font-size: var(--text-xl);
+  font-weight: 600;
   line-height: var(--leading-tight);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
   color: var(--text-on-ink);
+  text-shadow: 0 0 20px rgba(127, 176, 255, 0.35);
 }
 
 .shop-name-mini {
@@ -307,15 +522,15 @@ summary:focus-visible {
 .view.active.dir-none { animation: viewInFade var(--dur-slow) var(--ease-out-expo); }
 
 @keyframes viewInForward {
-  from { opacity: 0; transform: translateX(18px) scale(0.985); }
+  from { opacity: 0; transform: translateX(22px) scale(0.99); }
   to { opacity: 1; transform: translateX(0) scale(1); }
 }
 @keyframes viewInBack {
-  from { opacity: 0; transform: translateX(-18px) scale(0.985); }
+  from { opacity: 0; transform: translateX(-22px) scale(0.99); }
   to { opacity: 1; transform: translateX(0) scale(1); }
 }
 @keyframes viewInFade {
-  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  from { opacity: 0; transform: translateY(8px) scale(0.995); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -333,9 +548,11 @@ summary:focus-visible {
 .view-head h1 {
   font-family: var(--font-display);
   font-size: var(--text-3xl);
+  font-weight: 600;
   line-height: var(--leading-tight);
-  letter-spacing: -0.01em;
-  margin: 0 0 2px 0;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px 0;
+  color: #FFFFFF;
 }
 
 .view-sub { color: var(--text-muted); margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); }
@@ -350,43 +567,85 @@ summary:focus-visible {
   font-weight: 600;
   line-height: var(--leading-snug);
   cursor: pointer;
-  transition: transform var(--dur-fast) var(--ease-spring), filter var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  transition: transform var(--dur-fast) var(--ease-spring), filter var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .btn:active:not(:disabled) { transform: scale(0.96); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.btn-primary { background: var(--till-blue); color: var(--paper-bright); }
-.btn-primary:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); box-shadow: var(--shadow-1); }
-.btn-primary:active:not(:disabled) { transform: scale(0.96); }
+.btn-primary {
+  background: linear-gradient(180deg, #2F6AE4, #2456C4);
+  color: #FFFFFF;
+  border-color: rgba(127, 176, 255, 0.35);
+  box-shadow: 0 6px 18px rgba(36, 86, 196, 0.32), var(--shadow-inner-hairline);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(36, 86, 196, 0.42), 0 0 22px rgba(77, 141, 255, 0.28), var(--shadow-inner-hairline);
+}
 
-.btn-ghost { background: var(--paper-dim); color: var(--text-ink); border-color: var(--paper-line); }
-.btn-ghost:hover:not(:disabled) { background: var(--paper-line); border-color: var(--paper-line-strong); }
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-ink);
+  border-color: var(--line);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--glass-lift);
+  border-color: rgba(127, 176, 255, 0.36);
+  box-shadow: 0 0 18px rgba(77, 141, 255, 0.16);
+}
 
+/* Charge is the one button a cashier presses with a customer waiting, so it is
+   the one warm-to-cool, glowing, animated thing on the screen. */
 .btn-charge {
-  background: var(--coin-cyan);
-  color: var(--ink);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #7DEBE8, #35C8CE);
+  color: #04121A;
+  border-color: rgba(155, 240, 241, 0.5);
   flex: 1;
   font-size: var(--text-base);
   padding: var(--space-5) var(--space-7);
-  position: relative;
-  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(23, 150, 160, 0.35), var(--shadow-inner-hairline);
 }
-.btn-charge:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
-.btn-charge:not(:disabled) { animation: chargeGlow 2.4s ease-in-out infinite; }
+.btn-charge:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
+.btn-charge:disabled { box-shadow: none; }
+.btn-charge:not(:disabled) { animation: chargeGlow 2.6s ease-in-out infinite; }
 @keyframes chargeGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(28,194,192,0); }
-  50% { box-shadow: 0 0 0 6px rgba(28,194,192,0.12); }
+  0%, 100% { box-shadow: 0 8px 22px rgba(23, 150, 160, 0.3), 0 0 0 0 rgba(53, 200, 206, 0); }
+  50% { box-shadow: 0 8px 22px rgba(23, 150, 160, 0.4), 0 0 0 8px rgba(53, 200, 206, 0.1), 0 0 26px rgba(53, 200, 206, 0.28); }
+}
+/* A slow sheet of light crossing the button, so it stays alive without moving. */
+.btn-charge:not(:disabled)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.45) 50%, transparent 68%);
+  transform: translateX(-120%);
+  animation: chargeSheen 4.5s var(--ease-out) infinite;
+  pointer-events: none;
+}
+@keyframes chargeSheen {
+  0% { transform: translateX(-120%); }
+  55%, 100% { transform: translateX(120%); }
 }
 
-.btn-danger { background: var(--stamp-red); color: var(--paper-bright); }
+.btn-danger {
+  background: linear-gradient(180deg, #C2452F, #A2351F);
+  color: #FFFFFF;
+  border-color: rgba(249, 115, 22, 0.35);
+  box-shadow: 0 6px 18px rgba(120, 40, 22, 0.35), var(--shadow-inner-hairline);
+}
 .btn-danger:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 .btn-sm { padding: 7px var(--space-5); font-size: var(--text-xs); }
 
 /* ---------------- Inputs ---------------- */
 
 .search-input, .select-input, input[type=text], input[type=number], input[type=date], input[type=password], select {
-  border: 1px solid var(--paper-line);
-  background: var(--paper-bright);
+  border: 1px solid var(--line);
+  background: rgba(4, 8, 18, 0.55);
   border-radius: var(--radius-sm);
   padding: var(--space-4) var(--space-5);
   font-size: var(--text-sm);
@@ -394,22 +653,32 @@ summary:focus-visible {
   color: var(--text-ink);
   outline: none;
   width: 100%;
-  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
+.search-input::placeholder, input::placeholder { color: var(--text-dim); }
 .search-input:hover, .select-input:hover, input:not([type=checkbox]):hover, select:hover {
-  border-color: var(--paper-line-strong);
+  border-color: var(--line-strong);
 }
 .search-input:focus, .select-input:focus, input:focus, select:focus {
-  border-color: var(--till-blue);
-  box-shadow: var(--focus-halo);
+  border-color: rgba(127, 176, 255, 0.65);
+  background: rgba(7, 13, 26, 0.8);
+  box-shadow: var(--focus-glow);
+}
+
+/* The native dropdown and date-picker glyphs are drawn dark by the platform;
+   on these surfaces they have to be flipped to stay visible. */
+select option { background: var(--bg-2); color: var(--text-ink); }
+input[type=date]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85) sepia(0.4) saturate(4) hue-rotate(190deg);
+  cursor: pointer;
 }
 
 /* app.js toggles .shake-error on the search input when a scanned barcode
    matches nothing. The red border lives inside the keyframes so it fades back
    to the resting colour once the shake ends. */
 @keyframes shakeError {
-  0%, 100% { transform: translateX(0); border-color: var(--paper-line); }
-  20%, 60% { transform: translateX(-5px); border-color: var(--stamp-red); }
+  0%, 100% { transform: translateX(0); border-color: var(--line); box-shadow: none; }
+  20%, 60% { transform: translateX(-5px); border-color: var(--rust); box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18); }
   40%, 80% { transform: translateX(5px); }
 }
 .search-input.shake-error { animation: shakeError 0.36s var(--ease-out); }
@@ -422,39 +691,49 @@ summary:focus-visible {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
-  background: var(--ink);
+  background: linear-gradient(100deg, rgba(77, 141, 255, 0.18), rgba(77, 141, 255, 0.06));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   color: var(--text-on-ink);
+  border: 1px solid rgba(127, 176, 255, 0.3);
   border-radius: var(--radius-sm);
   padding: var(--space-4) var(--space-7);
   margin-bottom: var(--space-5);
   font-size: var(--text-sm);
   font-weight: 600;
-  box-shadow: var(--shadow-ink-1);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), var(--shadow-inner-hairline);
   animation: cardIn var(--dur-base) var(--ease-out-expo) both;
 }
 .bulk-bar-actions { display: flex; gap: var(--space-3); }
-.bulk-bar .btn-ghost { background: var(--ink-soft); color: var(--text-on-ink); border-color: var(--ink-softer); }
-.bulk-bar .btn-ghost:hover:not(:disabled) { background: var(--ink-softer); border-color: var(--till-blue-light); }
+.bulk-bar .btn-ghost { background: rgba(255, 255, 255, 0.06); color: var(--text-on-ink); border-color: var(--line-strong); }
+.bulk-bar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: var(--blue-soft); }
 .bulk-bar .btn-danger { border-color: transparent; }
 .bulk-bar .btn:focus-visible { outline: var(--focus-ring-on-ink); outline-offset: 2px; }
 
 .checkbox-col { width: 34px; }
 .data-table td.checkbox-col, .data-table th.checkbox-col { text-align: center; }
-.data-table input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--till-blue); vertical-align: middle; }
+.data-table input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--blue); vertical-align: middle; }
+/* The two checkboxes the Stock table and the Overview's low-stock list are
+   worked with. They are plain inputs with no styling of their own, so the only
+   thing they need is to be ticked in blue rather than in the platform's
+   default accent colour. */
+.stock-row-check, .low-stock-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--blue); vertical-align: middle; }
 .data-table input[type="checkbox"]:focus-visible,
 .field-check input[type="checkbox"]:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
 }
-.stock-row-selected { background: var(--till-blue-tint) !important; }
+.stock-row-selected { background: var(--blue-tint) !important; }
+.stock-row-selected td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
 .toolbar-row .search-input { max-width: 320px; }
 .toolbar-row .select-input { max-width: 220px; }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-6) 0; }
 
 .chip {
-  border: 1px solid var(--paper-line);
-  background: var(--paper-bright);
+  position: relative;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.035);
   color: var(--text-muted);
   padding: 7px var(--space-6);
   border-radius: var(--radius-pill);
@@ -462,14 +741,27 @@ summary:focus-visible {
   line-height: var(--leading-snug);
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out),
+              transform var(--dur-fast) var(--ease-spring);
 }
-.chip:hover { border-color: var(--till-blue); color: var(--till-blue-dark); box-shadow: var(--shadow-1); }
+.chip:hover {
+  border-color: rgba(127, 176, 255, 0.45);
+  color: var(--text-ink);
+  background: rgba(77, 141, 255, 0.1);
+  box-shadow: 0 0 16px rgba(77, 141, 255, 0.16);
+}
 .chip:active { transform: scale(0.96); }
 .chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-.chip.active { background: var(--till-blue); color: var(--paper-bright); border-color: var(--till-blue-dark); box-shadow: var(--shadow-1); animation: chipPop var(--dur-slow) var(--ease-spring); }
+.chip.active {
+  background: linear-gradient(180deg, #2F6AE4, #2456C4);
+  color: #FFFFFF;
+  border-color: rgba(127, 176, 255, 0.5);
+  box-shadow: 0 6px 18px rgba(36, 86, 196, 0.35), var(--shadow-inner-hairline);
+  animation: chipPop var(--dur-slow) var(--ease-spring);
+}
 .chip-remove { margin-left: var(--space-2); opacity: 0.6; transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); display: inline-block; }
-.chip-remove:hover { opacity: 1; transform: scale(1.2); }
+.chip-remove:hover { opacity: 1; transform: scale(1.2); color: var(--rust-soft); }
 
 @keyframes chipPop {
   0% { transform: scale(0.92); }
@@ -491,25 +783,47 @@ summary:focus-visible {
 }
 
 .day-summary-bar {
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-8);
   row-gap: var(--space-4);
-  background: var(--ink);
+  background: linear-gradient(100deg, rgba(22, 32, 60, 0.72), rgba(11, 18, 34, 0.6));
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
   color: var(--text-on-ink);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: var(--space-5) var(--space-9);
   margin-bottom: var(--space-7);
-  box-shadow: var(--shadow-ink-1);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), var(--shadow-inner-hairline);
+  overflow: hidden;
   animation: cardIn var(--dur-slower) var(--ease-out-expo) both;
 }
+/* A blue filament along the top edge of the bar, the brightest line in the
+   chrome around the till. */
+.day-summary-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.75), transparent);
+  pointer-events: none;
+}
 .day-summary-item { display: flex; flex-direction: column; gap: 2px; }
-.day-summary-label { font-size: var(--text-3xs); line-height: var(--leading-tight); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-on-ink-muted); }
-.day-summary-value { font-family: var(--font-mono); font-size: var(--text-lg); font-weight: 700; line-height: var(--leading-tight); font-variant-numeric: tabular-nums; transition: transform var(--dur-fast) var(--ease-spring); }
-.day-summary-value.ds-cash { color: var(--accent-cash); }
-.day-summary-value.ds-card { color: var(--accent-card); }
-.day-summary-sep { width: 1px; height: 26px; background: var(--ink-softer); }
+.day-summary-label { font-size: var(--text-3xs); line-height: var(--leading-tight); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-on-ink-muted); }
+.day-summary-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+.day-summary-value.ds-cash { color: var(--accent-cash); text-shadow: 0 0 18px rgba(95, 224, 176, 0.3); }
+.day-summary-value.ds-card { color: var(--accent-card); text-shadow: 0 0 18px rgba(169, 201, 255, 0.3); }
+.day-summary-sep { width: 1px; height: 26px; background: var(--line-strong); }
 
 .till-catalog { display: flex; flex-direction: column; min-height: 0; }
 .till-toolbar { margin-bottom: var(--space-2); display: flex; gap: var(--space-4); }
@@ -526,26 +840,62 @@ summary:focus-visible {
 }
 
 .product-card {
-  background: var(--paper-bright);
-  border: 1px solid var(--paper-line);
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(160deg, rgba(28, 40, 72, 0.66) 0%, rgba(12, 18, 34, 0.72) 100%);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: var(--space-6) var(--space-5);
   text-align: left;
+  color: var(--text-ink);
   cursor: pointer;
-  box-shadow: var(--shadow-2);
-  transition: transform var(--dur-base) var(--ease-spring-soft), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), var(--shadow-inner-hairline);
+  transition: transform var(--dur-base) var(--ease-spring-soft), border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   min-height: 96px;
   animation: cardPopIn var(--dur-slow) var(--ease-out-expo) both;
 }
-.product-card:hover:not(:disabled) { border-color: var(--till-blue); transform: translateY(-3px); box-shadow: var(--shadow-3); }
+/* The cold light that comes up when a card is hovered: one gradient layer, no
+   blur, so a grid of 120 of these still scrolls at full speed. */
+.product-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 100% at 15% 0%, rgba(77, 141, 255, 0.18), transparent 60%);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+/* A hairline rail down the left edge of the tile. */
+.product-card::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--blue-bright), rgba(77, 141, 255, 0));
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+.product-card:hover:not(:disabled) {
+  border-color: rgba(127, 176, 255, 0.45);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45), 0 0 24px rgba(77, 141, 255, 0.18), var(--shadow-inner-hairline);
+}
+.product-card:hover:not(:disabled)::before,
+.product-card:hover:not(:disabled)::after { opacity: 1; }
 .product-card:active:not(:disabled),
 .product-card.card-tapped:not(:disabled) { transform: translateY(-1px) scale(0.96); transition-duration: 0.08s; }
-.product-card:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-color: var(--till-blue); }
-.product-card.out-of-stock { opacity: 0.6; cursor: not-allowed; }
-.product-card.out-of-stock:hover { transform: none; box-shadow: var(--shadow-2); border-color: var(--paper-line); }
+.product-card:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-color: var(--blue-bright); }
+.product-card.out-of-stock { opacity: 0.5; cursor: not-allowed; }
+.product-card.out-of-stock:hover { transform: none; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); border-color: var(--line); }
 
 @keyframes cardPopIn {
   from { opacity: 0; transform: translateY(8px) scale(0.96); }
@@ -558,15 +908,28 @@ summary:focus-visible {
    and that is what makes the Till feel jittery while a sale is being built. */
 .product-grid.grid-settled .product-card { animation: none; }
 
-.product-card-name { font-size: var(--text-sm); font-weight: 600; line-height: var(--leading-snug); width: 100%; }
-.product-card-meta { display: flex; justify-content: space-between; align-items: baseline; margin-top: auto; width: 100%; gap: var(--space-2); }
-.product-card-price { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--till-blue-dark); }
+.product-card-name { position: relative; font-size: var(--text-sm); font-weight: 600; line-height: var(--leading-snug); width: 100%; }
+.product-card-meta { position: relative; display: flex; justify-content: space-between; align-items: baseline; margin-top: auto; width: 100%; gap: var(--space-2); }
+.product-card-price {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--blue-bright);
+  text-shadow: 0 0 14px rgba(77, 141, 255, 0.3);
+}
 .product-card-stock { font-size: var(--text-3xs); line-height: var(--leading-tight); color: var(--text-muted); text-align: right; }
-.product-card-stock.low { color: var(--stamp-red); }
+.product-card-stock.low { color: var(--rust); font-weight: 600; }
 
-/* ---------------- Receipt tape (signature element) ---------------- */
+/* ---------------- Receipt tape (signature element) ----------------
+   The tape is the one panel the customer looks at, so it is set apart: a deep
+   navy paper with an edge of blue light and the perforated ends kept from the
+   original design. It is deliberately not blurred — rows animate in and out of
+   it all shift long, and a live backdrop filter behind moving rows is exactly
+   the sort of thing that makes a till stutter. */
 
 .receipt-tape {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -574,23 +937,37 @@ summary:focus-visible {
   /* One knob for the whole receipt. The tape is set well above the rest of the
      app on purpose: a cashier reads it out loud and a customer reads it across
      the counter, so it is sized for that distance rather than to match the
-     panels beside it. */
-  --tape-font: 20px;
-  --tape-font-small: 15px;
+     panels beside it. It scales with the window so that on a small screen — a
+     1024-wide till, where the tape still keeps half of it — the names keep
+     breaking between words instead of through the middle of one. */
+  --tape-font: clamp(15px, 1.45vw, 20px);
+  --tape-font-small: clamp(12.5px, 1.1vw, 15px);
+  /* The paper itself, sampled from the tape body's own gradient at each end,
+     and the sky the notches are cut out of. */
+  --tape-cut: var(--bg);
+  --tape-paper-top: #10182C;
+  --tape-paper-bottom: #090E1B;
 }
 
+/* The perforated ends: each strip is paper with a row of notches cut out of the
+   edge that meets the tape, so the tape reads as torn off a roll rather than
+   chopped off. The top strip is turned over, which puts its notches at its
+   bottom edge. */
 .tape-scallop {
   height: 10px;
-  background:
-    radial-gradient(circle at 8px 0, transparent 7px, var(--paper) 7.5px) top / 16px 16px repeat-x;
+  background: radial-gradient(circle at 8px 0, var(--tape-cut) 7px, var(--tape-edge) 7.5px) top / 16px 16px repeat-x;
+  position: relative;
+  z-index: 1;
 }
-.tape-scallop-top { transform: rotate(180deg); }
+.tape-scallop-top { --tape-edge: var(--tape-paper-top); transform: rotate(180deg); }
+.tape-scallop-bottom { --tape-edge: var(--tape-paper-bottom); }
 
 .tape-body {
-  background: var(--paper-tape);
-  border-left: 1px solid var(--paper-line);
-  border-right: 1px solid var(--paper-line);
-  box-shadow: var(--shadow-2);
+  position: relative;
+  background: linear-gradient(180deg, rgba(17, 25, 45, 0.95) 0%, rgba(9, 14, 27, 0.97) 100%);
+  border-left: 1px solid rgba(127, 176, 255, 0.18);
+  border-right: 1px solid rgba(127, 176, 255, 0.18);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -598,8 +975,15 @@ summary:focus-visible {
   padding: var(--space-8) var(--space-8) var(--space-7) var(--space-8);
 }
 
-.tape-header { text-align: center; margin-bottom: var(--space-5); }
-.tape-shop { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; line-height: var(--leading-tight); }
+.tape-header { position: relative; text-align: center; margin-bottom: var(--space-5); }
+.tape-shop {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: var(--leading-tight);
+  color: #FFFFFF;
+}
 .tape-meta { font-family: var(--font-mono); font-size: var(--tape-font-small); color: var(--text-muted); margin-top: 2px; }
 
 .tape-items {
@@ -608,8 +992,8 @@ summary:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--tape-font);
   font-variant-numeric: tabular-nums;
-  border-top: 1px dashed var(--paper-line);
-  border-bottom: 1px dashed var(--paper-line);
+  border-top: 1px dashed rgba(127, 176, 255, 0.22);
+  border-bottom: 1px dashed rgba(127, 176, 255, 0.22);
   padding: var(--space-4) 0;
 }
 
@@ -644,7 +1028,7 @@ summary:focus-visible {
 .tape-line.pulse .tape-line-qty-num { animation: numPulse var(--dur-slow) var(--ease-spring); }
 @keyframes numPulse {
   0% { transform: scale(1); }
-  40% { transform: scale(1.22); color: var(--till-blue-dark); }
+  40% { transform: scale(1.22); color: var(--blue-bright); text-shadow: 0 0 16px var(--blue-glow); }
   100% { transform: scale(1); }
 }
 
@@ -655,55 +1039,67 @@ summary:focus-visible {
   display: flex; align-items: center; gap: var(--space-1);
   color: var(--text-muted);
 }
-.tape-line-qty-num { display: inline-block; min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; }
+.tape-line-qty-num { display: inline-block; min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; color: var(--text-ink); }
 .qty-btn {
-  width: 26px; height: 26px; border-radius: var(--radius-xs); border: 1px solid var(--paper-line);
-  background: var(--paper-dim); cursor: pointer; font-size: var(--tape-font-small); line-height: 1;
+  width: 26px; height: 26px; border-radius: var(--radius-xs); border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04); color: var(--text-ink); cursor: pointer; font-size: var(--tape-font-small); line-height: 1;
   display: flex; align-items: center; justify-content: center;
-  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out);
 }
-.qty-btn:hover { background: var(--paper-line); border-color: var(--paper-line-strong); }
+.qty-btn:hover { background: rgba(77, 141, 255, 0.18); border-color: rgba(127, 176, 255, 0.5); box-shadow: 0 0 14px rgba(77, 141, 255, 0.22); }
 .qty-btn:active { transform: scale(0.9); }
 .qty-btn:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
-.tape-line-total { min-width: 96px; text-align: right; font-weight: 600; display: inline-block; font-variant-numeric: tabular-nums; }
+.tape-line-total { min-width: clamp(66px, 7vw, 96px); text-align: right; font-weight: 600; display: inline-block; font-variant-numeric: tabular-nums; }
 .tape-line-remove {
-  color: var(--stamp-red); cursor: pointer; font-size: var(--text-lg); margin-left: 2px;
-  display: inline-block; transition: transform var(--dur-fast) var(--ease-spring);
+  color: var(--text-dim); cursor: pointer; font-size: var(--text-lg); margin-left: 2px;
+  display: inline-block; transition: transform var(--dur-fast) var(--ease-spring), color var(--dur-fast) var(--ease-out);
 }
-.tape-line-remove:hover { transform: scale(1.3) rotate(90deg); }
+.tape-line-remove:hover { transform: scale(1.3) rotate(90deg); color: var(--rust); }
 
-.tape-divider { height: 1px; background: var(--paper-line); margin: 2px 0; }
+.tape-divider { height: 1px; background: rgba(127, 176, 255, 0.16); margin: 2px 0; }
 
-.tape-totals { padding: var(--space-4) 0 var(--space-1) 0; font-family: var(--font-mono); font-size: var(--tape-font); font-variant-numeric: tabular-nums; }
+.tape-totals { padding: var(--space-4) 0 var(--space-1) 0; font-family: var(--font-mono); font-size: var(--tape-font); font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .tape-row { display: flex; justify-content: space-between; align-items: baseline; padding: var(--space-1) 0; }
+/* The labels stay quiet and the figures do not: the money on the tape is what
+   gets read out, so it is the brighter half of every row. */
+.tape-row span:last-child { color: var(--text-ink); }
 .tape-total {
-  font-size: var(--text-3xl); font-weight: 700; color: var(--coin-cyan-text);
-  border-top: 1px dashed var(--paper-line); margin-top: var(--space-1); padding-top: var(--space-3);
+  font-size: var(--text-3xl); font-weight: 700;
+  border-top: 1px dashed rgba(127, 176, 255, 0.22); margin-top: var(--space-1); padding-top: var(--space-3);
   transition: transform var(--dur-fast) var(--ease-spring);
+  text-shadow: 0 0 22px rgba(111, 224, 226, 0.35);
 }
-.tape-total.flash { animation: totalFlash var(--dur-slower) var(--ease-spring); }
+.tape-total, .tape-total span:last-child { color: var(--cyan); }
+/* Both the row and its figure flash, so the colour sweep is not overruled by
+   the brighter figure rule above. */
+.tape-total.flash,
+.tape-total.flash span:last-child { animation: totalFlash var(--dur-slower) var(--ease-spring); }
 @keyframes totalFlash {
   0% { transform: scale(1); }
-  35% { transform: scale(1.08); color: var(--till-blue-dark); }
-  100% { transform: scale(1); color: var(--coin-cyan-text); }
+  35% { transform: scale(1.06); color: #B6FBFB; }
+  100% { transform: scale(1); color: var(--cyan); }
 }
 
+/* A scan landing in the sale: one pulse of light around the tape, no movement. */
 .tape-body.receiving { animation: tapeReceive var(--dur-slower) var(--ease-out); }
 @keyframes tapeReceive {
-  0% { box-shadow: var(--shadow-2); }
-  40% { box-shadow: var(--focus-halo), var(--shadow-2); }
-  100% { box-shadow: var(--shadow-2); }
+  0% { box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5); }
+  40% { box-shadow: 0 0 0 1px rgba(127, 176, 255, 0.5), 0 0 34px rgba(77, 141, 255, 0.35), 0 18px 42px rgba(0, 0, 0, 0.5); }
+  100% { box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5); }
 }
 
 .tape-actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
 .tape-actions .btn { font-size: var(--tape-font-small); }
 
+/* The dot that flies from a tapped product to the tape. app.js drives its
+   position and transform; this only has to look like a spark. */
 .fly-ghost {
   position: fixed;
   width: 14px; height: 14px;
   border-radius: 50%;
-  background: var(--coin-cyan);
-  box-shadow: var(--shadow-ink-2);
+  background: radial-gradient(circle at 35% 35%, #DCE9FF, var(--blue) 70%);
+  box-shadow: 0 0 18px var(--blue-glow), 0 0 6px rgba(255, 255, 255, 0.7);
   z-index: 999;
   pointer-events: none;
   transition: transform 0.45s var(--ease-out-expo), opacity 0.45s ease 0.15s;
@@ -711,38 +1107,108 @@ summary:focus-visible {
 
 /* ---------------- Tables ---------------- */
 
-.table-wrap { border: 1px solid var(--paper-line); border-radius: var(--radius); overflow: hidden; background: var(--paper-bright); box-shadow: var(--shadow-1); }
+.table-wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(12, 19, 35, 0.72), rgba(7, 11, 22, 0.78));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36), var(--shadow-inner-hairline);
+}
 
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .data-table th {
-  text-align: left; font-size: var(--text-3xs); text-transform: uppercase; letter-spacing: 0.05em;
+  text-align: left; font-size: var(--text-3xs); text-transform: uppercase; letter-spacing: 0.07em;
   line-height: var(--leading-snug);
-  color: var(--text-muted); background: var(--paper-dim); padding: var(--space-4) var(--space-6); font-weight: 600;
+  color: var(--text-dim); background: rgba(22, 32, 60, 0.55); padding: var(--space-4) var(--space-6); font-weight: 600;
 }
-.data-table td { padding: var(--space-4) var(--space-6); border-top: 1px solid var(--paper-line); }
+.data-table td { padding: var(--space-4) var(--space-6); border-top: 1px solid var(--line); }
 .data-table td.num, .data-table th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.data-table tbody tr { transition: background-color var(--dur-fast) var(--ease-out); }
+.data-table tbody tr { transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
 .data-table tbody tr:hover,
-.data-table tbody tr:focus-within { background: var(--paper-dim); cursor: pointer; }
-.data-table tbody tr:active { background: var(--paper-line); }
+.data-table tbody tr:focus-within { background: rgba(77, 141, 255, 0.07); cursor: pointer; }
+/* The accent rail on a hovered row is drawn on its first cell: a box-shadow on
+   a <tr> in a collapsed table is not something every engine will paint. */
+.data-table tbody tr:hover td:first-child,
+.data-table tbody tr:focus-within td:first-child { box-shadow: inset 3px 0 0 rgba(127, 176, 255, 0.65); }
+.data-table tbody tr:active { background: rgba(77, 141, 255, 0.12); }
 
 .stock-badge { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.stock-badge.low { color: var(--stamp-red); font-weight: 700; }
-.cost-missing { color: var(--coin-cyan-text); cursor: help; }
+.stock-badge.low { color: var(--rust); font-weight: 700; }
+.cost-missing { color: var(--rust-soft); cursor: help; }
 
-.row-link { color: var(--till-blue-dark); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-size: var(--text-xs); transition: color var(--dur-fast) var(--ease-out); }
-.row-link:hover { color: var(--till-blue); }
+.row-link {
+  color: var(--blue-bright);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(127, 176, 255, 0.4);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  transition: color var(--dur-fast) var(--ease-out), text-decoration-color var(--dur-fast) var(--ease-out);
+}
+.row-link:hover { color: #FFFFFF; text-decoration-color: rgba(255, 255, 255, 0.6); }
+
+/* "of #1001" after a refund row's number in the Ledger */
+.row-sub { color: var(--text-dim); font-size: var(--text-2xs); }
+
+/* "Showing the first N of M..." row that caps long tables */
+.table-more td {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  padding: var(--space-8) var(--space-4);
+  background: rgba(22, 32, 60, 0.4);
+}
+
+.table-more-btn {
+  margin-left: var(--space-6);
+  padding: var(--space-4) var(--space-12);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-ink);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.table-more-btn:hover { background: rgba(77, 141, 255, 0.16); border-color: rgba(127, 176, 255, 0.5); box-shadow: 0 0 18px rgba(77, 141, 255, 0.2); }
+.table-more-btn:active { transform: translateY(1px); }
+
+.table-more-hint { display: inline-block; margin-left: var(--space-4); }
 
 /* ---------------- Dashboard ---------------- */
 
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--space-6); margin-bottom: var(--space-10); }
 .stat-card {
-  background: var(--paper-bright); border: 1px solid var(--paper-line); border-radius: var(--radius);
-  padding: var(--space-7) var(--space-8); box-shadow: var(--shadow-2);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, rgba(26, 38, 68, 0.62) 0%, rgba(10, 16, 31, 0.7) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-7) var(--space-8);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), var(--shadow-inner-hairline);
   animation: cardIn var(--dur-slower) var(--ease-out-expo) both;
-  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out);
 }
-.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-4); }
+/* Every card carries a thin filament along its top edge; the figure on it is
+   what the eye lands on first, so the rest stays quiet. */
+.stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.55), transparent);
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(127, 176, 255, 0.32);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), 0 0 26px rgba(77, 141, 255, 0.14), var(--shadow-inner-hairline);
+}
 .stat-card:nth-child(1) { animation-delay: 0.02s; }
 .stat-card:nth-child(2) { animation-delay: 0.07s; }
 .stat-card:nth-child(3) { animation-delay: 0.12s; }
@@ -752,24 +1218,53 @@ summary:focus-visible {
   from { opacity: 0; transform: translateY(10px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.stat-card-warn { border-color: var(--stamp-red-soft); }
-.stat-label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.05em; line-height: var(--leading-tight); color: var(--text-muted); margin-bottom: var(--space-2); }
-.stat-value { font-family: var(--font-mono); font-size: var(--text-xl); overflow-wrap: anywhere; font-weight: 700; line-height: var(--leading-tight); font-variant-numeric: tabular-nums; transition: color var(--dur-base) var(--ease-out); }
-.stat-card-warn .stat-value { color: var(--stamp-red); }
-.stat-card-profit .stat-value { color: var(--till-blue-dark); }
+.stat-card-warn { border-color: rgba(249, 115, 22, 0.32); }
+.stat-card-warn::before { background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.7), transparent); }
+.stat-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  line-height: var(--leading-tight);
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+}
+.stat-label::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--blue-bright);
+  box-shadow: 0 0 10px var(--blue-glow);
+  flex-shrink: 0;
+}
+.stat-card-warn .stat-label::before { background: var(--rust); box-shadow: 0 0 10px rgba(249, 115, 22, 0.6); }
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-base) var(--ease-out);
+}
+.stat-card-warn .stat-value { color: var(--rust); }
+.stat-card-profit .stat-value { color: var(--mint); text-shadow: 0 0 18px rgba(95, 224, 176, 0.22); }
 
 .bar-list { display: flex; flex-direction: column; gap: var(--space-5); }
 .bar-row { display: grid; grid-template-columns: 48px 1fr 72px; align-items: center; gap: var(--space-4); font-size: var(--text-xs); }
 .bar-label { color: var(--text-muted); font-weight: 600; }
-.bar-track { height: 10px; background: var(--paper-dim); border-radius: var(--radius-pill); overflow: hidden; }
+.bar-track { height: 10px; background: rgba(4, 8, 18, 0.7); border: 1px solid var(--line); border-radius: var(--radius-pill); overflow: hidden; }
 .bar-fill {
   height: 100%; border-radius: var(--radius-pill); width: 0;
   animation: barGrow 0.6s var(--ease-out-expo) 0.1s forwards;
 }
 @keyframes barGrow { to { width: var(--target-width); } }
-.bar-fill.bar-cash { background: var(--till-blue); }
-.bar-fill.bar-card { background: var(--bar-card); }
-.bar-fill.bar-other { background: var(--coin-cyan); }
+.bar-fill.bar-cash { background: linear-gradient(90deg, #3FCB99, var(--mint)); box-shadow: 0 0 14px rgba(95, 224, 176, 0.4); }
+.bar-fill.bar-card { background: linear-gradient(90deg, var(--blue), var(--blue-bright)); box-shadow: 0 0 14px rgba(77, 141, 255, 0.4); }
+.bar-fill.bar-other { background: linear-gradient(90deg, #6E5CE0, var(--violet)); box-shadow: 0 0 14px rgba(157, 140, 255, 0.4); }
 .bar-value { font-family: var(--font-mono); text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .history-wrap { max-height: 280px; overflow: auto; }
@@ -787,20 +1282,34 @@ summary:focus-visible {
 .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-7); }
 
 .panel {
-  background: var(--paper-bright); border: 1px solid var(--paper-line); border-radius: var(--radius); padding: var(--space-8); box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(165deg, rgba(24, 35, 63, 0.58) 0%, rgba(9, 15, 29, 0.68) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-8);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), var(--shadow-inner-hairline);
   animation: cardIn var(--dur-slower) var(--ease-out-expo) both;
+}
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.4), transparent);
 }
 .panel-row .panel:nth-child(1), .settings-grid .panel:nth-child(1) { animation-delay: 0.02s; }
 .panel-row .panel:nth-child(2), .settings-grid .panel:nth-child(2) { animation-delay: 0.08s; }
 .settings-grid .panel:nth-child(3) { animation-delay: 0.14s; }
 .settings-grid .panel:nth-child(4) { animation-delay: 0.2s; }
-.panel h2 { font-family: var(--font-display); font-size: var(--text-md); line-height: var(--leading-tight); margin: 0 0 var(--space-5) 0; }
+.panel h2 { font-family: var(--font-display); font-size: var(--text-md); font-weight: 600; line-height: var(--leading-tight); margin: 0 0 var(--space-5) 0; color: #FFFFFF; }
 .panel-note { color: var(--text-muted); font-size: var(--text-xs); line-height: var(--leading-normal); margin: 0 0 var(--space-5) 0; }
 
 .panel-full { grid-column: 1 / -1; }
 
-.panel-danger { border-color: var(--stamp-red-soft); }
-.panel-danger h2 { color: var(--stamp-red); }
+.panel-danger { border-color: rgba(249, 115, 22, 0.28); background: linear-gradient(165deg, rgba(58, 26, 20, 0.4) 0%, rgba(12, 14, 26, 0.7) 100%); }
+.panel-danger::before { background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.65), transparent); }
+.panel-danger h2 { color: var(--rust-soft); }
 
 .danger-row {
   display: flex;
@@ -808,7 +1317,7 @@ summary:focus-visible {
   justify-content: space-between;
   gap: var(--space-7);
   padding: var(--space-6) 0;
-  border-top: 1px solid var(--paper-line);
+  border-top: 1px solid var(--line);
 }
 .danger-row:first-of-type { border-top: none; padding-top: var(--space-4); }
 .danger-row-title { font-weight: 700; font-size: var(--text-sm); line-height: var(--leading-snug); color: var(--text-ink); margin-bottom: 3px; }
@@ -816,11 +1325,12 @@ summary:focus-visible {
 .danger-row .btn { flex-shrink: 0; }
 
 .rank-list { margin: 0; padding-left: 0; list-style: none; font-size: var(--text-sm); }
-.rank-list li { padding: 5px 0; }
-.rank-list .rank-num { font-family: var(--font-mono); color: var(--text-muted); margin-right: var(--space-1); }
+.rank-list li { padding: 6px 0; border-top: 1px solid var(--line); }
+.rank-list li:first-child { border-top: none; }
+.rank-list .rank-num { font-family: var(--font-mono); color: var(--blue-bright); margin-right: var(--space-1); }
 
 .plain-list { list-style: none; margin: 0; padding: 0; font-size: var(--text-sm); }
-.plain-list li { display: flex; justify-content: space-between; padding: var(--space-2) 0; border-top: 1px solid var(--paper-dim); font-variant-numeric: tabular-nums; }
+.plain-list li { display: flex; justify-content: space-between; padding: var(--space-2) 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .plain-list li:first-child { border-top: none; }
 .plain-empty { color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); }
 /* A low-stock row can be worked on: the checkbox and the name sit at the left
@@ -830,7 +1340,7 @@ summary:focus-visible {
 .low-stock-side { display: flex; align-items: center; gap: var(--space-3); flex-shrink: 0; }
 /* The barcode beside Delete: muted, and kept to one line, because half a barcode
    is no use to anyone reading one out. */
-.low-stock-code { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.low-stock-code { color: var(--text-dim); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------------- Forms ---------------- */
 
@@ -840,13 +1350,16 @@ summary:focus-visible {
 .field-inline { display: flex; gap: var(--space-3); }
 .field-inline input { flex: 1; }
 .field-check { flex-direction: row; align-items: center; gap: var(--space-3); cursor: pointer; }
-.field-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--till-blue); }
+.field-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--blue); }
 
 /* ---------------- Modals ---------------- */
 
 .modal-overlay {
   display: flex;
-  position: fixed; inset: 0; background: rgba(10,34,70,0.55);
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(900px 600px at 50% 0%, rgba(77, 141, 255, 0.1), transparent 70%),
+    rgba(3, 5, 12, 0.66);
   align-items: center; justify-content: center; z-index: 50;
   opacity: 0; visibility: hidden; pointer-events: none;
   backdrop-filter: blur(0px);
@@ -854,18 +1367,29 @@ summary:focus-visible {
 }
 .modal-overlay.active {
   opacity: 1; visibility: visible; pointer-events: auto;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(8px);
   transition: opacity var(--dur-base) var(--ease-out), backdrop-filter var(--dur-base) var(--ease-out), visibility 0s linear 0s;
 }
 .modal-overlay.closing { opacity: 0; backdrop-filter: blur(0px); }
 
 .modal {
-  background: var(--paper); border: 1px solid var(--paper-line);
-  border-radius: var(--radius-lg); padding: var(--space-10) var(--space-11);
+  position: relative;
+  background: linear-gradient(165deg, rgba(24, 35, 63, 0.94) 0%, rgba(8, 13, 26, 0.97) 100%);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-11);
   width: 460px; max-width: 90vw; max-height: 86vh; overflow-y: auto;
   box-shadow: var(--shadow-modal);
   transform: scale(0.92) translateY(14px);
   transition: transform var(--dur-slow) var(--ease-spring);
+}
+.modal::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.75), transparent);
 }
 .modal-overlay.active .modal { transform: scale(1) translateY(0); }
 .modal-overlay.closing .modal { transform: scale(0.95) translateY(6px); transition: transform var(--dur-fast) var(--ease-out); }
@@ -873,21 +1397,30 @@ summary:focus-visible {
 /* The receipt modal shows 32 columns of monospaced text at the tape's size, so
    it is wider than the other narrow modals. */
 .modal-receipt { width: min(760px, 92vw); }
-.modal h2 { font-family: var(--font-display); margin: 0 0 var(--space-7) 0; font-size: var(--text-xl); line-height: var(--leading-tight); }
+.modal h2 { font-family: var(--font-display); margin: 0 0 var(--space-7) 0; font-size: var(--text-xl); font-weight: 600; line-height: var(--leading-tight); color: #FFFFFF; }
 
 .modal-actions { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); margin-top: var(--space-8); }
 .modal-actions-right { display: flex; gap: var(--space-3); margin-left: auto; }
 
-.segmented { display: flex; border: 1px solid var(--paper-line); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: var(--space-6); }
-.period-tabs { margin-bottom: 0; background: var(--paper-bright); }
+.segmented { display: flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: var(--space-6); background: rgba(4, 8, 18, 0.55); }
+.period-tabs { margin-bottom: 0; background: rgba(255, 255, 255, 0.035); }
 .period-tabs .seg-btn { padding: var(--space-3) var(--space-7); }
-.seg-btn { flex: 1; background: var(--paper-bright); border: none; padding: 9px; font-size: var(--text-sm); line-height: var(--leading-snug); cursor: pointer; color: var(--text-muted); border-right: 1px solid var(--paper-line); transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.seg-btn {
+  flex: 1; background: transparent; border: none; padding: 9px;
+  font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-snug); cursor: pointer;
+  color: var(--text-muted); border-right: 1px solid var(--line);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
 .seg-btn:last-child { border-right: none; }
-.seg-btn:hover:not(.active) { background: var(--paper-dim); color: var(--text-ink); }
-.seg-btn:active:not(.active) { background: var(--paper-line); }
+.seg-btn:hover:not(.active) { background: rgba(255, 255, 255, 0.05); color: var(--text-ink); }
+.seg-btn:active:not(.active) { background: rgba(255, 255, 255, 0.08); }
 .seg-btn:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
-.seg-btn.active { background: var(--till-blue); color: var(--paper-bright); }
-.seg-btn.active:focus-visible { outline-color: var(--coin-cyan-light); }
+.seg-btn.active {
+  background: linear-gradient(180deg, #2F6AE4, #2456C4);
+  color: #FFFFFF;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 20px rgba(77, 141, 255, 0.24);
+}
+.seg-btn.active:focus-visible { outline-color: var(--blue-bright); }
 
 .charge-total-display, .change-display {
   display: flex; justify-content: space-between; align-items: baseline;
@@ -895,19 +1428,22 @@ summary:focus-visible {
   padding: var(--space-4) 0; margin-bottom: var(--space-3);
 }
 .charge-total-display span:first-child,
-.change-display span:first-child { font-size: var(--text-base); }
-.charge-total-display span:last-child { font-size: var(--text-2xl); font-weight: 700; color: var(--coin-cyan-text); }
-.change-display { border-top: 1px dashed var(--paper-line); }
-.change-display span:last-child { font-size: var(--text-xl); font-weight: 700; color: var(--till-blue-dark); }
+.change-display span:first-child { font-size: var(--text-base); color: var(--text-muted); }
+.charge-total-display span:last-child { font-size: var(--text-2xl); font-weight: 700; color: var(--cyan); text-shadow: 0 0 22px rgba(111, 224, 226, 0.3); }
+.change-display { border-top: 1px dashed rgba(127, 176, 255, 0.22); }
+.change-display span:last-child { font-size: var(--text-xl); font-weight: 700; color: var(--mint); text-shadow: 0 0 22px rgba(95, 224, 176, 0.3); }
 
 .held-list { display: flex; flex-direction: column; gap: var(--space-3); max-height: 320px; overflow-y: auto; }
 .held-item {
   display: flex; justify-content: space-between; align-items: center;
   gap: var(--space-3);
-  border: 1px solid var(--paper-line); border-radius: var(--radius-sm); padding: var(--space-4) var(--space-5); background: var(--paper-bright);
-  box-shadow: var(--shadow-1);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-4) var(--space-5);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: var(--shadow-inner-hairline);
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
-.held-item-info { font-size: var(--text-sm); line-height: var(--leading-snug); }
+.held-item:hover { border-color: rgba(127, 176, 255, 0.35); background: rgba(77, 141, 255, 0.08); }
+.held-item-info { font-size: var(--text-sm); line-height: var(--leading-snug); font-variant-numeric: tabular-nums; }
 .held-item-info .held-note { color: var(--text-muted); font-size: var(--text-2xs); margin-top: 2px; }
 .held-empty { color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); text-align: center; padding: var(--space-9); }
 
@@ -915,30 +1451,66 @@ summary:focus-visible {
 .import-preview table { font-size: var(--text-2xs); }
 .import-preview th, .import-preview td { padding: var(--space-2) var(--space-4); white-space: nowrap; }
 
+/* The paper a receipt would print on: shown as a lit panel of its own so the
+   preview reads as the thing that is about to come out of the printer. */
 .receipt-preview {
-  font-family: var(--font-mono); font-size: 18px; line-height: var(--leading-snug); background: var(--paper-bright);
-  border: 1px solid var(--paper-line); border-radius: var(--radius-sm); padding: var(--space-7); white-space: pre-wrap;
-  max-height: 420px; overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  line-height: var(--leading-snug);
+  background: linear-gradient(180deg, rgba(17, 25, 45, 0.95), rgba(9, 14, 27, 0.97));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-7);
+  white-space: pre-wrap;
+  max-height: 420px;
+  overflow-y: auto;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45);
 }
 
 /* ---------------- Toast ---------------- */
 
 .toast {
-  position: fixed; bottom: var(--space-10); left: 50%; transform: translateX(-50%) translateY(20px);
-  background: var(--ink); color: var(--text-on-ink); padding: 11px var(--space-9); border-radius: var(--radius-sm);
-  font-size: var(--text-sm); line-height: var(--leading-snug); box-shadow: var(--shadow-ink-2);
+  position: fixed;
+  bottom: var(--space-10);
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: linear-gradient(100deg, rgba(26, 38, 68, 0.95), rgba(10, 16, 31, 0.95));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--text-on-ink);
+  padding: 11px var(--space-9) 11px 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
   opacity: 0; pointer-events: none;
   transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
   z-index: 100;
+}
+/* A spark at the left of the toast, so a message is noticeable in peripheral
+   vision without the whole pill moving. */
+.toast::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue-bright);
+  box-shadow: 0 0 12px var(--blue-glow);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ---------------- Scrollbars ---------------- */
 
-::-webkit-scrollbar { width: 9px; height: 9px; }
-::-webkit-scrollbar-thumb { background: var(--paper-line); border-radius: var(--radius-pill); }
-::-webkit-scrollbar-thumb:hover { background: var(--paper-line-strong); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(127, 176, 255, 0.22); border-radius: var(--radius-pill); border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(127, 176, 255, 0.4); background-clip: content-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* ---------------- Responsive floor ---------------- */
 
@@ -956,7 +1528,11 @@ summary:focus-visible {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: var(--ink);
+  background:
+    radial-gradient(700px 520px at 50% 38%, rgba(77, 141, 255, 0.16), transparent 68%),
+    linear-gradient(180deg, rgba(6, 9, 18, 0.96), rgba(3, 5, 12, 0.98));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -970,24 +1546,62 @@ summary:focus-visible {
 
 .splash-content { text-align: center; }
 
+/* Lyra herself, drawn line by line as the app starts. Every line is 140 units
+   long in dash terms, which is longer than any of these paths, so one keyframe
+   draws them all. The whole figure is finished inside the second-and-a-half the
+   splash is on screen. */
+.splash-constellation {
+  display: block;
+  width: 196px;
+  height: 122px;
+  margin: 0 auto var(--space-8) auto;
+}
+.splash-constellation .constellation-line {
+  stroke: rgba(127, 176, 255, 0.75);
+  stroke-width: 1.2;
+  stroke-dasharray: 140;
+  stroke-dashoffset: 140;
+  animation: constellationDraw 1s var(--ease-out-expo) 0.1s forwards;
+}
+.splash-constellation .constellation-star {
+  opacity: 0;
+  animation: constellationStar 0.6s var(--ease-out) forwards;
+}
+.splash-constellation .constellation-star:nth-of-type(2) { animation-delay: 0.45s; }
+.splash-constellation .constellation-star:nth-of-type(3) { animation-delay: 0.6s; }
+.splash-constellation .constellation-star:nth-of-type(4) { animation-delay: 0.72s; }
+.splash-constellation .constellation-star:nth-of-type(5) { animation-delay: 0.84s; }
+.splash-constellation .constellation-star:nth-of-type(6) { animation-delay: 0.96s; }
+/* Vega fades in first and is the one star that goes on twinkling, so it carries
+   both animations itself rather than borrowing the stagger above. */
+.splash-constellation .constellation-star-star { animation: constellationStar 0.6s var(--ease-out) 0.3s forwards, starTwinkle 5s ease-in-out 1.8s infinite; }
+
+@keyframes constellationDraw { to { stroke-dashoffset: 0; } }
+@keyframes constellationStar {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .splash-mark {
   width: 72px;
   height: 72px;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-ink-3);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6), 0 0 40px rgba(77, 141, 255, 0.3);
   opacity: 0;
-  animation: splashPop 0.6s var(--ease-spring) forwards;
+  animation: splashPop 0.55s var(--ease-spring) 0.35s forwards;
 }
 
 .splash-appname {
   margin-top: var(--space-8);
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: var(--leading-tight);
   color: var(--text-on-ink);
   opacity: 0;
-  animation: splashFadeUp 0.5s var(--ease-out) 0.25s forwards;
+  animation: splashFadeUp 0.45s var(--ease-out) 0.5s forwards;
 }
 
 .splash-title {
@@ -999,12 +1613,12 @@ summary:focus-visible {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   opacity: 0;
-  background: linear-gradient(90deg, var(--text-on-ink-muted), var(--coin-cyan-light), var(--till-blue-light), var(--text-on-ink-muted));
+  background: linear-gradient(90deg, var(--text-on-ink-muted), var(--coin-cyan-light), var(--blue-bright), var(--text-on-ink-muted));
   background-size: 300% auto;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: splashFadeUp 0.5s var(--ease-out) 0.45s forwards, splashShimmer 3s linear 0.9s infinite;
+  animation: splashFadeUp 0.45s var(--ease-out) 0.68s forwards, splashShimmer 3s linear 1.1s infinite;
 }
 
 @keyframes splashPop {
@@ -1026,11 +1640,11 @@ summary:focus-visible {
   font-family: var(--font-display);
   font-size: var(--text-3xs);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  opacity: 0.3;
+  letter-spacing: 0.08em;
+  opacity: 0.32;
   pointer-events: none;
   user-select: none;
-  background: linear-gradient(90deg, #60a5fa, var(--coin-cyan), #7dd3fc, var(--till-blue), #60a5fa);
+  background: linear-gradient(90deg, var(--blue-bright), var(--coin-cyan), var(--coin-cyan-light), var(--blue), var(--blue-bright));
   background-size: 400% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -1038,7 +1652,7 @@ summary:focus-visible {
   animation: ssShimmer 7s linear infinite;
   transition: opacity var(--dur-base) var(--ease-out);
 }
-.sidebar-foot:hover .ss-watermark { opacity: 0.55; }
+.sidebar-foot:hover .ss-watermark { opacity: 0.6; }
 
 @keyframes ssShimmer {
   to { background-position: -400% 0; }
@@ -1049,10 +1663,10 @@ summary:focus-visible {
 .refund-lines { display: flex; flex-direction: column; margin-bottom: var(--space-4); }
 .refund-line {
   display: flex; align-items: center; gap: var(--space-4);
-  padding: var(--space-3) 0; border-top: 1px solid var(--paper-dim);
+  padding: var(--space-3) 0; border-top: 1px solid var(--line);
 }
 .refund-line:first-child { border-top: none; }
-.refund-line-done { opacity: 0.55; }
+.refund-line-done { opacity: 0.5; }
 .refund-line-info { flex: 1; min-width: 0; }
 .refund-line-name { font-size: var(--text-sm); color: var(--text-ink); font-weight: 600; }
 .refund-line-meta { font-size: var(--text-2xs); color: var(--text-muted); }
@@ -1067,55 +1681,12 @@ summary:focus-visible {
 }
 .refund-total {
   display: flex; justify-content: space-between; align-items: baseline;
-  border-top: 1px dashed var(--paper-line); padding-top: var(--space-3);
+  border-top: 1px dashed rgba(127, 176, 255, 0.22); padding-top: var(--space-3);
   font-size: var(--text-sm); color: var(--text-muted);
 }
 .refund-total span:last-child {
   font-family: var(--font-mono); font-size: var(--text-lg); font-weight: 700;
-  color: var(--stamp-red); font-variant-numeric: tabular-nums;
-}
-
-/* "of #1001" after a refund row's number in the Ledger */
-.row-sub { color: var(--text-muted); font-size: var(--text-2xs); }
-
-/* "Showing the first N of M..." row that caps long tables */
-.table-more td {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  padding: var(--space-8) var(--space-4);
-  background: var(--paper-dim);
-}
-
-.table-more-btn {
-  margin-left: var(--space-6);
-  padding: var(--space-4) var(--space-12);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--ink-rule);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.table-more-btn:hover { background: var(--paper-warm); }
-.table-more-btn:active { transform: translateY(1px); }
-
-.table-more-hint { display: inline-block; margin-left: var(--space-4); }
-
-
-/* A cool blue wash behind the app. Deliberately very faint: this is a screen
-   someone reads figures off all day, so the background never competes with the
-   text sitting on it. */
-
-html {
-  background-color: var(--paper);
-  background-image:
-    radial-gradient(1200px 700px at 88% -12%, rgba(26,111,212,0.11), transparent 62%),
-    radial-gradient(900px 620px at 2% 108%, rgba(14,143,158,0.08), transparent 60%);
-  background-attachment: fixed;
+  color: var(--rust); font-variant-numeric: tabular-nums;
 }
 
 /* ---------------- Hiding the product list ----------------
@@ -1128,13 +1699,13 @@ html {
 .till-grid.catalog-hidden .till-catalog { display: none; }
 .till-grid.catalog-hidden .receipt-tape { max-width: 760px; margin: 0 auto; width: 100%; }
 
-/* The hide/show toggle sits on the dark summary bar rather than in the product
+/* The hide/show toggle sits on the summary bar rather than in the product
    list, so it is still there to bring the list back once it is hidden. It
-   follows the bulk-bar rules for a button on ink rather than the light one. */
+   follows the bulk-bar rules for a button on glass rather than the light one. */
 
 .ds-toggle { margin-left: auto; flex-shrink: 0; }
-.day-summary-bar .btn-ghost { background: var(--ink-soft); color: var(--text-on-ink); border-color: var(--ink-softer); }
-.day-summary-bar .btn-ghost:hover:not(:disabled) { background: var(--ink-softer); border-color: var(--till-blue-light); }
+.day-summary-bar .btn-ghost { background: rgba(255, 255, 255, 0.06); color: var(--text-on-ink); border-color: var(--line-strong); }
+.day-summary-bar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: var(--blue-soft); }
 .day-summary-bar .btn-ghost:focus-visible { outline: var(--focus-ring-on-ink); outline-offset: 2px; }
 
 /* ---------------- Printing ----------------
@@ -1143,7 +1714,8 @@ html {
    wants and what the system's own print dialog should put on paper. When no
    thermal printer is chosen in Setup, the receipt is put in #printRoot and the
    print dialog is opened: this stylesheet makes that element the only thing on
-   the page, so none of the till goes with it. */
+   the page, so none of the till goes with it — and none of the dark theme,
+   either, because paper is white. */
 
 #printRoot { display: none; }
 
@@ -1184,4 +1756,7 @@ html {
     box-shadow: none !important;
     backdrop-filter: none !important;
   }
+
+  /* The sky and the constellation belong to the screen, not the receipt. */
+  .starfield, .splash-screen { display: none !important; }
 }
