@@ -116,6 +116,8 @@
           </div>
           <button class="btn btn-ghost btn-sm ds-toggle" id="hideItemsBtn" aria-pressed="false"
                   title="Hide the product list and give the receipt the whole window">Hide items</button>
+          <button class="btn btn-ghost btn-sm ds-mail" id="emailReportBtn"
+                  title="Email the day's figures to the address set in Setup, as a PDF">Email today's report</button>
         </div>
         <div class="till-grid">
 
@@ -417,6 +419,19 @@
           </div>
 
           <div class="panel">
+            <h2>Day report by email</h2>
+            <p class="panel-note">The Till can email a PDF of the day's takings to one address — useful on days you cannot be in the shop. Sending goes through your own Gmail account, so nothing passes through anyone else's server. Google will not accept your normal password: turn on 2-step verification for the account, then create a 16-character <strong>App Password</strong> at myaccount.google.com/apppasswords and paste it here.</p>
+            <label class="field"><span>Send the day report to</span><input type="text" id="setReportEmail" placeholder="owner@gmail.com" autocomplete="off" /></label>
+            <label class="field"><span>Send it from (Gmail address)</span><input type="text" id="setMailFrom" placeholder="Leave blank to send from the address above" autocomplete="off" /></label>
+            <label class="field"><span>Gmail App Password</span><input type="password" id="setMailPassword" placeholder="16 characters, no spaces" autocomplete="off" /></label>
+            <div class="field-inline">
+              <button class="btn btn-primary" id="saveMailBtn">Save email settings</button>
+              <button class="btn btn-ghost" id="sendTestMailBtn">Send a test report</button>
+            </div>
+            <p class="panel-note" id="mailStatus"></p>
+          </div>
+
+          <div class="panel">
             <h2>Categories</h2>
             <p class="panel-note">Add a category below. Remove one with the ✕ — if products are filed under it you'll be asked which category they should move to.</p>
             <div class="chip-row" id="settingsCategoryChips"></div>
@@ -488,9 +503,12 @@
       <div class="field-row">
         <label class="field"><span>Price</span><input type="number" id="pmPrice" min="0" step="0.01" /></label>
         <label class="field"><span>Cost</span><input type="number" id="pmCost" min="0" step="0.01" /></label>
-        <label class="field"><span>Stock on hand</span><input type="number" id="pmStock" min="0" step="1" /></label>
+        <label class="field"><span title="Type a percentage and the price is worked out from the cost. Type a price and the percentage you end up with is shown here.">Profit %</span><input type="number" id="pmMarkup" step="0.1" placeholder="e.g. 20" /></label>
       </div>
-      <label class="field"><span>Supplier</span><input type="text" id="pmSupplier" placeholder="e.g. Marltons, Bio Farm…" /></label>
+      <div class="field-row">
+        <label class="field"><span>Stock on hand</span><input type="number" id="pmStock" min="0" step="1" /></label>
+        <label class="field"><span>Supplier</span><input type="text" id="pmSupplier" placeholder="e.g. Marltons, Bio Farm…" /></label>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="pmDeleteBtn" style="display:none;">Delete</button>
         <div class="modal-actions-right">

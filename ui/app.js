@@ -1156,6 +1156,11 @@
   async function reprintReceipt(sale) {
     const printer = (DATA.settings.receiptPrinter || '').trim();
     if (printer) { await printReceiptToPrinter(sale, printer); return; }
+    // No thermal printer chosen: print the receipt page through the webview, with
+    // no preview to dismiss. The old preview stays as the fallback, for a machine
+    // with no default printer or an older webview runtime.
+    const silent = await window.pos.printPageSilent('');
+    if (silent && silent.ok) { toast('Sent to printer.'); return; }
     const res = await window.pos.printReceipt(receiptText(sale));
     if (res && res.ok) toast('Sent to printer.');
     else if (res && res.error) toast('Could not print: ' + res.error);
@@ -1182,6 +1187,8 @@
         await printReceiptToPrinter(currentSaleForReceipt, printer);
         return;
       }
+      const silent = await window.pos.printPageSilent('');
+      if (silent && silent.ok) { toast('Sent to printer.'); return; }
       const res = await window.pos.printReceipt(receiptText(currentSaleForReceipt));
       if (res && res.ok) toast('Sent to printer.');
       else if (res && res.error) toast('Could not print: ' + res.error);
@@ -1422,6 +1429,9 @@
       $('#pmStock').value = '';
       $('#pmSupplier').value = '';
     }
+    // An existing product opens showing the percentage it is actually on; a new
+    // one starts clean.
+    refreshMarkupField();
     openModal('#productModalOverlay');
     setTimeout(() => (isEdit ? $('#pmName') : $('#pmSku')).focus(), 50);
   }
@@ -1463,6 +1473,288 @@
       renderStock();
       toast('Product deleted.');
     });
+    initMarkupField();
+  }
+
+  // ---------------- Profit percentage on the product form ----------------
+
+  // One field that works both ways: type a percentage and the price is worked
+  // out from the cost, or type a price and the percentage the shop has ended up
+  // on is shown. The price box is still the one that gets saved, so the shop can
+  // always overrule the maths by typing a price.
+  function refreshMarkupField() {
+    const markup = $('#pmMarkup');
+    if (!markup) return;
+    const cost = parseFloat($('#pmCost').value) || 0;
+    const price = parseFloat($('#pmPrice').value) || 0;
+    if (!(cost > 0)) { markup.value = ''; return; }
+    markup.value = (Math.round(((price - cost) / cost) * 1000) / 10).toString();
+  }
+
+  function initMarkupField() {
+    const markup = $('#pmMarkup');
+    if (!markup) return;
+
+    markup.addEventListener('input', () => {
+      const cost = parseFloat($('#pmCost').value) || 0;
+      const pct = parseFloat(markup.value);
+      // Nothing to work from until a cost is in: the percentage sits there until
+      // it can mean something, rather than inventing a price of its own.
+      if (!(cost > 0) || isNaN(pct)) return;
+      $('#pmPrice').value = (Math.round(cost * (1 + pct / 100) * 100) / 100).toFixed(2);
+    });
+
+    // Typing a cost or a price reports what that works out to; it never changes
+    // the price on its own.
+    ['#pmCost', '#pmPrice'].forEach(sel => $(sel).addEventListener('input', refreshMarkupField));
+  }
+
+  // ---------------- Session warmth ----------------
+
+  // The interface picks up a little of the shop's own colour as a shift goes on:
+  // nothing when the app opens, a hint within the first hour, a few warm accents
+  // by the end of a long day. It is one CSS variable read by a handful of
+  // decorative layers — no figure, label or button colour depends on it, so a
+  // till left running overnight still reads exactly the same.
+  const WARMTH_FULL_MS = 6 * 60 * 60 * 1000;   // fully warm after six hours
+
+  function startWarmth() {
+    const openedAt = Date.now();
+    const paint = () => {
+      const v = Math.min(1, Math.max(0, (Date.now() - openedAt) / WARMTH_FULL_MS));
+      document.documentElement.style.setProperty('--warmth', v.toFixed(3));
+    };
+    paint();
+    setInterval(paint, 30000);
+  }
+
+  // ---------------- The day's report, by email ----------------
+
+  // What the owner receives is a PDF laid out in Rust from this snapshot, built
+  // here at the moment the till asks for it — so the email can only ever say what
+  // the Overview would have said at that second.
+  function reportSettings() {
+    const s = DATA.settings;
+    const to = (s.reportEmail || '').trim();
+    return {
+      recipient: to,
+      username: (s.mailFrom || '').trim() || to,
+      senderName: (s.shopName || 'Lyra PoS').trim(),
+      smtpHost: (s.mailHost || '').trim() || 'smtp.gmail.com',
+      smtpPort: parseInt(s.mailPort, 10) || 465
+    };
+  }
+
+  function dayKeyAgo(days) {
+    return new Date(Date.now() - (days || 0) * 86400000).toISOString().slice(0, 10);
+  }
+
+  function buildDayReport() {
+    const todayKey = dayKeyAgo(0);
+    const t = computePeriodTotals(todayKey, 'day');
+    const month = computePeriodTotals(periodKeyFromDayKey(todayKey, 'month'), 'month');
+
+    const records = DATA.sales.filter(s => s.date.slice(0, 10) === todayKey);
+    const refunded = records
+      .filter(s => s.type === 'return')
+      .reduce((sum, s) => sum + Math.abs(s.total), 0);
+    const costOfGoods = records.reduce(
+      (sum, s) => sum + s.items.reduce((a, li) => a + (li.cost || 0) * li.qty, 0), 0);
+
+    const tally = {};
+    records
+      .filter(s => s.type !== 'return')
+      .forEach(sale => sale.items.forEach(li => {
+        const row = tally[li.name] || (tally[li.name] = { name: li.name, qty: 0, revenue: 0, profit: 0 });
+        row.qty += li.qty;
+        row.revenue += li.lineTotal;
+        row.profit += li.lineTotal - (li.cost || 0) * li.qty;
+      }));
+    const topSellers = Object.values(tally).sort((a, b) => b.qty - a.qty).slice(0, 8);
+
+    const recentDays = [];
+    for (let d = 6; d >= 0; d--) {
+      const key = dayKeyAgo(d);
+      const dt = computePeriodTotals(key, 'day');
+      recentDays.push({ label: periodLabel(key, 'day'), sales: dt.total, profit: dt.profit, transactions: dt.transactions });
+    }
+
+    const threshold = DATA.settings.lowStockThreshold || 0;
+    const low = lowStockProducts();
+
+    return {
+      shopName: DATA.settings.shopName || '',
+      address: DATA.settings.address || '',
+      phone: DATA.settings.phone || '',
+      currency: DATA.settings.currency || '',
+      dateLabel: periodHeaderLabel(todayKey, 'day'),
+      generatedAt: new Date().toLocaleString(),
+      footerNote: DATA.settings.receiptFooter || '',
+      totals: {
+        sales: t.total,
+        cash: t.cash,
+        card: t.card,
+        other: t.other,
+        refundsValue: refunded,
+        refundCount: t.refunds,
+        transactions: t.transactions,
+        itemsSold: t.itemsSold,
+        averageSale: t.transactions ? t.total / t.transactions : 0,
+        costOfGoods,
+        profit: t.profit,
+        marginPct: t.total !== 0 ? (t.profit / t.total) * 100 : 0
+      },
+      topSellers,
+      recentDays,
+      monthToDate: {
+        sales: month.total,
+        profit: month.profit,
+        transactions: month.transactions,
+        itemsSold: month.itemsSold
+      },
+      // Out of stock is listed separately from low: it is the half of the list an
+      // owner can act on without thinking, and a shop that has run out of
+      // something is losing sales right now.
+      lowStock: low.filter(p => p.stock > 0).map(p => ({ name: p.name, sku: p.sku || '', stock: p.stock, threshold })),
+      outOfStock: low.filter(p => p.stock <= 0).map(p => ({ name: p.name, sku: p.sku || '' })),
+      heldSales: (DATA.heldSales || []).map(h => ({
+        label: new Date(h.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        items: h.cart.reduce((s, i) => s + i.qty, 0),
+        total: h.cart.reduce((s, i) => s + i.price * i.qty, 0)
+      }))
+    };
+  }
+
+  function reportEmailBody(entry) {
+    const cfg = reportSettings();
+    const t = entry.report.totals;
+    const money = (v) => (entry.report.currency || '') + Number(v || 0).toFixed(2);
+    return [
+      entry.report.shopName,
+      'Day report - ' + entry.dateLabel,
+      '',
+      'Takings        ' + money(t.sales),
+      'Paid in cash   ' + money(t.cash),
+      'Paid by card   ' + money(t.card),
+      (t.other ? 'Other payment  ' + money(t.other) + '\n' : '') +
+      'Sales          ' + t.transactions + '     Items sold ' + t.itemsSold,
+      'Profit         ' + money(t.profit) + '  (' + t.marginPct.toFixed(1) + '% margin)',
+      '',
+      'The full report is attached as a PDF.',
+      '',
+      entry.report.footerNote || '',
+      'Sent by Lyra PoS' + (cfg.senderName ? ' — ' + cfg.senderName : '')
+    ].filter(line => line !== '').join('\n');
+  }
+
+  function reportQueue() {
+    if (!Array.isArray(DATA.reportQueue)) DATA.reportQueue = [];
+    return DATA.reportQueue;
+  }
+
+  async function sendReport(entry) {
+    const cfg = reportSettings();
+    if (!cfg.recipient) return { ok: false, error: 'no report address is set — add one in Setup, Day report by email' };
+    if (!cfg.username) return { ok: false, error: 'no Gmail address is set to send from — add one in Setup' };
+    return window.pos.sendDailyReport({
+      ...cfg,
+      subject: 'Day report — ' + entry.dateLabel + ' — ' + (DATA.settings.shopName || 'Lyra PoS'),
+      bodyText: reportEmailBody(entry),
+      report: entry.report
+    });
+  }
+
+  // The button carries the state, so a cashier can always see whether the day's
+  // figures actually left the shop.
+  function refreshReportButton() {
+    const btn = $('#emailReportBtn');
+    if (!btn || btn.dataset.busy === '1') return;
+    const queue = reportQueue();
+    const todayKey = dayKeyAgo(0);
+    const waiting = queue.length;
+    btn.classList.toggle('btn-warn', waiting > 0);
+    if (!waiting) btn.textContent = "Email today's report";
+    else if (queue.some(e => e.dateKey === todayKey)) btn.textContent = 'Report waiting — retrying';
+    else btn.textContent = 'Send ' + waiting + ' waiting report' + (waiting > 1 ? 's' : '');
+  }
+
+  async function emailDayReport() {
+    const btn = $('#emailReportBtn');
+    if (!btn || btn.dataset.busy === '1') return;
+    const todayKey = dayKeyAgo(0);
+    const queue = reportQueue();
+
+    // One entry per day: asking twice replaces today's rather than sending the
+    // same day's figures twice.
+    let entry = queue.find(e => e.dateKey === todayKey);
+    if (!entry) {
+      entry = { dateKey: todayKey, attempts: 0 };
+      queue.push(entry);
+      if (queue.length > 14) queue.splice(0, queue.length - 14);
+    }
+    entry.dateLabel = periodHeaderLabel(todayKey, 'day');
+    entry.generatedAt = new Date().toISOString();
+    entry.report = buildDayReport();
+    await persist();
+
+    btn.dataset.busy = '1';
+    btn.classList.remove('btn-warn');
+    btn.textContent = 'Sending…';
+    const res = await sendReport(entry);
+    delete btn.dataset.busy;
+
+    if (res && res.ok) {
+      DATA.reportQueue = queue.filter(e => e !== entry);
+      await persist();
+      refreshReportButton();
+      toast('Day report emailed to ' + reportSettings().recipient + '.');
+      return;
+    }
+
+    entry.attempts = (entry.attempts || 0) + 1;
+    entry.lastError = (res && res.error) || 'unknown error';
+    await persist();
+    refreshReportButton();
+    toast('Could not send the report: ' + entry.lastError);
+  }
+
+  // Anything unsent is kept with the day it belongs to and tried again while the
+  // app is open, so a shop with no internet at closing time still gets its
+  // figures out in the morning. A retried report is the day as it closed: the
+  // snapshot is what was taken, not what the till looks like now.
+  const REPORT_RETRY_MS = 5 * 60 * 1000;
+
+  function startReportRetries() {
+    const attempt = async () => {
+      const queue = reportQueue();
+      if (!queue.length) { refreshReportButton(); return; }
+      const btn = $('#emailReportBtn');
+      if (btn) btn.dataset.busy = '1';
+      const entry = queue[0];
+      const res = await sendReport(entry);
+      if (btn) delete btn.dataset.busy;
+      if (res && res.ok) {
+        DATA.reportQueue = queue.filter(e => e !== entry);
+        await persist();
+        toast('Waiting day report for ' + entry.dateLabel + ' sent.');
+      } else {
+        entry.attempts = (entry.attempts || 0) + 1;
+        entry.lastError = (res && res.error) || 'unknown error';
+        await persist();
+      }
+      refreshReportButton();
+    };
+    // One quiet attempt shortly after opening, in case yesterday's report is
+    // still waiting, then every few minutes while the shop is open.
+    setTimeout(attempt, 20000);
+    setInterval(attempt, REPORT_RETRY_MS);
+  }
+
+  function initReportButton() {
+    const btn = $('#emailReportBtn');
+    if (!btn) return;
+    btn.addEventListener('click', emailDayReport);
+    refreshReportButton();
   }
 
   // ---------------- Ledger ----------------
@@ -1950,8 +2242,29 @@
     $('#setCurrentKey').value = '';
     $('#setNewKey').value = '';
     $('#setConfirmKey').value = '';
+    $('#setReportEmail').value = s.reportEmail || '';
+    $('#setMailFrom').value = s.mailFrom || '';
+    // The App Password is never sent back to the screen; the line underneath
+    // says whether one is saved.
+    $('#setMailPassword').value = '';
+    refreshMailStatus();
     renderSettingsCategoryChips();
     renderPrinterSetting();
+  }
+
+  // What Setup can say about the email settings without ever handling the
+  // password: where reports go, and whether a password is stored.
+  async function refreshMailStatus() {
+    const el = $('#mailStatus');
+    if (!el) return;
+    const cfg = reportSettings();
+    const has = await window.pos.hasMailPassword();
+    const queue = reportQueue();
+    const parts = [];
+    parts.push(cfg.recipient ? 'Reports go to ' + cfg.recipient + '.' : 'No report address set yet.');
+    parts.push(has ? 'A Gmail App Password is saved.' : 'No App Password saved yet.');
+    if (queue.length) parts.push(queue.length + ' report' + (queue.length > 1 ? 's' : '') + ' still waiting to send.');
+    el.textContent = parts.join(' ');
   }
 
   // Fills Setup's receipt-printer dropdown from the printers Windows knows about.
@@ -2054,6 +2367,42 @@
       DATA.settings.receiptCutPaper = $('#setCutPaper').checked;
       await persist();
       toast('Receipt printer saved.');
+    });
+
+    $('#saveMailBtn').addEventListener('click', async () => {
+      DATA.settings.reportEmail = $('#setReportEmail').value.trim();
+      DATA.settings.mailFrom = $('#setMailFrom').value.trim();
+      if (!DATA.settings.mailHost) DATA.settings.mailHost = 'smtp.gmail.com';
+      if (!DATA.settings.mailPort) DATA.settings.mailPort = 465;
+      const password = $('#setMailPassword').value;
+      if (password) {
+        const res = await window.pos.saveMailPassword(password);
+        if (!res || !res.ok) { toast('Could not save the App Password: ' + ((res && res.error) || 'unknown error')); return; }
+      }
+      await persist();
+      $('#setMailPassword').value = '';
+      await refreshMailStatus();
+      refreshReportButton();
+      toast(password ? 'Email settings saved, with a new App Password.' : 'Email settings saved.');
+    });
+
+    $('#sendTestMailBtn').addEventListener('click', async () => {
+      const btn = $('#sendTestMailBtn');
+      // The password box is read straight from the form, so a report can be tried
+      // before anything is saved — that is the point of a test.
+      const typed = $('#setMailPassword').value;
+      if (typed) await window.pos.saveMailPassword(typed);
+      DATA.settings.reportEmail = $('#setReportEmail').value.trim();
+      DATA.settings.mailFrom = $('#setMailFrom').value.trim();
+      const cfg = reportSettings();
+      if (!cfg.recipient || !cfg.username) { toast('Fill in the report address first.'); return; }
+      const todayKey = dayKeyAgo(0);
+      const entry = { dateKey: todayKey, dateLabel: periodHeaderLabel(todayKey, 'day'), report: buildDayReport() };
+      btn.disabled = true;
+      const res = await sendReport(entry);
+      btn.disabled = false;
+      if (res && res.ok) { $('#setMailPassword').value = ''; await refreshMailStatus(); toast('Test report sent to ' + cfg.recipient + '.'); }
+      else toast('Could not send: ' + ((res && res.error) || 'unknown error'));
     });
 
     $('#testPrintBtn').addEventListener('click', async () => {
@@ -2288,6 +2637,7 @@
   async function boot() {
     DATA = await window.pos.loadData();
     if (!DATA.heldSales) DATA.heldSales = [];
+    if (!Array.isArray(DATA.reportQueue)) DATA.reportQueue = [];
     if (!DATA.settings.adminKeyHash) DATA.settings.adminKeyHash = '';
     applyShopIdentity();
 
@@ -2309,6 +2659,9 @@
     initPeriodTabs();
     initLowStockPanel();
     initReportsView();
+    initReportButton();
+    startWarmth();
+    startReportRetries();
 
     $('#productSearch').addEventListener('input', debounce(renderCatalog, 80));
     // Enter is handled document-wide by initBarcodeScanning, which reads the box

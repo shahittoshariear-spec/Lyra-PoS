@@ -31,9 +31,10 @@
 >   data file written atomically, so an interrupted save can never leave a
 >   half-written file behind. It always opens: a file it cannot read is set aside
 >   rather than being a reason to fail.
-> - **Security.** The screens can reach exactly the eleven commands the app
->   defines, and nothing else. There is no remote content, no network access at
->   all, and no scripting bridge into the operating system.
+- **Security.** The screens can reach exactly the commands the app defines,
+and nothing else: no remote content and no scripting bridge into the
+operating system. The only thing the app itself reaches over the network is
+the shop's own mail server, and only when a report is emailed.
 >
 > Your data comes with you — see "Where the data lives" below.
 
@@ -287,6 +288,24 @@ Either way every receipt is saved in the Ledger and can be reprinted later.
   `src/escpos.rs` can be printed. Anything else prints as `?` — extend that
   table if your shop name needs more.
 
+## Emailing the day's report
+
+A day's figures can be sent as the same PDF the report is printed as. Sending
+goes through the shop's own Gmail account, which needs two things: the Gmail
+address, and a Google **App Password** — Google will not accept an ordinary
+account password from another program, and the App Password has to be made for
+this app in the Google account's security settings.
+
+The address is kept with the rest of the shop's settings. The App Password is
+kept in Windows **Credential Manager** and never in the data file, so a backup
+of that file — or a copy of it on a USB stick — carries no password with it.
+Clearing the password in Setup forgets it, and nothing can read it back out
+again: Setup can only say whether one is saved.
+
+Nothing else about the app has changed: it still runs with no internet
+connection at all, and only tries to reach the mail server when a report is
+actually being sent. If there is no internet, it says so rather than waiting.
+
 ## What's not in this build
 
 POS Maid is a large, decades-old program with features built up over years
@@ -376,6 +395,10 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 | `src/escpos.rs` | Turning a receipt's text into the bytes a thermal printer wants |
 | `src/printing.rs` | Listing printers, and sending a receipt to one |
 | `src/import.rs` | Reading a product list, and guessing which column is which |
+| `src/page_print.rs` | Printing the window's own page, with no dialog |
+| `src/report.rs` | Laying the day's report out as a PDF |
+| `src/pdf.rs` | The small PDF writer the report is drawn with |
+| `src/mail.rs` | Emailing the report through the shop's own Gmail account |
 | `src/bridge.js` | The one place the screens talk to the machine |
 
 Everything a shop actually sees is in `ui/`. The Rust half deliberately holds no

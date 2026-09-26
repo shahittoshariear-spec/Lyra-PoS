@@ -126,6 +126,46 @@
       } catch (err) {
         return { ok: false, error: String(err) };
       }
+    },
+
+    // Prints without any dialog at all, through the webview's own printing: the
+    // print stylesheet leaves the receipt as the only thing on the page, so what
+    // comes out is the receipt and nothing else. Used when no thermal printer is
+    // chosen in Setup; the preview above stays as the fallback for a machine
+    // with no default printer or an older webview runtime.
+    async printPageSilent(printer) {
+      const name = String(printer == null ? '' : printer).trim();
+      try {
+        await call('print_page_silent', { printer: name });
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
+
+    // The Gmail App Password is held by Windows Credential Manager, never by the
+    // shop's data file, and is never handed back to the screens — saving it is a
+    // one-way trip. An empty string forgets it.
+    async saveMailPassword(password) {
+      try {
+        await call('save_mail_password', { password: String(password == null ? '' : password) });
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
+
+    async hasMailPassword() {
+      try { return !!(await call('has_mail_password')); } catch (err) { return false; }
+    },
+
+    async sendDailyReport(request) {
+      try {
+        await call('send_daily_report', { request });
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
     }
   };
 })();

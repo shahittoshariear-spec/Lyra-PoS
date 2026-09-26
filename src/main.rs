@@ -9,9 +9,14 @@
 mod data;
 mod escpos;
 mod import;
+mod mail;
+mod page_print;
+mod pdf;
 mod printing;
+mod report;
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use data::Data;
 use import::ParsedFile;
@@ -178,6 +183,70 @@ async fn print_receipt_raw(printer: String, text: String, cut: bool) -> Result<u
         .map_err(|e| e.to_string())?
 }
 
+/// How long past the webview's own deadline this still waits, for the handover to
+/// the window's thread rather than for the printer: the webview's deadline only
+/// starts once that thread is free to run the print.
+const GRACE: Duration = Duration::from_secs(10);
+
+/// Prints the page the screens have dressed for printing — the receipt — with no
+/// dialog at all, on the printer chosen in Setup or on the Windows default one.
+///
+/// The webview can only be driven from the thread that owns it, so the work is
+/// handed to that thread and this waits for it. The wait is bounded on both
+/// sides of the handover, so a printer that never answers leaves the till
+/// usable rather than stuck.
+#[tauri::command]
+async fn print_page_silent(
+    window: tauri::WebviewWindow,
+    printer: Option<String>,
+) -> Result<(), String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    window
+        .with_webview(move |webview| {
+            let _ = tx.send(page_print::print_page(&webview, printer.as_deref()));
+        })
+        .map_err(|e| format!("The app could not ask its own window to print: {e}"))?;
+
+    tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(page_print::WAIT + GRACE))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|_| {
+            "Printing did not finish. Check the printer is switched on, has paper and is not \
+             paused, then print again."
+                .to_string()
+        })?
+}
+
+// ---------------------------------------------------------------------------
+// Emailing the day's report
+// ---------------------------------------------------------------------------
+
+/// Keeps the Gmail App Password in Windows Credential Manager, where it stays
+/// out of the shop's data file and out of every backup of it. An empty password
+/// forgets a saved one.
+#[tauri::command]
+fn save_mail_password(password: String) -> Result<(), String> {
+    mail::save_password(&password)
+}
+
+/// Whether a password is saved, so Setup can say so without showing it.
+#[tauri::command]
+fn has_mail_password() -> bool {
+    mail::has_password()
+}
+
+/// Builds the day's report as a PDF and emails it as an attachment.
+///
+/// Off the main thread, and off the webview's: this waits on a socket, and a
+/// shop with no internet must get a message about it rather than a window that
+/// has stopped answering.
+#[tauri::command]
+async fn send_daily_report(request: mail::MailRequest) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || mail::send_daily_report(request))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -202,6 +271,10 @@ fn main() {
             import_products_file,
             list_printers,
             print_receipt_raw,
+            print_page_silent,
+            save_mail_password,
+            has_mail_password,
+            send_daily_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lyra PoS");

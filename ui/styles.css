@@ -51,6 +51,12 @@
   --rust-deep: #C2452F;
   --rust-tint: rgba(249, 115, 22, 0.14);
 
+  /* How warm the interface has grown since the app was opened: 0 at launch, 1
+     after six hours (startWarmth in app.js moves it). Only decorative layers
+     read it — no figure, label or button colour depends on it — so a till left
+     running from morning to night never loses contrast where it counts. */
+  --warmth: 0;
+
   /* ---- Money readouts ---- */
   --mint: #5FE0B0;
   --cyan: #6FE0E2;
@@ -494,7 +500,7 @@ summary:focus-visible {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   color: var(--text-on-ink);
-  text-shadow: 0 0 20px rgba(127, 176, 255, 0.35);
+  text-shadow: 0 0 20px rgba(127, 176, 255, 0.35), 0 0 30px rgba(249, 115, 22, calc(var(--warmth) * 0.3));
 }
 
 .shop-name-mini {
@@ -1707,6 +1713,75 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .day-summary-bar .btn-ghost { background: rgba(255, 255, 255, 0.06); color: var(--text-on-ink); border-color: var(--line-strong); }
 .day-summary-bar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: var(--blue-soft); }
 .day-summary-bar .btn-ghost:focus-visible { outline: var(--focus-ring-on-ink); outline-offset: 2px; }
+
+/* ---------------- Session warmth ----------------
+
+   The shop's own colour, arriving slowly. Nothing at all when the app opens, a
+   hint within the first hour, a few warm accents by the end of a long day — all
+   of it behind or beside the content, never on it. */
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(760px 560px at 104% 108%, rgba(249, 115, 22, 0.16), transparent 62%),
+    radial-gradient(520px 420px at -6% -8%, rgba(249, 115, 22, 0.08), transparent 60%);
+  opacity: calc(var(--warmth) * 0.5);
+  transition: opacity 2s linear;
+}
+
+.sidebar::after {
+  content: '';
+  position: absolute;
+  inset: auto -30% -20% -30%;
+  height: 55%;
+  background: radial-gradient(50% 70% at 50% 100%, rgba(249, 115, 22, 0.22), transparent 70%);
+  opacity: calc(var(--warmth) * 0.6);
+  pointer-events: none;
+}
+
+/* By evening the filament over the summary bar has taken on a little of the
+   colour of the till's own lights. */
+.day-summary-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.8), transparent);
+  opacity: calc(var(--warmth) * 0.9);
+  pointer-events: none;
+}
+
+.panel::after,
+.stat-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  background: radial-gradient(60% 100% at 12% 100%, rgba(249, 115, 22, 0.14), transparent 70%);
+  opacity: calc(var(--warmth) * 0.8);
+  pointer-events: none;
+}
+
+/* The day report button sits with the hide toggle on the summary bar, and turns
+   rust while a report is still waiting to go out. */
+.ds-mail { margin-left: var(--space-3); flex-shrink: 0; }
+
+.btn-warn,
+.day-summary-bar .btn-warn {
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(249, 115, 22, 0.5);
+  color: var(--rust-soft);
+}
+.btn-warn:hover:not(:disabled),
+.day-summary-bar .btn-warn:hover:not(:disabled) {
+  background: rgba(249, 115, 22, 0.22);
+  border-color: var(--rust);
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.2);
+}
 
 /* ---------------- Printing ----------------
 
