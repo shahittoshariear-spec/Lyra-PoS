@@ -287,9 +287,14 @@ fn explain(error: &lettre::transport::smtp::Error, host: &str) -> String {
 fn known_reply(code: u16) -> Option<String> {
     match code {
         // Gmail refusing the password, with or without a second factor in the way.
+        // The reply that arrives almost every time this happens is a shopkeeper
+        // having typed their ordinary Google password, so the message names the
+        // fix and where to get it rather than saying "authentication failed".
         534 | 535 => Some(
-            "Gmail refused the App Password. Check the 16-character App Password saved in Setup \
-             — an ordinary Gmail password will not work."
+            "Gmail refused the password. Gmail never accepts an ordinary Google account password \
+             over email — it needs a 16-character App Password. Turn on 2-step verification for \
+             the account, make an App Password at myaccount.google.com/apppasswords, then save it \
+             in Setup → Day report by email."
                 .to_string(),
         ),
         // 421 is the server closing a connection it cannot serve, 454 is a

@@ -2376,8 +2376,19 @@
       if (!DATA.settings.mailPort) DATA.settings.mailPort = 465;
       const password = $('#setMailPassword').value;
       if (password) {
+        // A Gmail App Password is 16 lowercase letters and nothing else. Anything
+        // else is almost always the shop's ordinary Google password, which Gmail
+        // will never accept over email — say so before it fails at sending time.
+        // It is still saved, so a change at Google's end cannot lock anyone out
+        // of an app that used to work.
+        const bare = password.replace(/\s+/g, '');
+        const looksLikeAppPassword = /^[a-z]{16}$/.test(bare);
         const res = await window.pos.saveMailPassword(password);
         if (!res || !res.ok) { toast('Could not save the App Password: ' + ((res && res.error) || 'unknown error')); return; }
+        if (!looksLikeAppPassword) {
+          const el = $('#mailStatus');
+          if (el) el.textContent = 'That does not look like a Google App Password — those are 16 letters, no numbers or capitals. If it is your ordinary Google password, Gmail will refuse it: make an App Password at myaccount.google.com/apppasswords.';
+        }
       }
       await persist();
       $('#setMailPassword').value = '';
@@ -2402,7 +2413,14 @@
       const res = await sendReport(entry);
       btn.disabled = false;
       if (res && res.ok) { $('#setMailPassword').value = ''; await refreshMailStatus(); toast('Test report sent to ' + cfg.recipient + '.'); }
-      else toast('Could not send: ' + ((res && res.error) || 'unknown error'));
+      else {
+        // The reason stays on screen rather than in a toast that disappears: the
+        // usual one is the password, and it has a fix that takes a minute.
+        const why = (res && res.error) || 'unknown error';
+        const el = $('#mailStatus');
+        if (el) el.textContent = 'Could not send: ' + why;
+        toast('Could not send: ' + why);
+      }
     });
 
     $('#testPrintBtn').addEventListener('click', async () => {

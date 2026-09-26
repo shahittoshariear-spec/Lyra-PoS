@@ -420,7 +420,8 @@
 
           <div class="panel">
             <h2>Day report by email</h2>
-            <p class="panel-note">The Till can email a PDF of the day's takings to one address — useful on days you cannot be in the shop. Sending goes through your own Gmail account, so nothing passes through anyone else's server. Google will not accept your normal password: turn on 2-step verification for the account, then create a 16-character <strong>App Password</strong> at myaccount.google.com/apppasswords and paste it here.</p>
+            <p class="panel-note">The Till can email a PDF of the day's takings to one address — useful on days you cannot be in the shop. Sending goes through your own Gmail account, so nothing passes through anyone else's server.</p>
+            <p class="panel-note"><strong>Your ordinary Google password will not work here — Google refuses it.</strong> Gmail needs a 16-character App Password: open myaccount.google.com/apppasswords (turn on 2-step verification first if it asks), create one called “Lyra PoS”, and paste the 16 letters below. Spaces do not matter.</p>
             <label class="field"><span>Send the day report to</span><input type="text" id="setReportEmail" placeholder="owner@gmail.com" autocomplete="off" /></label>
             <label class="field"><span>Send it from (Gmail address)</span><input type="text" id="setMailFrom" placeholder="Leave blank to send from the address above" autocomplete="off" /></label>
             <label class="field"><span>Gmail App Password</span><input type="password" id="setMailPassword" placeholder="16 characters, no spaces" autocomplete="off" /></label>
