@@ -139,6 +139,21 @@ async fn import_backup(app: tauri::AppHandle) -> Result<Option<Data>, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Writes a timestamped copy of the data file into the `backups` folder beside
+/// it, keeping the newest twelve. A till that has never saved is answered, not
+/// refused.
+#[tauri::command]
+fn write_data_backup() -> Result<data::BackupInfo, String> {
+    data::write_data_backup()
+}
+
+/// The folder automatic backups are written to, for Setup to show. It exists
+/// after this returns, whether or not anything has been backed up yet.
+#[tauri::command]
+fn backup_folder() -> String {
+    data::backup_folder()
+}
+
 // ---------------------------------------------------------------------------
 // Importing a product list
 // ---------------------------------------------------------------------------
@@ -268,6 +283,8 @@ fn main() {
             report_problem,
             export_backup,
             import_backup,
+            write_data_backup,
+            backup_folder,
             import_products_file,
             list_printers,
             print_receipt_raw,

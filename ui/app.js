@@ -1318,19 +1318,11 @@
     $('#addProductBtn').addEventListener('click', () => openProductModal(null));
     $('#stockSearch').addEventListener('input', debounce(renderStock, 120));
 
-    // With the caret already at the start of the box there is nowhere further
-    // left to go, so a left arrow clears the filter instead of doing nothing.
-    // Anywhere else in the box it still just moves the caret, so a half-typed
-    // filter can be edited as usual.
-    $('#stockSearch').addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowLeft') return;
-      const box = e.currentTarget;
-      if (!box.value) return;
-      if (box.selectionStart !== 0 || box.selectionEnd !== 0) return;
-      e.preventDefault();
-      box.value = '';
-      renderStock();
-    });
+    // A left arrow at the start of the box used to clear this filter. Nothing was
+    // ever deleted by it — the list only looked emptied — but a keystroke that
+    // wipes what someone typed without being asked is a poor thing to find by
+    // accident. It is now “Clear the Stock filter” in Setup → Shortcuts, unbound
+    // unless the shop asks for it. The arrow is back to moving the caret.
     $('#stockCategoryFilter').addEventListener('change', renderStock);
 
     // One listener for the whole table: the checkbox toggles selection, anything
@@ -1678,6 +1670,31 @@
     else btn.textContent = 'Send ' + waiting + ' waiting report' + (waiting > 1 ? 's' : '');
   }
 
+  // A report on its own at a set time, for the days nobody remembers to press the
+  // button. It goes once a day, and only while the app is open.
+  function startReportClock() {
+    const check = async () => {
+      const s = DATA.settings;
+      if (s.reportAuto === false) return;
+      const time = /^\d{1,2}:\d{2}$/.test(s.reportAutoTime || '') ? s.reportAutoTime : '17:30';
+      const parts = time.split(':');
+      const now = new Date();
+      const due = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+        parseInt(parts[0], 10) || 0, parseInt(parts[1], 10) || 0, 0, 0);
+      if (now < due) return;
+      const todayKey = dayKeyAgo(0);
+      if (DATA.lastAutoReport === todayKey) return;
+      // Nothing set up: stay quiet without marking the day, so an address added
+      // later the same evening still gets the report that evening.
+      if (!reportSettings().recipient) return;
+      DATA.lastAutoReport = todayKey;
+      await persist();
+      await emailDayReport();
+    };
+    setTimeout(check, 30000);
+    setInterval(check, 60000);
+  }
+
   async function emailDayReport() {
     const btn = $('#emailReportBtn');
     if (!btn || btn.dataset.busy === '1') return;
@@ -1755,6 +1772,338 @@
     if (!btn) return;
     btn.addEventListener('click', emailDayReport);
     refreshReportButton();
+  }
+
+  // ---------------- Shortcuts ----------------
+
+  // Every shortcut the shop can bind, with the defaults it starts on. Nothing
+  // destructive is bound out of the box, and the two actions that throw work
+  // away start on 'hold' so that a brush against the keyboard cannot empty a
+  // sale: the key has to be kept down for a moment.
+  const SHORTCUT_ACTIONS = [
+    { id: 'viewTill', label: 'Go to Till', def: 'Ctrl+1' },
+    { id: 'viewStock', label: 'Go to Stock', def: 'Ctrl+2' },
+    { id: 'viewLedger', label: 'Go to Ledger', def: 'Ctrl+3' },
+    { id: 'viewDashboard', label: 'Go to Overview', def: 'Ctrl+4' },
+    { id: 'viewReports', label: 'Go to Reports', def: 'Ctrl+5' },
+    { id: 'viewSettings', label: 'Go to Setup', def: 'Ctrl+6' },
+    { id: 'tillFocus', label: 'Jump to the scan / search box', def: 'F2' },
+    { id: 'tillCharge', label: 'Take payment for the sale', def: 'F9' },
+    { id: 'tillHold', label: 'Hold the sale on the till', def: 'F4' },
+    { id: 'tillEmail', label: "Email today's report", def: 'F8' },
+    { id: 'tillHide', label: 'Hide or show the product list', def: 'F6' },
+    { id: 'tillClear', label: 'Empty the sale on the till', def: 'F7', mode: 'hold' },
+    { id: 'stockAdd', label: 'Add a product', def: 'F3' },
+    { id: 'stockClearFilter', label: 'Clear the Stock filter', def: '', mode: 'hold' },
+    { id: 'stockDelete', label: 'Delete the ticked products', def: '', mode: 'hold' }
+  ];
+
+  const SHORTCUT_HOLD_MS = 650;
+
+  // The bindings in force: key → action. An action with no key is left out, and
+  // an action the shop has never touched falls back to its default.
+  function shortcutMap() {
+    if (!DATA.settings.shortcuts || typeof DATA.settings.shortcuts !== 'object') DATA.settings.shortcuts = {};
+    const saved = DATA.settings.shortcuts;
+    const map = {};
+    SHORTCUT_ACTIONS.forEach(action => {
+      const entry = saved[action.id];
+      const key = entry && typeof entry.key === 'string' ? entry.key : action.def;
+      const mode = (entry && entry.mode) || action.mode || 'press';
+      if (key) map[key] = { id: action.id, mode };
+    });
+    return map;
+  }
+
+  // A keystroke as a shortcut: modifiers in a fixed order, then the key, so
+  // Ctrl+Shift+A and Shift+Ctrl+A are the same shortcut rather than two.
+  function comboFrom(event) {
+    const key = event.key;
+    if (!key || key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') return '';
+    const parts = [];
+    if (event.ctrlKey) parts.push('Ctrl');
+    if (event.altKey) parts.push('Alt');
+    if (event.shiftKey) parts.push('Shift');
+    let name = key.length === 1 ? key.toUpperCase() : key;
+    if (name === ' ') name = 'Space';
+    parts.push(name);
+    return parts.join('+');
+  }
+
+  // A bare letter or digit would fight with typing, so a binding has to be a
+  // function key or carry a modifier. Being strict here is what keeps shortcuts
+  // from quietly swallowing someone's typing.
+  function shortcutIsSafe(combo) {
+    return /^(F\d+|Ctrl\+|Alt\+)/.test(combo);
+  }
+
+  function onTill() { return $('#view-till').classList.contains('active'); }
+
+  function goTill() { if (!onTill()) switchView('till'); }
+
+  function runShortcut(id) {
+    switch (id) {
+      case 'viewTill': case 'viewStock': case 'viewLedger':
+      case 'viewDashboard': case 'viewReports': case 'viewSettings':
+        attemptSwitchView(id.slice(4).toLowerCase());
+        return;
+      case 'tillFocus':
+        goTill();
+        focusScanTarget();
+        return;
+      case 'tillCharge':
+        goTill();
+        if ($('#chargeBtn').disabled) toast('Nothing on the till to charge yet.');
+        else openChargeModal();
+        return;
+      case 'tillHold':
+        goTill();
+        if ($('#holdBtn').disabled) toast('Nothing on the till to hold yet.');
+        else $('#holdBtn').click();
+        return;
+      case 'tillClear':
+        goTill();
+        if ($('#clearCartBtn').disabled) toast('The till is already empty.');
+        else $('#clearCartBtn').click();
+        return;
+      case 'tillHide':
+        goTill();
+        $('#hideItemsBtn').click();
+        return;
+      case 'tillEmail':
+        emailDayReport();
+        return;
+      case 'stockAdd':
+        attemptSwitchView('stock');
+        openProductModal(null);
+        return;
+      case 'stockClearFilter':
+        attemptSwitchView('stock');
+        $('#stockSearch').value = '';
+        renderStock();
+        return;
+      case 'stockDelete':
+        attemptSwitchView('stock');
+        if (selectedStockIds.size) $('#stockBulkDeleteBtn').click();
+        else toast('Nothing is ticked in Stock.');
+        return;
+    }
+  }
+
+  // Set while Setup is listening for a new binding, so the keystroke being
+  // recorded is not also carried out.
+  let shortcutCapture = null;
+
+  function initShortcuts() {
+    const timers = new Map();
+
+    document.addEventListener('keydown', (e) => {
+      if (shortcutCapture) {
+        e.preventDefault();
+        if (e.key === 'Escape') { stopCapture(); return; }
+        const combo = comboFrom(e);
+        if (!combo) return;                       // a bare modifier: keep waiting
+        if (!shortcutIsSafe(combo)) { toast('Use a function key (F1–F12), or hold Ctrl or Alt.'); return; }
+        const clash = shortcutMap()[combo];
+        if (clash && clash.id !== shortcutCapture.actionId) {
+          const other = SHORTCUT_ACTIONS.find(a => a.id === clash.id);
+          toast('That key is already used by “' + (other ? other.label : clash.id) + '”.');
+          return;
+        }
+        const actionId = shortcutCapture.actionId;
+        DATA.settings.shortcuts[actionId] = { key: combo, mode: shortcutCapture.mode };
+        stopCapture();
+        persist();
+        renderShortcutList();
+        toast('Shortcut set to ' + combo + '.');
+        return;
+      }
+
+      const combo = comboFrom(e);
+      if (!combo) return;
+      const hit = shortcutMap()[combo];
+      if (!hit) return;
+      if (isForeignTypingField(document.activeElement) && !shortcutIsSafe(combo)) return;
+      e.preventDefault();
+      if (e.repeat) return;
+
+      if (hit.mode === 'hold') {
+        if (timers.has(combo)) return;
+        timers.set(combo, setTimeout(() => { timers.delete(combo); runShortcut(hit.id); }, SHORTCUT_HOLD_MS));
+        return;
+      }
+      runShortcut(hit.id);
+    }, true);
+
+    document.addEventListener('keyup', (e) => {
+      const combo = comboFrom(e);
+      if (timers.has(combo)) { clearTimeout(timers.get(combo)); timers.delete(combo); }
+    }, true);
+  }
+
+  function stopCapture() {
+    if (shortcutCapture && shortcutCapture.button) {
+      shortcutCapture.button.classList.remove('listening');
+      shortcutCapture.button.textContent = shortcutCapture.label;
+    }
+    shortcutCapture = null;
+  }
+
+  // The key bound to an action right now, or '' when it is unbound.
+  function boundKeyFor(actionId) {
+    const map = shortcutMap();
+    const keys = Object.keys(map);
+    for (let i = 0; i < keys.length; i++) {
+      if (map[keys[i]].id === actionId) return keys[i];
+    }
+    return '';
+  }
+
+  // The mode that applies to an action: what the shop saved, even for one that is
+  // unbound, or the default the action came with.
+  function shortcutModeFor(actionId) {
+    const saved = (DATA.settings.shortcuts || {})[actionId];
+    const action = SHORTCUT_ACTIONS.find(a => a.id === actionId);
+    return (saved && saved.mode) || (action && action.mode) || 'press';
+  }
+
+  function renderShortcutList() {
+    const list = $('#shortcutList');
+    if (!list) return;
+    const bound = {};
+    const map = shortcutMap();
+    Object.keys(map).forEach(key => { bound[map[key].id] = { key, mode: map[key].mode }; });
+
+    list.innerHTML = SHORTCUT_ACTIONS.map(action => {
+      const hit = bound[action.id];
+      const mode = hit ? hit.mode : shortcutModeFor(action.id);
+      return '<div class="shortcut-row">' +
+        '<span class="shortcut-name">' + escapeHtml(action.label) + '</span>' +
+        '<button class="shortcut-key' + (hit ? '' : ' shortcut-key-empty') + '" data-set="' + action.id + '">' +
+          (hit ? escapeHtml(hit.key) : 'Not set') + '</button>' +
+        '<select class="select-input shortcut-mode" data-mode="' + action.id + '" title="Fire straight away, or only when the key is held">' +
+          '<option value="press"' + (mode === 'press' ? ' selected' : '') + '>On press</option>' +
+          '<option value="hold"' + (mode === 'hold' ? ' selected' : '') + '>On hold</option>' +
+        '</select>' +
+        '<button class="shortcut-clear" data-clear="' + action.id + '" title="Leave this one unbound">✕</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ---------------- Automatic backups ----------------
+
+  // The screens decide when a copy is due; the Rust side writes it beside the
+  // data file and keeps the newest twelve. Weekly out of the box, because a copy
+  // a day is more than a small shop needs and the folder has to stay readable.
+  const BACKUP_EVERY_MS = { day: 86400000, week: 7 * 86400000, month: 30 * 86400000 };
+
+  function backupDue() {
+    if (DATA.settings.backupAuto === false) return false;
+    const every = BACKUP_EVERY_MS[DATA.settings.backupEvery] || BACKUP_EVERY_MS.week;
+    return !DATA.lastBackupAt || (Date.now() - DATA.lastBackupAt) >= every;
+  }
+
+  async function runBackup(quiet) {
+    const res = await window.pos.writeDataBackup();
+    if (res && res.ok) {
+      DATA.lastBackupAt = Date.now();
+      await persist();
+      await refreshBackupStatus(res.info);
+      if (!quiet) {
+        toast(res.info && res.info.path ? 'Backup written to ' + res.info.path : 'Nothing to back up yet.');
+      }
+      return;
+    }
+    if (!quiet) toast('Could not write a backup: ' + ((res && res.error) || 'unknown error'));
+  }
+
+  async function refreshBackupStatus(info) {
+    const el = $('#backupStatus');
+    if (!el) return;
+    let folder = '';
+    try { folder = await window.pos.backupFolder(); } catch (err) { folder = ''; }
+    const when = DATA.lastBackupAt ? new Date(DATA.lastBackupAt).toLocaleString() : 'not yet';
+    const kept = info && typeof info.count === 'number' ? info.count + ' kept now. ' : '';
+    el.textContent = 'Last backup: ' + when + '. ' + kept + (folder ? 'Copies are kept in ' + folder + '.' : '');
+  }
+
+  function startBackupClock() {
+    const check = () => { if (backupDue()) runBackup(true); };
+    // Not during the first minute: a shop opening up in the morning has a sale to
+    // ring up before it wants a file copy.
+    setTimeout(check, 60000);
+    setInterval(check, 30 * 60 * 1000);
+  }
+
+  // ---------------- The period as a picture ----------------
+
+  // The same figures the cards at the top are built from, cut into buckets the
+  // tabs can move over: hours for a day, days for a week or month, months for a
+  // year. One place decides the shape, so the sketch and the numbers cannot
+  // disagree.
+  function chartBuckets(period) {
+    const todayKey = dayKeyAgo(0);
+
+    if (period === 'day') {
+      const hours = [];
+      for (let h = 0; h < 24; h++) hours.push({ sales: 0, profit: 0 });
+      DATA.sales.filter(s => s.date.slice(0, 10) === todayKey).forEach(sale => {
+        const h = new Date(sale.date).getUTCHours();
+        hours[h].sales += sale.total;
+        hours[h].profit += saleProfit(sale);
+      });
+      // Only the hours the shop was actually trading: a day's trade crammed into
+      // the six hours it happened in reads far better than twenty-four mostly
+      // empty ones.
+      const first = hours.findIndex(b => b.sales !== 0 || b.profit !== 0);
+      if (first < 0) return [];
+      let last = 23;
+      while (last > first && hours[last].sales === 0 && hours[last].profit === 0) last--;
+      const out = [];
+      for (let h = Math.max(0, first - 1); h <= Math.min(23, last + 1); h++) {
+        out.push({ label: String(h).padStart(2, '0') + ':00', sales: hours[h].sales, profit: hours[h].profit });
+      }
+      return out;
+    }
+
+    if (period === 'week' || period === 'month') {
+      const days = period === 'week' ? 7 : parseInt(todayKey.slice(8, 10), 10);
+      const out = [];
+      for (let d = days - 1; d >= 0; d--) {
+        const key = dayKeyAgo(d);
+        const t = computePeriodTotals(key, 'day');
+        out.push({
+          label: period === 'week' ? periodLabel(key, 'day') : key.slice(8, 10),
+          sales: t.total,
+          profit: t.profit
+        });
+      }
+      return out;
+    }
+
+    const year = todayKey.slice(0, 4);
+    const out = [];
+    for (let m = 1; m <= 12; m++) {
+      const key = year + '-' + String(m).padStart(2, '0');
+      const t = computePeriodTotals(key, 'month');
+      out.push({
+        label: new Date(Date.UTC(Number(year), m - 1, 1)).toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }),
+        sales: t.total,
+        profit: t.profit
+      });
+    }
+    return out;
+  }
+
+  function renderSalesChart(period) {
+    const host = $('#salesChart');
+    const title = $('#salesChartTitle');
+    if (title) title.textContent = 'Takings and profit ' + periodPhrase(period);
+    if (!host || !window.LyraCharts) return;
+    window.LyraCharts.area(host, {
+      currency: DATA.settings.currency || '',
+      buckets: chartBuckets(period)
+    });
   }
 
   // ---------------- Ledger ----------------
@@ -1927,20 +2276,35 @@
     requestAnimationFrame(tick);
   }
 
+  // Where the money came from, as a ring: the same three figures the bars used
+  // to carry, with the amounts still spelled out beside them. If charts.js did
+  // not load for any reason, the plain bars are still drawn. — see charts.js
   function renderPaymentSplit(selector, t, emptyLabel) {
     const wrap = $(selector);
     if (!wrap) return;
     const entries = [
-      { label: 'Cash', value: t.cash, cls: 'bar-cash' },
-      { label: 'Card', value: t.card, cls: 'bar-card' }
+      { label: 'Cash', value: t.cash, tone: 'cash', cls: 'bar-cash' },
+      { label: 'Card', value: t.card, tone: 'card', cls: 'bar-card' }
     ];
-    if (t.other) entries.push({ label: 'Other', value: t.other, cls: 'bar-other' });
-    if (!entries.some(e => e.value !== 0)) {
-      wrap.innerHTML = `<div class="plain-empty">${emptyLabel || 'No sales in this period.'}</div>`;
+    if (t.other) entries.push({ label: 'Other', value: t.other, tone: 'other', cls: 'bar-other' });
+
+    if (window.LyraCharts) {
+      window.LyraCharts.donut(wrap, {
+        currency: DATA.settings.currency || '',
+        slices: entries.map(e => ({ label: e.label, value: e.value, tone: e.tone })),
+        centreLabel: 'Takings',
+        centreValue: t.total
+      });
       return;
     }
-    const max = Math.max(1, ...entries.map(e => Math.abs(e.value)));
-    wrap.innerHTML = entries.map(e => `
+
+    const spent = entries.filter(e => e.value !== 0);
+    if (!spent.length) {
+      wrap.innerHTML = '<div class="plain-empty">' + (emptyLabel || 'No sales in this period.') + '</div>';
+      return;
+    }
+    const max = Math.max(1, ...spent.map(e => Math.abs(e.value)));
+    wrap.innerHTML = spent.map(e => `
       <div class="bar-row">
         <span class="bar-label">${e.label}</span>
         <div class="bar-track"><div class="bar-fill ${e.cls}" style="--target-width:${Math.min(100, Math.abs(e.value) / max * 100)}%"></div></div>
@@ -2099,6 +2463,7 @@
     $('#statStockValueSell').textContent = moneyGrouped(stockValueAtSell);
 
     renderPaymentSplit('#paymentSplitToday', t, 'No sales in this period yet.');
+    renderSalesChart(period);
 
     const periodSales = DATA.sales.filter(s => s.type !== 'return' && periodKeyFromDayKey(s.date.slice(0, 10), period) === currentKey);
     const tally = {};
@@ -2247,6 +2612,12 @@
     // The App Password is never sent back to the screen; the line underneath
     // says whether one is saved.
     $('#setMailPassword').value = '';
+    $('#setReportAuto').checked = s.reportAuto !== false;
+    $('#setReportAutoTime').value = /^\d{1,2}:\d{2}$/.test(s.reportAutoTime || '') ? s.reportAutoTime : '17:30';
+    $('#setBackupAuto').checked = s.backupAuto !== false;
+    $('#setBackupEvery').value = s.backupEvery || 'week';
+    renderShortcutList();
+    refreshBackupStatus();
     refreshMailStatus();
     renderSettingsCategoryChips();
     renderPrinterSetting();
@@ -2372,6 +2743,8 @@
     $('#saveMailBtn').addEventListener('click', async () => {
       DATA.settings.reportEmail = $('#setReportEmail').value.trim();
       DATA.settings.mailFrom = $('#setMailFrom').value.trim();
+      DATA.settings.reportAuto = $('#setReportAuto').checked;
+      DATA.settings.reportAutoTime = $('#setReportAutoTime').value || '17:30';
       if (!DATA.settings.mailHost) DATA.settings.mailHost = 'smtp.gmail.com';
       if (!DATA.settings.mailPort) DATA.settings.mailPort = 465;
       const password = $('#setMailPassword').value;
@@ -2421,6 +2794,64 @@
         if (el) el.textContent = 'Could not send: ' + why;
         toast('Could not send: ' + why);
       }
+    });
+
+    $('#saveBackupBtn').addEventListener('click', async () => {
+      DATA.settings.backupAuto = $('#setBackupAuto').checked;
+      DATA.settings.backupEvery = $('#setBackupEvery').value || 'week';
+      await persist();
+      await refreshBackupStatus();
+      toast(DATA.settings.backupAuto ? 'Automatic backups saved.' : 'Automatic backups turned off.');
+    });
+
+    $('#backupNowBtn').addEventListener('click', async () => {
+      const btn = $('#backupNowBtn');
+      btn.disabled = true;
+      await runBackup(false);
+      btn.disabled = false;
+    });
+
+    $('#resetShortcutsBtn').addEventListener('click', async () => {
+      const ok = await confirmDialog('Reset every shortcut?', 'All shortcuts go back to the keys they came with. Nothing else is touched.', 'Reset shortcuts');
+      if (!ok) return;
+      DATA.settings.shortcuts = {};
+      await persist();
+      renderShortcutList();
+      toast('Shortcuts reset.');
+    });
+
+    // One listener for the whole list rather than one per row, the same way the
+    // product grid and the tables are wired.
+    $('#shortcutList').addEventListener('click', async (e) => {
+      const setBtn = e.target.closest('[data-set]');
+      if (setBtn) {
+        stopCapture();
+        shortcutCapture = {
+          actionId: setBtn.dataset.set,
+          button: setBtn,
+          label: setBtn.textContent,
+          mode: shortcutModeFor(setBtn.dataset.set)
+        };
+        setBtn.classList.add('listening');
+        setBtn.textContent = 'Press a key…';
+        return;
+      }
+      const clearBtn = e.target.closest('[data-clear]');
+      if (clearBtn) {
+        DATA.settings.shortcuts[clearBtn.dataset.clear] = { key: '', mode: 'press' };
+        await persist();
+        renderShortcutList();
+        toast('Shortcut cleared.');
+      }
+    });
+
+    $('#shortcutList').addEventListener('change', async (e) => {
+      const sel = e.target.closest('[data-mode]');
+      if (!sel) return;
+      const id = sel.dataset.mode;
+      DATA.settings.shortcuts[id] = { key: boundKeyFor(id), mode: sel.value };
+      await persist();
+      toast('Shortcut set to fire on ' + (sel.value === 'hold' ? 'hold.' : 'press.'));
     });
 
     $('#testPrintBtn').addEventListener('click', async () => {
@@ -2680,6 +3111,9 @@
     initReportButton();
     startWarmth();
     startReportRetries();
+    initShortcuts();
+    startReportClock();
+    startBackupClock();
 
     $('#productSearch').addEventListener('input', debounce(renderCatalog, 80));
     // Enter is handled document-wide by initBarcodeScanning, which reads the box

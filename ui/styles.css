@@ -1783,6 +1783,60 @@ body::after {
   box-shadow: 0 0 18px rgba(249, 115, 22, 0.2);
 }
 
+/* ---------------- Overview charts ----------------
+
+   charts.js draws these; the panel only has to give them room. A floor on the
+   height keeps the page from jumping while a chart is laid out. */
+
+.chart-panel { margin-bottom: var(--space-7); }
+.chart-host { position: relative; min-height: 190px; }
+#paymentSplitToday.chart-host { min-height: 170px; }
+.chart-host .lyra-empty { color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-6) 0; }
+
+/* ---------------- Setup → Shortcuts ---------------- */
+
+.shortcut-list { display: flex; flex-direction: column; margin-bottom: var(--space-5); }
+.shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 118px 28px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+.shortcut-row:first-child { border-top: none; }
+.shortcut-name { font-size: var(--text-sm); color: var(--text-ink); }
+.shortcut-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 6px var(--space-4);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-ink);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.shortcut-key:hover { border-color: rgba(127, 176, 255, 0.5); box-shadow: 0 0 14px rgba(77, 141, 255, 0.18); }
+.shortcut-key:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.shortcut-key-empty { color: var(--text-dim); }
+.shortcut-key.listening {
+  color: var(--rust-soft);
+  border-color: var(--rust);
+  background: var(--rust-tint);
+  animation: shortcutWaiting 1.1s ease-in-out infinite;
+}
+@keyframes shortcutWaiting { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.shortcut-row .select-input { padding: 6px var(--space-3); font-size: var(--text-xs); }
+.shortcut-clear {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-size: var(--text-sm); line-height: 1; padding: 4px;
+  transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+.shortcut-clear:hover { color: var(--rust); transform: scale(1.15); }
+.shortcut-clear:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
 /* ---------------- Printing ----------------
 
    A receipt is already 32-column plain text, which is what a thermal printer

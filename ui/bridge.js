@@ -166,6 +166,21 @@
       } catch (err) {
         return { ok: false, error: String(err) };
       }
+    },
+
+    // A spare copy of the shop's data, written beside it by the Rust side. The
+    // screens decide when one is due; the machine decides how it is written.
+    async writeDataBackup() {
+      try {
+        const info = await call('write_data_backup');
+        return { ok: true, info };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
+
+    async backupFolder() {
+      try { return await call('backup_folder'); } catch (err) { return ''; }
     }
   };
 })();

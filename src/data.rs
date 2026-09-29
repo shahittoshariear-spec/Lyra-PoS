@@ -8,6 +8,7 @@
 //! The keys are exactly the ones the original wrote (`camelCase`), so a data
 //! file or a backup file moves between the two apps untouched.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,18 @@ use serde::{Deserialize, Serialize};
 /// (on Windows, `%APPDATA%\Lyra PoS\lyra-pos-data.json`).
 pub const DATA_DIR_NAME: &str = "Lyra PoS";
 pub const DATA_FILE_NAME: &str = "lyra-pos-data.json";
+
+/// The folder automatic backups are kept in, beside the data file. Their names
+/// carry the date and time, which sort as text, oldest first — which is all the
+/// pruning below needs to know.
+const BACKUP_DIR_NAME: &str = "backups";
+/// Backups this app writes are named `lyra-backup-<date>_<time>.json`. The
+/// prefix and extension also keep anything else in the folder, including the
+/// half-written `.part` of an interrupted copy, out of the pruning.
+const BACKUP_PREFIX: &str = "lyra-backup-";
+/// How many automatic backups are kept before the oldest is deleted. Left
+/// alone, the folder would grow without bound on a till used every day.
+const BACKUPS_KEPT: usize = 12;
 
 /// Earlier names this app shipped under, newest first. Renaming the app moves
 /// its data folder, which would otherwise hide an existing shop's data — so on
@@ -50,6 +63,30 @@ fn default_next_sale_number() -> i64 {
 fn default_categories() -> Vec<String> {
     vec!["General".to_string()]
 }
+fn default_mail_port() -> u16 {
+    465
+}
+fn default_report_auto_time() -> String {
+    // The end of a working day, which is when a shop wants the figures for it.
+    "17:30".to_string()
+}
+fn default_backup_every() -> String {
+    // A copy a day is more than a small shop needs, and the folder has to stay
+    // readable; a week is the middle of what Setup offers.
+    "week".to_string()
+}
+
+/// One key the shop has bound in Setup, as the screens wrote it. The shape is
+/// theirs; this end only has to keep it.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ShortcutBinding {
+    /// The combination, like "Ctrl+2" or "F9". Empty means unbound.
+    pub key: String,
+    /// "press" fires at once, "hold" only after the key is kept down. Empty
+    /// falls back to whatever the action's own default is.
+    pub mode: String,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
@@ -71,6 +108,24 @@ pub struct Settings {
     /// a printer that errors on a cut refuses every later receipt, so it waits
     /// until Setup has shown a cut working on this printer.
     pub receipt_cut_paper: bool,
+    /// Where the day's report is emailed to, and the Gmail account it is sent
+    /// from. The password itself is not here — it lives in Windows Credential
+    /// Manager — but these are ordinary settings and belong in the data file.
+    pub report_email: String,
+    pub mail_from: String,
+    /// Left blank for Gmail's own server; Setup fills it in when saved.
+    pub mail_host: String,
+    pub mail_port: u16,
+    /// The day report going by itself is on by default, waiting for an address;
+    /// a shop with nothing set up hears nothing either way.
+    pub report_auto: bool,
+    pub report_auto_time: String,
+    /// A copy of the data file kept beside it, weekly by default.
+    pub backup_auto: bool,
+    pub backup_every: String,
+    /// The shop's own keyboard shortcuts, by action id, exactly as Setup wrote
+    /// them. Opaque here: only the screens know what an action does.
+    pub shortcuts: BTreeMap<String, ShortcutBinding>,
 }
 
 impl Default for Settings {
@@ -86,6 +141,15 @@ impl Default for Settings {
             admin_key_hash: String::new(),
             receipt_printer: String::new(),
             receipt_cut_paper: false,
+            report_email: String::new(),
+            mail_from: String::new(),
+            mail_host: String::new(),
+            mail_port: default_mail_port(),
+            report_auto: true,
+            report_auto_time: default_report_auto_time(),
+            backup_auto: true,
+            backup_every: default_backup_every(),
+            shortcuts: BTreeMap::new(),
         }
     }
 }
@@ -187,6 +251,16 @@ pub struct Data {
     pub held_sales: Vec<HeldSale>,
     pub next_product_id: i64,
     pub next_sale_number: i64,
+    /// Day reports that could not be sent yet, kept exactly as the screens
+    /// wrote them — the day, the snapshot and the last error. Opaque here.
+    pub report_queue: Vec<serde_json::Value>,
+    /// When the last automatic backup was written, as the screens' clock read
+    /// it (milliseconds since the epoch). Absent until the first one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_backup_at: Option<f64>,
+    /// The local day key ("YYYY-MM-DD") the automatic report last went out on,
+    /// or empty. A restart on the same day must not send it twice.
+    pub last_auto_report: String,
 }
 
 impl Default for Data {
@@ -199,6 +273,9 @@ impl Default for Data {
             held_sales: Vec::new(),
             next_product_id: default_next_product_id(),
             next_sale_number: default_next_sale_number(),
+            report_queue: Vec::new(),
+            last_backup_at: None,
+            last_auto_report: String::new(),
         }
     }
 }
@@ -353,6 +430,136 @@ pub fn import_backup(src: &Path) -> Result<Data, String> {
     Ok(data)
 }
 
+/// What Setup is told after a backup: where it went, where backups live, how
+/// many are kept now, and when this one was taken.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupInfo {
+    /// The file just written. Empty when there was no data file to copy yet.
+    pub path: String,
+    pub folder: String,
+    pub count: usize,
+    /// Local time, written the way a person reads it.
+    pub taken_at: String,
+}
+
+/// The folder automatic backups are written to, for Setup to show. Created here
+/// if it isn't there yet, so the answer is a real folder even on a till that
+/// has not backed anything up.
+pub fn backup_folder() -> String {
+    let Some(data_file) = Data::file_path() else {
+        return String::new();
+    };
+    let folder = backup_folder_for(&data_file);
+    let _ = fs::create_dir_all(&folder);
+    folder.to_string_lossy().into_owned()
+}
+
+/// Copies the data file into the backups folder beside it, then prunes the
+/// oldest backups beyond the newest twelve.
+pub fn write_data_backup() -> Result<BackupInfo, String> {
+    let data_file = Data::file_path().ok_or_else(|| {
+        "The app could not find its data folder, so no backup was made. Restart the app and try \
+         again."
+            .to_string()
+    })?;
+    write_backup(&data_file)
+}
+
+/// The folder backups live in: `backups` beside the data file.
+fn backup_folder_for(data_file: &Path) -> PathBuf {
+    data_file
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(BACKUP_DIR_NAME)
+}
+
+/// Writes one backup of `data_file` and prunes the folder. A data file that
+/// does not exist yet is answered with an empty `path` rather than an error, so
+/// a shop that has never saved is not told something went wrong.
+fn write_backup(data_file: &Path) -> Result<BackupInfo, String> {
+    let folder = backup_folder_for(data_file);
+    let taken_at = chrono::Local::now();
+    let taken_at_text = taken_at.format("%Y-%m-%d %H:%M:%S").to_string();
+    let folder_text = folder.to_string_lossy().into_owned();
+
+    if !data_file.is_file() {
+        let _ = fs::create_dir_all(&folder);
+        return Ok(BackupInfo {
+            path: String::new(),
+            folder: folder_text,
+            count: backup_files(&folder).len(),
+            taken_at: taken_at_text,
+        });
+    }
+
+    fs::create_dir_all(&folder).map_err(|e| {
+        format!(
+            "The backups folder could not be made at {folder_text}. Check the disk has space, \
+             then try again: {e}"
+        )
+    })?;
+
+    let name = format!("{BACKUP_PREFIX}{}.json", taken_at.format("%Y-%m-%d_%H%M"));
+    let dest = folder.join(&name);
+    // Copied under a temporary name and moved into place afterwards, so a
+    // backup interrupted part-way through is never left looking complete.
+    let part = folder.join(format!("{name}.part"));
+    fs::copy(data_file, &part).map_err(|e| {
+        let _ = fs::remove_file(&part);
+        format!("The backup could not be copied. Check the disk has space, then try again: {e}")
+    })?;
+    if dest.exists() {
+        // A rename over an existing file fails on Windows, and two backups
+        // taken in the same minute share a name; the newest one wins.
+        let _ = fs::remove_file(&dest);
+    }
+    fs::rename(&part, &dest).map_err(|e| {
+        let _ = fs::remove_file(&part);
+        format!(
+            "The backup could not be put in place. Check the disk has space, then try again: {e}"
+        )
+    })?;
+
+    Ok(BackupInfo {
+        path: dest.to_string_lossy().into_owned(),
+        folder: folder_text,
+        count: prune_backups(&folder),
+        taken_at: taken_at_text,
+    })
+}
+
+/// Deletes the oldest backups beyond the newest `BACKUPS_KEPT`, oldest first,
+/// and answers how many backups are in the folder now. A backup that cannot be
+/// deleted is left in place rather than failing the backup just taken.
+fn prune_backups(folder: &Path) -> usize {
+    let mut backups = backup_files(folder);
+    backups.sort();
+    let excess = backups.len().saturating_sub(BACKUPS_KEPT);
+    for oldest in &backups[..excess] {
+        let _ = fs::remove_file(oldest);
+    }
+    // Counted afresh: a backup that could not be deleted is still a backup the
+    // shop has.
+    backup_files(folder).len()
+}
+
+/// The automatic backups in `folder`, however many there are.
+fn backup_files(folder: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(BACKUP_PREFIX) && name.ends_with(".json"))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,6 +613,64 @@ mod tests {
         let raw = r#"{"settings":{"shopName":"Shop","somethingNew":42}}"#;
         let data: Data = serde_json::from_str(raw).unwrap();
         assert_eq!(data.settings.shop_name, "Shop");
+    }
+
+    #[test]
+    fn reports_and_backups_start_on_and_can_be_turned_off() {
+        // A shop that has never touched these settings gets them the way Setup
+        // shows them: the report at 17:30, a backup every week.
+        let data: Data = serde_json::from_str(r#"{"settings":{}}"#).unwrap();
+        assert!(data.settings.report_auto);
+        assert_eq!(data.settings.report_auto_time, "17:30");
+        assert!(data.settings.backup_auto);
+        assert_eq!(data.settings.backup_every, "week");
+        assert_eq!(data.settings.mail_port, 465);
+        assert!(data.settings.shortcuts.is_empty());
+        assert!(data.last_backup_at.is_none());
+        assert_eq!(data.last_auto_report, "");
+        assert!(data.report_queue.is_empty());
+    }
+
+    #[test]
+    fn every_setting_the_screens_write_survives_a_save() {
+        // The screens keep their settings in the data file through this struct,
+        // so a key with no field here would be dropped on the next save — the
+        // email setup, the shortcuts and the timers all have to come back out
+        // exactly as they went in.
+        let raw = r#"{
+            "settings": {
+                "reportEmail": "owner@example.com",
+                "mailFrom": "shop@example.com",
+                "mailHost": "smtp.gmail.com",
+                "mailPort": 465,
+                "reportAuto": false,
+                "reportAutoTime": "17:45",
+                "backupAuto": true,
+                "backupEvery": "day",
+                "shortcuts": {
+                    "tillCharge": { "key": "F9", "mode": "press" },
+                    "stockDelete": { "key": "", "mode": "hold" }
+                }
+            },
+            "lastBackupAt": 1759100000000,
+            "lastAutoReport": "2026-09-28",
+            "reportQueue": [{ "dateKey": "2026-09-28", "attempts": 2, "report": { "totals": { "sales": 12.5 } } }]
+        }"#;
+        let data: Data = serde_json::from_str(raw).unwrap();
+
+        let back: Data = serde_json::from_str(&serde_json::to_string(&data).unwrap()).unwrap();
+        assert_eq!(back, data, "a save must not drop any of it");
+        assert_eq!(back.settings.report_email, "owner@example.com");
+        assert!(!back.settings.report_auto);
+        assert_eq!(back.settings.report_auto_time, "17:45");
+        assert_eq!(back.settings.backup_every, "day");
+        assert_eq!(back.settings.shortcuts["tillCharge"].key, "F9");
+        assert_eq!(back.settings.shortcuts["tillCharge"].mode, "press");
+        assert_eq!(back.settings.shortcuts["stockDelete"].key, "");
+        assert_eq!(back.last_backup_at, Some(1759100000000.0));
+        assert_eq!(back.last_auto_report, "2026-09-28");
+        assert_eq!(back.report_queue.len(), 1);
+        assert_eq!(back.report_queue[0]["dateKey"], "2026-09-28");
     }
 
     #[test]
@@ -565,5 +830,68 @@ mod tests {
         let json = serde_json::to_string_pretty(&original).unwrap();
         let back: Data = serde_json::from_str(&json).unwrap();
         assert_eq!(back, original);
+    }
+
+    #[test]
+    fn automatic_backups_keep_the_newest_twelve_and_forget_the_rest() {
+        let scratch = Scratch::new();
+        let file = scratch.file();
+        a_shop().save_to(&file).unwrap();
+
+        // Fourteen backups from previous days, named the way the app names
+        // them. Long past, so the backup written below is the newest.
+        let folder = backup_folder_for(&file);
+        fs::create_dir_all(&folder).unwrap();
+        let older: Vec<String> = (1..=14)
+            .map(|day| format!("lyra-backup-2020-01-{day:02}_0900.json"))
+            .collect();
+        for name in &older {
+            fs::write(folder.join(name), "{}").unwrap();
+        }
+
+        let info = write_backup(&file).unwrap();
+
+        // Fifteen backups became twelve: the one just taken plus the eleven
+        // newest old ones. The three oldest went first.
+        assert_eq!(info.count, 12);
+        let mut remaining: Vec<String> = fs::read_dir(&folder)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        remaining.sort();
+        assert_eq!(remaining.len(), 12, "kept: {remaining:?}");
+        let new_name = Path::new(&info.path)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        assert!(remaining.contains(&new_name), "the new backup is kept");
+        assert_eq!(&remaining[..11], &older[3..], "the oldest three went");
+
+        // What was written is a whole copy of the live file, nothing partial.
+        assert_eq!(
+            fs::read_to_string(&info.path).unwrap(),
+            fs::read_to_string(&file).unwrap()
+        );
+        assert_eq!(info.folder, folder.to_string_lossy());
+        assert!(!info.taken_at.is_empty());
+    }
+
+    #[test]
+    fn a_backup_before_the_first_save_is_an_answer_not_an_error() {
+        let scratch = Scratch::new();
+        let file = scratch.file(); // never written: a brand-new till
+
+        let info = write_backup(&file).unwrap();
+
+        assert!(info.path.is_empty(), "nothing was there to copy");
+        assert_eq!(info.count, 0);
+        assert_eq!(info.folder, backup_folder_for(&file).to_string_lossy());
+        assert!(
+            backup_folder_for(&file).is_dir(),
+            "Setup is still given a real folder to show"
+        );
+        assert!(!info.taken_at.is_empty());
     }
 }

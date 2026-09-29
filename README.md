@@ -10,8 +10,10 @@
 > 1. **The S.S. / “Shariear's Software” credit** still shows on the splash screen
 >    and in the app window.
 > 2. **The app icon** is the same blue/ocean-cyan wave mark (`icons/`).
-> 3. **Versions still move in single `0.01` steps** — this build is `v1.8.2`,
->    the version it was rebuilt from. No jumping to `v1.9` or `v2.0`.
+> 3. **Versions move in single `0.01` steps**, with a major update now and
+>    then — this build is `v1.9.0`, the first major update on top of the Rust
+>    rebuild: charts, a configurable Shortcuts screen, automatic backups, and a
+>    day report that can send itself.
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -88,10 +90,12 @@ so there is no browser to install and no Node.js to install.
   and the refund receipt is shown ready to print.
 - **Stock** — add, edit, and delete products (name, SKU/barcode, category,
   price, cost, quantity on hand). Opening Stock puts the caret straight into the
-  filter box, so a product can be typed or scanned without clicking first, and a
-  left arrow with the cursor already at the start of that box clears the filter.
-  The keyboard comes back to that box when a product is added, edited or
-  deleted, so the next search can be typed straight away.
+  filter box, so a product can be typed or scanned without clicking first.
+  Clearing that filter is **Setup → Shortcuts → Clear the Stock filter**,
+  unbound unless you ask for it — the old left-arrow-clears-it keystroke went
+  because it wiped what was typed without a warning. The keyboard comes back to
+  that box when a product is added, edited or deleted, so the next search can
+  be typed straight away.
 - **Ledger** — every past sale and refund, filterable by date, with a
   reprintable receipt. Each row has **Reprint** to print a copy without opening
   anything, and **View** to see the receipt — reprint it, or refund items from
@@ -106,12 +110,29 @@ so there is no browser to install and no Node.js to install.
   to spot at any zoom level. Low-stock warnings, and the two inventory value
   figures — what the shelf is worth at cost and at sell — are always current
   regardless of the tab selected, and carry a comma every three digits, so a
-  big number can be counted at a glance.
+  big number can be counted at a glance. Each tab also draws its period: the
+  takings and profit as an animated line that sweeps in when you switch tabs,
+  and the payment split as a ring with the amounts spelled out beside it.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales
   already recorded. Each line also shows the product's barcode beside Delete,
   ready to read out or copy when reordering.
+- **Keyboard shortcuts** — Setup → Shortcuts lists every action that can have
+  a key: going to each screen, jumping to the scan/search box, taking payment,
+  holding the sale, emailing the day's report, hiding the product list, adding
+  a product, clearing the Stock filter, and deleting the ticked products. Click
+  a key box and press the combination you want — a function key, or anything
+  with Ctrl or Alt, so a shortcut is never confused with typing. Each one fires
+  **on press** or **on hold**; anything that throws work away comes set to
+  hold, so a brush against the keyboard cannot empty a sale. Nothing
+  destructive is bound out of the box, and **Reset to defaults** puts every key
+  back the way it came.
+- **Automatic backups** — a copy of the shop's data file written beside it
+  while the app is open, so a failed disk never costs more than the last few
+  days: weekly by default (daily, weekly or monthly, or off, in Setup →
+  Automatic backups). The newest twelve are kept and older ones cleared out on
+  their own, and **Back up now** takes one on the spot.
 - **Profit** is sales minus cost of goods sold, using each product's Cost
   field at the time of sale. If Profit ever looks identical to Sales for a
   period, it means the products sold in that period have no Cost set —
@@ -122,7 +143,8 @@ so there is no browser to install and no Node.js to install.
   without needing access to Overview.
 - **Setup** — shop name/address/phone (shown on receipts), currency symbol,
   tax rate, low-stock threshold, categories, Admin Key management, backup
-  export/import, and bulk product import.
+  export/import, bulk product import, when the day report sends itself,
+  automatic backups, and the Shortcuts screen.
 - **Import products from POS Maid (or any spreadsheet)** — bring in a
   product list exported from POS Maid's Excel/CSV export, or any spreadsheet
   with name/SKU/price/stock columns. Lyra PoS guesses which column is which
@@ -230,6 +252,11 @@ it up from the file itself, so if it's forgotten there's no built-in
 recovery short of restoring an older backup, using Setup → Danger Zone →
 Reset all data, or editing the data file by hand.
 
+Beside that file the app keeps its own automatic backups in a `backups`
+folder — the newest twelve copies, by default one a week (see **Setup →
+Automatic backups**). They are ordinary copies of the data file, so one can be
+restored with **Import backup…** if it is ever needed.
+
 **Upgrading keeps your data.** Renaming the app moves its data folder, which
 would otherwise hide an existing shop's data, so the first time it runs without
 finding a data file of its own it looks for one left by an earlier name — first
@@ -301,6 +328,13 @@ kept in Windows **Credential Manager** and never in the data file, so a backup
 of that file — or a copy of it on a USB stick — carries no password with it.
 Clearing the password in Setup forgets it, and nothing can read it back out
 again: Setup can only say whether one is saved.
+
+The report can also go by itself. Tick **Send the day report on its own** in
+Setup and choose a time — 17:30 by default — and it goes once a day while the
+app is open. No internet at that moment is not a lost report: it is kept with
+the day it belongs to and tried again while the app stays open, so a shop that
+closes up early still gets its figures out in the morning. The button is still
+there for sending one by hand at any time.
 
 Nothing else about the app has changed: it still runs with no internet
 connection at all, and only tries to reach the mail server when a report is
@@ -390,6 +424,7 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 | Path | What's in it |
 |---|---|
 | `ui/` | The screens: `index.html`, `styles.css`, `app.js`, `bridge.js` |
+| `ui/charts.js` | The Overview's graphs — the takings/profit line and the payment-split ring |
 | `src/main.rs` | The commands the screens can call, and the window setup |
 | `src/data.rs` | The shape of the saved data, and reading/writing it |
 | `src/escpos.rs` | Turning a receipt's text into the bytes a thermal printer wants |
