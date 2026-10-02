@@ -96,24 +96,7 @@
 
       <!-- TILL VIEW -->
       <section class="view active" id="view-till">
-        <div class="day-summary-bar" id="daySummaryBar">
-          <div class="day-summary-item">
-            <span class="day-summary-label">Today's Total</span>
-            <span class="day-summary-value" id="dsTotal">R0.00</span>
-          </div>
-          <div class="day-summary-sep"></div>
-          <div class="day-summary-item">
-            <span class="day-summary-label">Cash</span>
-            <span class="day-summary-value ds-cash" id="dsCash">R0.00</span>
-          </div>
-          <div class="day-summary-item">
-            <span class="day-summary-label">Card</span>
-            <span class="day-summary-value ds-card" id="dsCard">R0.00</span>
-          </div>
-          <div class="day-summary-item" id="dsOtherWrap" style="display:none;">
-            <span class="day-summary-label">Other</span>
-            <span class="day-summary-value" id="dsOther">R0.00</span>
-          </div>
+        <div class="till-action-bar" id="tillActionBar">
           <button class="btn btn-ghost btn-sm ds-toggle" id="hideItemsBtn" aria-pressed="false"
                   title="Hide the product list and give the receipt the whole window">Hide items</button>
           <button class="btn btn-ghost btn-sm ds-mail" id="emailReportBtn"
@@ -646,8 +629,16 @@
       <div class="segmented" id="paymentMethodSeg">
         <button class="seg-btn active" data-method="Cash">Cash</button>
         <button class="seg-btn" data-method="Card">Card</button>
+        <button class="seg-btn" data-method="Split">Cash + Card</button>
       </div>
       <label class="field" id="tenderedField"><span>Amount tendered</span><input type="number" id="tenderedInput" min="0" step="0.01" /></label>
+      <div id="splitFields" style="display:none;">
+        <label class="field"><span>Paid in cash</span><input type="number" id="splitCashInput" min="0" step="0.01" /></label>
+        <div class="charge-total-display charge-split-card">
+          <span>Charged to card</span>
+          <span id="splitCardDisplay">0.00</span>
+        </div>
+      </div>
       <div class="change-display" id="changeDisplay" style="display:none;">
         <span>Change due</span>
         <span id="changeAmount">0.00</span>

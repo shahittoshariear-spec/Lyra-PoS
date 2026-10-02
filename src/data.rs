@@ -231,6 +231,13 @@ pub struct Sale {
     pub payment_method: String,
     pub tendered: f64,
     pub change: f64,
+    /// A sale paid partly in cash and partly by card carries what each side
+    /// took. Simple sales leave both out and stand by `payment_method`, so
+    /// their records read exactly as the old app wrote them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cash_paid: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub card_paid: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -606,6 +613,34 @@ mod tests {
             !json.contains("refundOf"),
             "plain sales carry no refund keys"
         );
+    }
+
+    #[test]
+    fn a_sale_split_across_cash_and_card_keeps_both_halves() {
+        let sale = Sale {
+            id: "s1".into(),
+            total: 100.0,
+            payment_method: "Cash + Card".into(),
+            cash_paid: Some(40.0),
+            card_paid: Some(60.0),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&sale).unwrap();
+        assert!(json.contains(r#""cashPaid":40.0"#));
+        assert!(json.contains(r#""cardPaid":60.0"#));
+        let back: Sale = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.cash_paid, Some(40.0));
+        assert_eq!(back.card_paid, Some(60.0));
+
+        // A simple sale carries neither key, so its record stays exactly what
+        // the old app wrote and the two versions keep reading each other's files.
+        let plain = Sale {
+            id: "s2".into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(!json.contains("cashPaid"));
+        assert!(!json.contains("cardPaid"));
     }
 
     #[test]

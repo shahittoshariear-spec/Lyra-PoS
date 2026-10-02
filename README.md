@@ -53,11 +53,12 @@ so there is no browser to install and no Node.js to install.
 ## What it does
 
 - **Till** — search, tap, or scan a barcode to build a sale; hold a sale to
-  serve another customer and resume it later; take cash or card payment
-  with automatic change calculation; print or save a receipt. In the payment
-  dialog, Enter completes the sale — type what the customer handed over and
-  press Enter, and the change is worked out for you. Pressing Enter twice in a
-  hurry still records the sale once.
+  serve another customer and resume it later; take cash or card payment, or
+  split one sale across both — enter the cash part and the card is worked out
+  as the rest — with automatic change calculation; print or save a receipt. In
+  the payment dialog, Enter completes the sale — type what the customer handed
+  over and press Enter, and the change is worked out for you. Pressing Enter
+  twice in a hurry still records the sale once.
 - **Barcode scanning** — plug in any USB or Bluetooth barcode scanner (the
   cheap kind that "types" like a keyboard). Scan a product at the till to add
   it straight to the cart; scan while adding/editing a product to fill in its
@@ -137,10 +138,6 @@ so there is no browser to install and no Node.js to install.
   field at the time of sale. If Profit ever looks identical to Sales for a
   period, it means the products sold in that period have no Cost set —
   Stock flags any product with a R0.00 cost so it's easy to spot and fix.
-- **Today's totals on the Till screen** — a summary bar (total sale, cash,
-  card) sits at the top of the Till screen itself, visible even in Client
-  mode. A cashier without the Admin Key can screenshot it and send it over
-  without needing access to Overview.
 - **Setup** — shop name/address/phone (shown on receipts), currency symbol,
   tax rate, low-stock threshold, categories, Admin Key management, backup
   export/import, bulk product import, when the day report sends itself,
@@ -366,7 +363,6 @@ is on the till from doing their job.
 | | Client mode | Unlocked |
 |---|---|---|
 | Till — ring up, scan, hold, take payment | yes | yes |
-| Today's totals bar on the Till screen | yes | yes |
 | Stock — look up, filter, check what's left | yes | yes |
 | Stock — add, edit or delete a product | yes | yes |
 | Ledger — look up a sale, reprint a receipt | yes | yes |

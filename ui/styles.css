@@ -788,7 +788,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   height: calc(100vh - var(--till-grid-offset));
 }
 
-.day-summary-bar {
+.till-action-bar {
   position: relative;
   display: flex;
   align-items: center;
@@ -809,7 +809,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 }
 /* A blue filament along the top edge of the bar, the brightest line in the
    chrome around the till. */
-.day-summary-bar::after {
+.till-action-bar::after {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
@@ -817,19 +817,6 @@ input[type=date]::-webkit-calendar-picker-indicator {
   background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.75), transparent);
   pointer-events: none;
 }
-.day-summary-item { display: flex; flex-direction: column; gap: 2px; }
-.day-summary-label { font-size: var(--text-3xs); line-height: var(--leading-tight); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-on-ink-muted); }
-.day-summary-value {
-  font-family: var(--font-mono);
-  font-size: var(--text-lg);
-  font-weight: 700;
-  line-height: var(--leading-tight);
-  font-variant-numeric: tabular-nums;
-  transition: transform var(--dur-fast) var(--ease-spring);
-}
-.day-summary-value.ds-cash { color: var(--accent-cash); text-shadow: 0 0 18px rgba(95, 224, 176, 0.3); }
-.day-summary-value.ds-card { color: var(--accent-card); text-shadow: 0 0 18px rgba(169, 201, 255, 0.3); }
-.day-summary-sep { width: 1px; height: 26px; background: var(--line-strong); }
 
 .till-catalog { display: flex; flex-direction: column; min-height: 0; }
 .till-toolbar { margin-bottom: var(--space-2); display: flex; gap: var(--space-4); }
@@ -1436,6 +1423,9 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .charge-total-display span:first-child,
 .change-display span:first-child { font-size: var(--text-base); color: var(--text-muted); }
 .charge-total-display span:last-child { font-size: var(--text-2xl); font-weight: 700; color: var(--cyan); text-shadow: 0 0 22px rgba(111, 224, 226, 0.3); }
+/* In the split fields the card half is a figure being followed, not the number
+   the sale is about, so it stays quieter than the total due above it. */
+.charge-split-card span:last-child { font-size: var(--text-xl); color: var(--text-ink); text-shadow: none; }
 .change-display { border-top: 1px dashed rgba(127, 176, 255, 0.22); }
 .change-display span:last-child { font-size: var(--text-xl); font-weight: 700; color: var(--mint); text-shadow: 0 0 22px rgba(95, 224, 176, 0.3); }
 
@@ -1525,7 +1515,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   .till-grid { grid-template-columns: minmax(0, 1fr) minmax(50%, 1fr); gap: var(--space-8); }
   .stat-row { grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
   .panel-row, .settings-grid { grid-template-columns: 1fr; }
-  .day-summary-bar { gap: var(--space-6); }
+  .till-action-bar { gap: var(--space-6); }
 }
 
 /* ---------------- Startup splash ---------------- */
@@ -1710,9 +1700,9 @@ input[type=date]::-webkit-calendar-picker-indicator {
    follows the bulk-bar rules for a button on glass rather than the light one. */
 
 .ds-toggle { margin-left: auto; flex-shrink: 0; }
-.day-summary-bar .btn-ghost { background: rgba(255, 255, 255, 0.06); color: var(--text-on-ink); border-color: var(--line-strong); }
-.day-summary-bar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: var(--blue-soft); }
-.day-summary-bar .btn-ghost:focus-visible { outline: var(--focus-ring-on-ink); outline-offset: 2px; }
+.till-action-bar .btn-ghost { background: rgba(255, 255, 255, 0.06); color: var(--text-on-ink); border-color: var(--line-strong); }
+.till-action-bar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: var(--blue-soft); }
+.till-action-bar .btn-ghost:focus-visible { outline: var(--focus-ring-on-ink); outline-offset: 2px; }
 
 /* ---------------- Session warmth ----------------
 
@@ -1745,7 +1735,7 @@ body::after {
 
 /* By evening the filament over the summary bar has taken on a little of the
    colour of the till's own lights. */
-.day-summary-bar::before {
+.till-action-bar::before {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
@@ -1766,18 +1756,18 @@ body::after {
   pointer-events: none;
 }
 
-/* The day report button sits with the hide toggle on the summary bar, and turns
-   rust while a report is still waiting to go out. */
+/* The day report button sits with the hide toggle in the till's action bar,
+   and turns rust while a report is still waiting to go out. */
 .ds-mail { margin-left: var(--space-3); flex-shrink: 0; }
 
 .btn-warn,
-.day-summary-bar .btn-warn {
+.till-action-bar .btn-warn {
   background: rgba(249, 115, 22, 0.14);
   border-color: rgba(249, 115, 22, 0.5);
   color: var(--rust-soft);
 }
 .btn-warn:hover:not(:disabled),
-.day-summary-bar .btn-warn:hover:not(:disabled) {
+.till-action-bar .btn-warn:hover:not(:disabled) {
   background: rgba(249, 115, 22, 0.22);
   border-color: var(--rust);
   box-shadow: 0 0 18px rgba(249, 115, 22, 0.2);

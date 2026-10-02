@@ -181,7 +181,7 @@
     if (view === 'dashboard') renderDashboard();
     if (view === 'reports') renderReports();
     if (view === 'settings') renderSettings();
-    if (view === 'till') { renderCatalog(); renderDaySummary(); focusScanTarget(); }
+    if (view === 'till') { renderCatalog(); focusScanTarget(); }
   }
 
   // The pill's geometry only changes when the window is resized, but this used to
@@ -779,13 +779,12 @@
       btn.addEventListener('click', () => {
         $$('#paymentMethodSeg .seg-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        const method = btn.dataset.method;
-        $('#tenderedField').style.display = method === 'Cash' ? 'flex' : 'none';
-        $('#changeDisplay').style.display = 'none';
-        updateChange();
+        syncChargeFields();
+        if (btn.dataset.method === 'Split') setTimeout(() => $('#splitCashInput').focus(), 50);
       });
     });
     $('#tenderedInput').addEventListener('input', updateChange);
+    $('#splitCashInput').addEventListener('input', updateChange);
     $('#chargeConfirmBtn').addEventListener('click', completeSale);
   }
 
@@ -793,9 +792,9 @@
     const t = cartTotals();
     $('#chargeTotalDisplay').textContent = fmt(t.total);
     $('#tenderedInput').value = '';
-    $('#changeDisplay').style.display = 'none';
+    $('#splitCashInput').value = '';
     $$('#paymentMethodSeg .seg-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
-    $('#tenderedField').style.display = 'flex';
+    syncChargeFields();
     openModal('#chargeModalOverlay');
     setTimeout(() => $('#tenderedInput').focus(), 50);
   }
@@ -805,8 +804,35 @@
     return active ? active.dataset.method : 'Cash';
   }
 
+  // Which fields the chosen method needs, and everything the dialog says about
+  // the money in them. Called whenever the method or an amount changes.
+  function syncChargeFields() {
+    const method = currentPaymentMethod();
+    $('#tenderedField').style.display = method === 'Cash' ? 'flex' : 'none';
+    $('#splitFields').style.display = method === 'Split' ? 'block' : 'none';
+    updateChange();
+  }
+
   function updateChange() {
     const method = currentPaymentMethod();
+    if (method === 'Split') {
+      // The cash box carries what is being paid in cash; the card takes the
+      // rest, shown as it changes. Cash past the total is a cash sale with
+      // change — that is what the cashier means when they type it — so the
+      // change line comes out then, and only then.
+      const t = cartTotals();
+      const cash = Math.round((parseFloat($('#splitCashInput').value) || 0) * 100) / 100;
+      $('#splitCardDisplay').textContent = fmt(Math.max(0, Math.round((t.total - cash) * 100) / 100));
+      const change = Math.round((cash - t.total) * 100) / 100;
+      if (change > 0) {
+        $('#changeDisplay').style.display = 'flex';
+        $('#changeAmount').textContent = fmt(change);
+        $('#changeAmount').style.color = '';
+      } else {
+        $('#changeDisplay').style.display = 'none';
+      }
+      return;
+    }
     if (method !== 'Cash') { $('#changeDisplay').style.display = 'none'; return; }
     const t = cartTotals();
     const tendered = parseFloat($('#tenderedInput').value) || 0;
@@ -832,12 +858,30 @@
     // Nothing to sell: never write a zero-value sale into the Ledger.
     if (!cart.length) return;
     const t = cartTotals();
-    const method = currentPaymentMethod();
-    let tendered = t.total, change = 0;
-    if (method === 'Cash') {
+    const chosen = currentPaymentMethod();
+    let method = chosen, tendered = t.total, change = 0;
+    // Set only when the sale is actually split across the two methods; a
+    // single-method sale leaves them off, exactly as it always did.
+    let cashPaid, cardPaid;
+    if (chosen === 'Cash') {
       tendered = parseFloat($('#tenderedInput').value) || 0;
       if (tendered < t.total) { toast('Amount tendered is less than the total.'); return; }
       change = tendered - t.total;
+    } else if (chosen === 'Split') {
+      const cash = Math.round((parseFloat($('#splitCashInput').value) || 0) * 100) / 100;
+      if (cash > 0 && cash < t.total) {
+        method = 'Cash + Card';
+        cashPaid = cash;
+        cardPaid = Math.round((t.total - cash) * 100) / 100;
+      } else if (cash >= t.total && cash > 0) {
+        // More cash than the total: a plain cash sale with change.
+        method = 'Cash';
+        tendered = cash;
+        change = Math.round((cash - t.total) * 100) / 100;
+      } else {
+        // Nothing in cash: the card takes all of it.
+        method = 'Card';
+      }
     }
 
     const sale = {
@@ -856,6 +900,7 @@
       tendered: tendered,
       change: change
     };
+    if (cashPaid != null) { sale.cashPaid = cashPaid; sale.cardPaid = cardPaid; }
 
     // Everything below waits on the save, so the flag goes up first — a second
     // Enter arriving during that await is refused at the top of the function.
@@ -872,7 +917,6 @@
       cart = [];
       renderCart();
       renderCatalog();
-      renderDaySummary();
       closeModal('#chargeModalOverlay');
 
       currentSaleForReceipt = sale;
@@ -1027,6 +1071,15 @@
       tendered: -totals.total,
       change: 0
     };
+    if (typeof sale.cashPaid === 'number') {
+      // A split sale is refunded off both halves in the proportion they were
+      // paid, so the payment-split figures stay right; the rounding penny goes
+      // to the card side, keeping the two adding up to the refund exactly.
+      const share = sale.total ? totals.total / sale.total : 0;
+      const backInCash = Math.round(sale.cashPaid * share * 100) / 100;
+      refund.cashPaid = -backInCash;
+      refund.cardPaid = -(Math.round((totals.total - backInCash) * 100) / 100);
+    }
 
     items.forEach(li => {
       const p = DATA.products.find(pp => pp.id === li.productId);
@@ -1037,7 +1090,6 @@
     await persist();
     renderCatalog();
     if ($('#view-stock').classList.contains('active')) renderStock();
-    renderDaySummary();
     closeModal('#receiptModalOverlay');
 
     const wholeSale = refundableLines(sale).length === 0;
@@ -1092,8 +1144,15 @@
     lines.push(padRow('Tax', fmt(sale.tax)));
     lines.push(padRow('TOTAL', fmt(sale.total)));
     lines.push('');
-    lines.push(padRow((isReturn ? 'Refunded (' : 'Paid (') + sale.paymentMethod + ')', fmt(sale.tendered)));
-    if (!isReturn && sale.paymentMethod === 'Cash') lines.push(padRow('Change', fmt(sale.change)));
+    if (!isReturn && typeof sale.cashPaid === 'number') {
+      // A split sale names both halves rather than their sum, so the receipt
+      // reads the way the money was handed over.
+      lines.push(padRow('Paid (Cash)', fmt(sale.cashPaid)));
+      lines.push(padRow('Paid (Card)', fmt(sale.cardPaid)));
+    } else {
+      lines.push(padRow((isReturn ? 'Refunded (' : 'Paid (') + sale.paymentMethod + ')', fmt(sale.tendered)));
+      if (!isReturn && sale.paymentMethod === 'Cash') lines.push(padRow('Change', fmt(sale.change)));
+    }
     lines.push('-'.repeat(32));
     if (s.receiptFooter) lines.push(center(s.receiptFooter, 32));
     return lines.join('\n');
@@ -2242,14 +2301,19 @@
     const profit = records.reduce((s, r) => s + saleProfit(r), 0);
     const itemsSold = saleRecords.reduce((s, r) => s + r.items.reduce((a, i) => a + i.qty, 0), 0) -
       returnRecords.reduce((s, r) => s + r.items.reduce((a, i) => a + i.qty, 0), 0);
-    const byMethod = (method) => records.filter(r => r.paymentMethod === method).reduce((s, r) => s + r.total, 0);
+    // A sale split across cash and card carries each half on the record; every
+    // other record is its whole total on the one method it names. Refund
+    // records are negative, so they come off the same way.
+    const cashPart = (r) => (typeof r.cashPaid === 'number' ? r.cashPaid : (r.paymentMethod === 'Cash' ? r.total : 0));
+    const cardPart = (r) => (typeof r.cardPaid === 'number' ? r.cardPaid : (r.paymentMethod === 'Card' ? r.total : 0));
+    const otherPart = (r) => (r.paymentMethod === 'Other' ? r.total : 0);
     return {
       key, period, total, profit, itemsSold,
       transactions: saleRecords.length,
       refunds: returnRecords.length,
-      cash: byMethod('Cash'),
-      card: byMethod('Card'),
-      other: byMethod('Other')
+      cash: records.reduce((s, r) => s + cashPart(r), 0),
+      card: records.reduce((s, r) => s + cardPart(r), 0),
+      other: records.reduce((s, r) => s + otherPart(r), 0)
     };
   }
 
@@ -2311,22 +2375,6 @@
         <span class="bar-value">${money(e.value)}</span>
       </div>
     `).join('');
-  }
-
-  // ---------------- Till day summary (visible in Client mode, screenshot-friendly) ----------------
-
-  function renderDaySummary() {
-    if (!DATA) return;
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const t = computePeriodTotals(todayKey, 'day');
-    const totalEl = $('#dsTotal');
-    if (!totalEl) return;
-    totalEl.textContent = money(t.total);
-    $('#dsCash').textContent = money(t.cash);
-    $('#dsCard').textContent = money(t.card);
-    const otherWrap = $('#dsOtherWrap');
-    if (t.other) { otherWrap.style.display = 'flex'; $('#dsOther').textContent = money(t.other); }
-    else { otherWrap.style.display = 'none'; }
   }
 
   // ---------------- Dashboard ----------------
@@ -2956,7 +3004,6 @@
     cart = [];
     renderCart();
     renderCatalog();
-    renderDaySummary();
     refreshHeldButton();
     renderSettings();
     toast('Sales & stock have been reset.');
@@ -3141,7 +3188,6 @@
     refreshHeldButton();
     renderCatalog();
     renderCart();
-    renderDaySummary();
     focusScanTarget();
 
     $$('.modal-overlay').forEach(ov => {
