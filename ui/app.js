@@ -784,7 +784,19 @@
       });
     });
     $('#tenderedInput').addEventListener('input', updateChange);
-    $('#splitCashInput').addEventListener('input', updateChange);
+    $('#splitCashInput').addEventListener('input', () => mirrorSplit('cash'));
+    $('#splitCardInput').addEventListener('input', () => mirrorSplit('card'));
+    $('#quickCashRow').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-amount]');
+      if (!btn) return;
+      if (currentPaymentMethod() === 'Split') {
+        $('#splitCashInput').value = btn.dataset.amount;
+        mirrorSplit('cash');
+      } else {
+        $('#tenderedInput').value = btn.dataset.amount;
+        updateChange();
+      }
+    });
     $('#chargeConfirmBtn').addEventListener('click', completeSale);
   }
 
@@ -793,6 +805,7 @@
     $('#chargeTotalDisplay').textContent = fmt(t.total);
     $('#tenderedInput').value = '';
     $('#splitCashInput').value = '';
+    $('#splitCardInput').value = '';
     $$('#paymentMethodSeg .seg-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
     syncChargeFields();
     openModal('#chargeModalOverlay');
@@ -809,21 +822,67 @@
   function syncChargeFields() {
     const method = currentPaymentMethod();
     $('#tenderedField').style.display = method === 'Cash' ? 'flex' : 'none';
+    $('#quickCashRow').style.display = method === 'Cash' || method === 'Split' ? 'flex' : 'none';
     $('#splitFields').style.display = method === 'Split' ? 'block' : 'none';
+    if (method === 'Split' && !$('#splitCashInput').value && !$('#splitCardInput').value) {
+      // The card starts with the whole total, so entering the cash part is the
+      // only typing most split sales need.
+      $('#splitCardInput').value = splitTotal().toFixed(2);
+    }
+    renderQuickCash();
+    updateChange();
+  }
+
+  // The round sums a cashier is most likely to be handed, as one-tap buttons:
+  // the exact total first, then the next note up for each common denomination.
+  const QUICK_NOTES = [20, 50, 100, 200];
+
+  // Split amounts are money, so they are worked in whole cents: tax can land a
+  // cart total on a half-cent, and the two halves would otherwise end up a
+  // cent apart from the figure the dialog shows.
+  function splitTotal() { return Math.round(cartTotals().total * 100) / 100; }
+
+  function renderQuickCash() {
+    const row = $('#quickCashRow');
+    if (!row) return;
+    const total = splitTotal();
+    const amounts = [];
+    const seen = new Set();
+    const push = (v) => {
+      const r = Math.round(v * 100) / 100;
+      if (r <= 0 || seen.has(r)) return;
+      seen.add(r);
+      amounts.push(r);
+    };
+    push(total);
+    QUICK_NOTES.forEach(note => push(Math.ceil(total / note) * note));
+    row.innerHTML = amounts.slice(0, 4).map((v, i) =>
+      '<button type="button" class="quick-cash' + (i === 0 ? ' quick-cash-exact' : '') + '" data-amount="' + v.toFixed(2) + '">' +
+        (i === 0 ? 'Exact — ' : '') + money(v) + '</button>'
+    ).join('');
+  }
+
+  // Both halves of a split sale are editable: type either one and the other
+  // becomes the rest, so the sale always adds up without anyone doing
+  // arithmetic at the counter.
+  function mirrorSplit(from) {
+    const total = splitTotal();
+    const edit = from === 'cash' ? $('#splitCashInput') : $('#splitCardInput');
+    const other = from === 'cash' ? $('#splitCardInput') : $('#splitCashInput');
+    const v = Math.round((parseFloat(edit.value) || 0) * 100) / 100;
+    other.value = Math.max(0, Math.round((total - v) * 100) / 100).toFixed(2);
     updateChange();
   }
 
   function updateChange() {
     const method = currentPaymentMethod();
     if (method === 'Split') {
-      // The cash box carries what is being paid in cash; the card takes the
-      // rest, shown as it changes. Cash past the total is a cash sale with
-      // change — that is what the cashier means when they type it — so the
-      // change line comes out then, and only then.
-      const t = cartTotals();
+      // The two halves are mirrored, so their sum is normally the total; money
+      // past the total is change handed back out of the cash.
+      const total = splitTotal();
       const cash = Math.round((parseFloat($('#splitCashInput').value) || 0) * 100) / 100;
-      $('#splitCardDisplay').textContent = fmt(Math.max(0, Math.round((t.total - cash) * 100) / 100));
-      const change = Math.round((cash - t.total) * 100) / 100;
+      const card = Math.round((parseFloat($('#splitCardInput').value) || 0) * 100) / 100;
+      const change = Math.round((cash + card - total) * 100) / 100;
       if (change > 0) {
         $('#changeDisplay').style.display = 'flex';
         $('#changeAmount').textContent = fmt(change);
@@ -868,19 +927,31 @@
       if (tendered < t.total) { toast('Amount tendered is less than the total.'); return; }
       change = tendered - t.total;
     } else if (chosen === 'Split') {
+      const total = splitTotal();
       const cash = Math.round((parseFloat($('#splitCashInput').value) || 0) * 100) / 100;
-      if (cash > 0 && cash < t.total) {
-        method = 'Cash + Card';
-        cashPaid = cash;
-        cardPaid = Math.round((t.total - cash) * 100) / 100;
-      } else if (cash >= t.total && cash > 0) {
-        // More cash than the total: a plain cash sale with change.
+      const card = Math.round((parseFloat($('#splitCardInput').value) || 0) * 100) / 100;
+      if (cash >= total && cash > 0) {
+        // Enough cash alone: a plain cash sale with change.
         method = 'Cash';
         tendered = cash;
-        change = Math.round((cash - t.total) * 100) / 100;
-      } else {
-        // Nothing in cash: the card takes all of it.
+        change = Math.round((cash - total) * 100) / 100;
+      } else if (card >= total && card > 0) {
+        // Nothing left for the cash to do: the card takes all of it.
         method = 'Card';
+      } else if (cash > 0 && card > 0) {
+        if (cash + card < total - 0.005) { toast('Cash and card together are less than the total.'); return; }
+        const over = Math.round((cash + card - total) * 100) / 100;
+        method = 'Cash + Card';
+        cashPaid = Math.max(0, Math.round((cash - over) * 100) / 100);
+        cardPaid = card;
+        change = over;
+        tendered = Math.round((total + over) * 100) / 100;
+      } else if (cash + card === 0) {
+        toast('Enter what is being paid in cash and on the card.');
+        return;
+      } else {
+        toast('Cash and card together are less than the total.');
+        return;
       }
     }
 
@@ -1226,11 +1297,20 @@
   }
 
   function showReceiptModal(sale) {
-    $('#receiptPreview').textContent = receiptText(sale);
     const isReturn = sale.type === 'return';
+    const fresh = !isReturn && !currentReceiptIsHistorical;
+    const preview = $('#receiptPreview');
+    preview.textContent = receiptText(sale);
+    // The receipt feeds out of the printer each time it opens: a short reveal
+    // from the top, replayed even when the modal was already on screen.
+    preview.classList.remove('printing', 'printing-refund');
+    void preview.offsetWidth;
+    preview.classList.add('printing');
+    if (isReturn) preview.classList.add('printing-refund');
     $('#receiptModalTitle').textContent = isReturn
       ? 'Refund #' + sale.number
       : (currentReceiptIsHistorical ? 'Sale #' + sale.number : 'Sale complete');
+    $('#receiptModalOverlay .modal-receipt').classList.toggle('fresh-sale', fresh);
     const canRefund = currentReceiptIsHistorical && canRefundSale(sale);
     $('#receiptRefundBtn').style.display = canRefund ? 'inline-flex' : 'none';
     $('#receiptPrintBtn').textContent = currentReceiptIsHistorical ? 'Reprint receipt' : 'Print receipt';
@@ -2047,6 +2127,40 @@
         '<button class="shortcut-clear" data-clear="' + action.id + '" title="Leave this one unbound">✕</button>' +
       '</div>';
     }).join('');
+
+    applyShortcutHints();
+  }
+
+  // The key bound to an action, shown on the button it fires, so a shop that
+  // has set shortcuts can see them without opening Setup. Titles only, so
+  // nothing on screen changes size as keys come and go.
+  const SHORTCUT_HINT_TARGETS = [
+    ['tillCharge', '#chargeBtn'],
+    ['tillHold', '#holdBtn'],
+    ['tillClear', '#clearCartBtn'],
+    ['tillHide', '#hideItemsBtn'],
+    ['tillEmail', '#emailReportBtn'],
+    ['tillFocus', '#productSearch'],
+    ['stockAdd', '#addProductBtn']
+  ];
+
+  function applyShortcutHints() {
+    SHORTCUT_HINT_TARGETS.forEach(pair => {
+      const el = $(pair[1]);
+      if (!el) return;
+      if (el.dataset.hintBase == null) el.dataset.hintBase = el.title || '';
+      const key = boundKeyFor(pair[0]);
+      const base = el.dataset.hintBase;
+      el.title = base + (key ? (base ? ' — ' : '') + key : '');
+    });
+    $$('.nav-btn').forEach(btn => {
+      const view = btn.dataset.view || '';
+      if (!view) return;
+      if (btn.dataset.hintBase == null) btn.dataset.hintBase = btn.title || '';
+      const key = boundKeyFor('view' + view.charAt(0).toUpperCase() + view.slice(1));
+      const base = btn.dataset.hintBase;
+      btn.title = base + (key ? (base ? ' — ' : '') + key : '');
+    });
   }
 
   // ---------------- Automatic backups ----------------
@@ -2167,6 +2281,16 @@
 
   // ---------------- Ledger ----------------
 
+  // A payment method as a small badge, so a split sale stands out from a plain
+  // one at a glance down the Ledger.
+  function paymentBadge(method) {
+    const cls = method === 'Cash' ? 'pay-cash'
+      : method === 'Card' ? 'pay-card'
+      : method === 'Cash + Card' ? 'pay-split'
+      : 'pay-other';
+    return '<span class="pay-badge ' + cls + '">' + escapeHtml(method || '—') + '</span>';
+  }
+
   function renderLedger() {
     const dateVal = $('#ledgerDateFilter').value;
     const body = $('#ledgerTableBody');
@@ -2202,7 +2326,7 @@
           <td>${new Date(sale.date).toLocaleString()}</td>
           <td>${itemCount}</td>
           <td class="num" style="${isReturn ? 'color:var(--stamp-red);' : ''}">${money(sale.total)}</td>
-          <td>${escapeHtml(sale.paymentMethod)}</td>
+          <td>${paymentBadge(sale.paymentMethod)}</td>
           <td><span class="row-link" data-action="print">Reprint</span> <span class="row-link" data-action="view">View</span></td>
         </tr>`;
     }).join('');
@@ -3161,6 +3285,7 @@
     initShortcuts();
     startReportClock();
     startBackupClock();
+    applyShortcutHints();
 
     $('#productSearch').addEventListener('input', debounce(renderCatalog, 80));
     // Enter is handled document-wide by initBarcodeScanning, which reads the box

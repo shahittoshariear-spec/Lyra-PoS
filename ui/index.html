@@ -10,6 +10,10 @@
 </head>
 <body>
 
+  <!-- A slow curtain of colour behind the sky: three huge, soft gradients that
+       drift against each other over a minute or two. Decorative only. -->
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
   <!-- The sky: drawn by starfield.js, behind everything, never in the way.
        Hidden when printing and when the window is not on screen. -->
   <canvas class="starfield" id="starfield" aria-hidden="true"></canvas>
@@ -632,12 +636,10 @@
         <button class="seg-btn" data-method="Split">Cash + Card</button>
       </div>
       <label class="field" id="tenderedField"><span>Amount tendered</span><input type="number" id="tenderedInput" min="0" step="0.01" /></label>
+      <div class="quick-cash-row" id="quickCashRow"></div>
       <div id="splitFields" style="display:none;">
         <label class="field"><span>Paid in cash</span><input type="number" id="splitCashInput" min="0" step="0.01" /></label>
-        <div class="charge-total-display charge-split-card">
-          <span>Charged to card</span>
-          <span id="splitCardDisplay">0.00</span>
-        </div>
+        <label class="field"><span>Charged to card</span><input type="number" id="splitCardInput" min="0" step="0.01" /></label>
       </div>
       <div class="change-display" id="changeDisplay" style="display:none;">
         <span>Change due</span>

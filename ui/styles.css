@@ -1423,9 +1423,6 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .charge-total-display span:first-child,
 .change-display span:first-child { font-size: var(--text-base); color: var(--text-muted); }
 .charge-total-display span:last-child { font-size: var(--text-2xl); font-weight: 700; color: var(--cyan); text-shadow: 0 0 22px rgba(111, 224, 226, 0.3); }
-/* In the split fields the card half is a figure being followed, not the number
-   the sale is about, so it stays quieter than the total due above it. */
-.charge-split-card span:last-child { font-size: var(--text-xl); color: var(--text-ink); text-shadow: none; }
 .change-display { border-top: 1px dashed rgba(127, 176, 255, 0.22); }
 .change-display span:last-child { font-size: var(--text-xl); font-weight: 700; color: var(--mint); text-shadow: 0 0 22px rgba(95, 224, 176, 0.3); }
 
@@ -1877,5 +1874,177 @@ body::after {
   }
 
   /* The sky and the constellation belong to the screen, not the receipt. */
-  .starfield, .splash-screen { display: none !important; }
+  .starfield, .splash-screen, .aurora { display: none !important; }
 }
+
+/* ===========================================================================
+   V2 — the night sky, deepened
+
+   1. An aurora behind the starfield: three enormous, soft gradients drifting
+      against each other. Transform-only animation and no filters, so the
+      whole thing is one composited layer.
+   2. An interaction layer: light crossing a primary button, the nav icon
+      popping as its screen opens, the receipt feeding out of the printer.
+   3. Small motion with meaning — the reveal says "printed", the tick says
+      "this one just happened". Nothing loops in front of a figure.
+   =========================================================================== */
+
+/* ---------------- The aurora ---------------- */
+
+.aurora {
+  position: fixed;
+  inset: -10%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+}
+.aurora i {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  will-change: transform;
+}
+.aurora i:nth-child(1) {
+  width: 66vw; height: 66vw; left: -14vw; top: -24vw;
+  background: radial-gradient(circle at 50% 50%, rgba(47, 106, 228, 0.3), rgba(47, 106, 228, 0.08) 55%, transparent 72%);
+  animation: auroraDriftA 64s ease-in-out infinite alternate;
+}
+.aurora i:nth-child(2) {
+  width: 52vw; height: 52vw; right: -12vw; top: 2vh;
+  background: radial-gradient(circle at 50% 50%, rgba(157, 140, 255, 0.22), rgba(157, 140, 255, 0.06) 55%, transparent 70%);
+  animation: auroraDriftB 78s ease-in-out infinite alternate;
+}
+.aurora i:nth-child(3) {
+  width: 44vw; height: 44vw; left: 18vw; bottom: -18vw;
+  background: radial-gradient(circle at 50% 50%, rgba(111, 224, 226, 0.16), transparent 68%);
+  animation: auroraDriftC 92s ease-in-out infinite alternate;
+}
+@keyframes auroraDriftA {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(7vw, 5vh, 0) scale(1.15); }
+}
+@keyframes auroraDriftB {
+  from { transform: translate3d(0, 0, 0) scale(1.08); }
+  to { transform: translate3d(-6vw, 7vh, 0) scale(0.96); }
+}
+@keyframes auroraDriftC {
+  from { transform: translate3d(0, 0, 0) scale(0.95); }
+  to { transform: translate3d(5vw, -6vh, 0) scale(1.12); }
+}
+
+/* ---------------- The interaction layer ---------------- */
+
+/* A sheet of light crossing a primary button once, as the pointer lands. */
+.btn-primary { position: relative; overflow: hidden; }
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.34) 50%, transparent 65%);
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+.btn-primary:hover:not(:disabled)::after { animation: btnSheen 0.7s var(--ease-out); }
+@keyframes btnSheen {
+  from { transform: translateX(-130%); }
+  to { transform: translateX(130%); }
+}
+
+/* The nav icon pops as its screen opens; the pill slides underneath it. */
+.nav-btn.active .nav-icon { animation: navIconPop 0.5s var(--ease-spring); }
+@keyframes navIconPop {
+  0% { transform: scale(0.8); }
+  60% { transform: scale(1.14); }
+  100% { transform: scale(1.04); }
+}
+
+/* Page headings take the brand's gradient, held still — a till is looked at
+   for a whole shift, so nothing up here shimmers. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .view-head h1 {
+    background: linear-gradient(100deg, #FFFFFF 5%, var(--blue-soft) 60%, #E8EEFA 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* A toast arrives with a small spring rather than a slide. */
+.toast.show { animation: toastPop 0.35s var(--ease-spring-soft); }
+@keyframes toastPop {
+  from { transform: translateX(-50%) translateY(14px) scale(0.96); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+}
+
+/* ---------------- Payment dialog ---------------- */
+
+/* One-tap cash sums under the tendered field: the exact total, then the next
+   note up for each common denomination, so "they handed me R150" is one tap. */
+.quick-cash-row { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: calc(var(--space-4) * -1 + 2px) 0 var(--space-5); }
+.quick-cash {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-ink);
+  border-radius: var(--radius-pill);
+  padding: 5px var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  animation: chipPop var(--dur-slow) var(--ease-spring) backwards;
+}
+.quick-cash:nth-child(2) { animation-delay: 0.03s; }
+.quick-cash:nth-child(3) { animation-delay: 0.06s; }
+.quick-cash:nth-child(4) { animation-delay: 0.09s; }
+.quick-cash:hover { border-color: rgba(127, 176, 255, 0.5); background: rgba(77, 141, 255, 0.12); box-shadow: 0 0 14px rgba(77, 141, 255, 0.18); }
+.quick-cash:active { transform: scale(0.95); }
+.quick-cash-exact { color: var(--cyan); border-color: rgba(111, 224, 226, 0.4); }
+
+/* ---------------- The receipt feeds out ---------------- */
+
+.receipt-preview.printing { animation: receiptFeed 0.6s var(--ease-out-expo); }
+.receipt-preview.printing.printing-refund { animation-name: receiptFeedRefund; }
+@keyframes receiptFeed {
+  0% { clip-path: inset(0 0 100% 0); filter: brightness(1.3); }
+  55% { filter: brightness(1.06); }
+  100% { clip-path: inset(0 0 0 0); filter: brightness(1); }
+}
+@keyframes receiptFeedRefund {
+  0% { clip-path: inset(0 0 100% 0); box-shadow: inset 0 0 60px rgba(249, 115, 22, 0.45); }
+  100% { clip-path: inset(0 0 0 0); box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45); }
+}
+
+/* A fresh sale gets a tick beside its title; a reprint does not. */
+.modal-receipt.fresh-sale h2::after {
+  content: '✓';
+  display: inline-block;
+  margin-left: 10px;
+  color: var(--mint);
+  text-shadow: 0 0 16px rgba(95, 224, 176, 0.65);
+  animation: checkPop 0.5s var(--ease-spring) 0.18s backwards;
+}
+@keyframes checkPop {
+  from { transform: scale(0.2) rotate(-30deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+/* ---------------- Ledger payment badges ---------------- */
+
+.pay-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  white-space: nowrap;
+}
+.pay-cash { color: var(--mint); border-color: rgba(95, 224, 176, 0.35); background: rgba(95, 224, 176, 0.08); }
+.pay-card { color: var(--blue-soft); border-color: rgba(169, 201, 255, 0.35); background: rgba(77, 141, 255, 0.1); }
+.pay-split { color: var(--violet); border-color: rgba(157, 140, 255, 0.42); background: linear-gradient(100deg, rgba(95, 224, 176, 0.1), rgba(77, 141, 255, 0.14)); }
+.pay-other { color: var(--text-muted); }

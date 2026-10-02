@@ -11,9 +11,10 @@
 >    and in the app window.
 > 2. **The app icon** is the same blue/ocean-cyan wave mark (`icons/`).
 > 3. **Versions move in single `0.01` steps**, with a major update now and
->    then — this build is `v1.9.0`, the first major update on top of the Rust
->    rebuild: charts, a configurable Shortcuts screen, automatic backups, and a
->    day report that can send itself.
+>    then — this build is `v2.0.0`, the V2 release: split cash/card payments,
+>    a deeper aurora-lit theme with motion across the screens, over the v1.9
+>    work (charts, Shortcuts, automatic backups, and a day report that can
+>    send itself).
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -54,11 +55,11 @@ so there is no browser to install and no Node.js to install.
 
 - **Till** — search, tap, or scan a barcode to build a sale; hold a sale to
   serve another customer and resume it later; take cash or card payment, or
-  split one sale across both — enter the cash part and the card is worked out
-  as the rest — with automatic change calculation; print or save a receipt. In
-  the payment dialog, Enter completes the sale — type what the customer handed
-  over and press Enter, and the change is worked out for you. Pressing Enter
-  twice in a hurry still records the sale once.
+  split one sale across both — type either side and the other fills in the
+  rest — with automatic change calculation and one-tap cash sums; print or
+  save a receipt. In the payment dialog, Enter completes the sale — type what
+  the customer handed over and press Enter, and the change is worked out for
+  you. Pressing Enter twice in a hurry still records the sale once.
 - **Barcode scanning** — plug in any USB or Bluetooth barcode scanner (the
   cheap kind that "types" like a keyboard). Scan a product at the till to add
   it straight to the cart; scan while adding/editing a product to fill in its
