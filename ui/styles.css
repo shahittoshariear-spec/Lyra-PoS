@@ -784,7 +784,12 @@ input[type=date]::-webkit-calendar-picker-indicator {
      list: a wide tape fits the names and totals that a narrow strip had to
      truncate. */
   grid-template-columns: minmax(0, 1fr) minmax(50%, 1fr);
-  gap: var(--space-10);
+  /* Row one is the search bar, spanning both columns; row two is the list
+     and the tape. The bar stays put when the list is hidden, over the
+     receipt, because a scan has to work whatever the screen is showing. */
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: var(--space-10);
+  row-gap: var(--space-2);
   height: calc(100vh - var(--till-grid-offset));
 }
 
@@ -819,7 +824,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 }
 
 .till-catalog { display: flex; flex-direction: column; min-height: 0; }
-.till-toolbar { margin-bottom: var(--space-2); display: flex; gap: var(--space-4); }
+.till-toolbar { grid-column: 1 / -1; display: flex; gap: var(--space-4); }
 .till-toolbar .search-input { flex: 1; }
 #heldSalesBtn { white-space: nowrap; }
 
@@ -1509,7 +1514,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 
 @media (max-width: 1180px) {
   /* The receipt keeps its half of the window; only the gap tightens. */
-  .till-grid { grid-template-columns: minmax(0, 1fr) minmax(50%, 1fr); gap: var(--space-8); }
+  .till-grid { grid-template-columns: minmax(0, 1fr) minmax(50%, 1fr); column-gap: var(--space-8); }
   .stat-row { grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
   .panel-row, .settings-grid { grid-template-columns: 1fr; }
   .till-action-bar { gap: var(--space-6); }

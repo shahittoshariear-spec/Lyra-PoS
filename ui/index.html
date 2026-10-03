@@ -108,11 +108,15 @@
         </div>
         <div class="till-grid">
 
+          <!-- The search bar spans the whole till — over the product list and
+               the receipt both — and stays put in Hide-items mode, so a scan
+               or a search works whichever way the shop likes the screen. -->
+          <div class="till-toolbar">
+            <input type="text" id="productSearch" class="search-input" placeholder="Search by name, code, or scan a barcode…" autocomplete="off" />
+            <button class="btn btn-ghost" id="heldSalesBtn" style="display:none;">Held <span id="heldCount">0</span></button>
+          </div>
+
           <div class="till-catalog">
-            <div class="till-toolbar">
-              <input type="text" id="productSearch" class="search-input" placeholder="Search by name, code, or scan a barcode…" autocomplete="off" />
-              <button class="btn btn-ghost" id="heldSalesBtn" style="display:none;">Held <span id="heldCount">0</span></button>
-            </div>
             <div class="chip-row" id="categoryChips"></div>
             <div class="product-grid" id="productGrid"></div>
           </div>

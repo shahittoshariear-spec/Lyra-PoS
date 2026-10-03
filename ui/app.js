@@ -571,6 +571,11 @@
   }
 
   function addToCart(product) {
+    // A line whose ✕ was just tapped is on its way off the receipt: the cart
+    // still holds it for the exit animation, but the shop has already said no
+    // to it — so the old line goes now, and this add starts fresh at qty 1.
+    const leaving = pendingLineRemovals.has(product.id);
+    if (leaving) cart = cart.filter(i => i.productId !== product.id);
     const existing = cart.find(i => i.productId === product.id);
     const inCart = existing ? existing.qty : 0;
     if (inCart + 1 > product.stock) {
@@ -579,7 +584,7 @@
     }
     if (existing) existing.qty += 1;
     else cart.push({ productId: product.id, name: product.name, price: product.price, qty: 1 });
-    renderCart(existing ? product.id : null);
+    renderCart(existing || leaving ? product.id : null);
     return true;
   }
 
@@ -602,6 +607,28 @@
   function removeFromCart(productId) {
     cart = cart.filter(i => i.productId !== productId);
     renderCart();
+  }
+
+  // The cart-side half of a line leaving the receipt, kept by product so a
+  // re-add can cancel it: tapping ✕ by mistake and adding the item straight
+  // back must not have the removal timer take the new add off the till.
+  const pendingLineRemovals = new Map();
+
+  // Sends a row off the receipt: the animation runs, the cart follows a moment
+  // later, and the row leaves the DOM just after that. Every timer is stored on
+  // the row (and, for the cart, by product) so renderCart can cancel both if
+  // the item comes back — otherwise the price lands on the total with no line
+  // under it, which is exactly the bug this replaces.
+  function startLineExit(row, productId) {
+    row.classList.add('line-exit');
+    if (row._exitTimer) clearTimeout(row._exitTimer);
+    row._exitTimer = setTimeout(() => { row._exitTimer = null; row.remove(); }, 220);
+    const pending = pendingLineRemovals.get(productId);
+    if (pending) clearTimeout(pending);
+    pendingLineRemovals.set(productId, setTimeout(() => {
+      pendingLineRemovals.delete(productId);
+      removeFromCart(productId);
+    }, 200));
   }
 
   function cartTotals() {
@@ -627,10 +654,7 @@
     `;
     row.querySelector('[data-act=inc]').addEventListener('click', () => changeQty(item.productId, 1));
     row.querySelector('[data-act=dec]').addEventListener('click', () => changeQty(item.productId, -1));
-    row.querySelector('[data-act=rm]').addEventListener('click', () => {
-      row.classList.add('line-exit');
-      setTimeout(() => removeFromCart(item.productId), 200);
-    });
+    row.querySelector('[data-act=rm]').addEventListener('click', () => startLineExit(row, item.productId));
     row.addEventListener('animationend', (e) => { if (e.animationName === 'lineEnter') row.classList.remove('line-enter'); });
     return row;
   }
@@ -656,9 +680,18 @@
         let row = existingRows[item.productId];
         if (!row) {
           row = buildCartRow(item);
-          const ref = wrap.children[idx] || null;
-          wrap.insertBefore(row, ref);
         } else {
+          // The row may have been on its way out — tapped off and then added
+          // back — so both timers are stopped and it re-enters rather than
+          // staying invisible with its price still on the total.
+          const pending = pendingLineRemovals.get(item.productId);
+          if (pending) { clearTimeout(pending); pendingLineRemovals.delete(item.productId); }
+          if (row._exitTimer) { clearTimeout(row._exitTimer); row._exitTimer = null; }
+          if (row.classList.contains('line-exit')) {
+            row.classList.remove('line-exit', 'line-enter');
+            void row.offsetWidth;
+            row.classList.add('line-enter');
+          }
           row.querySelector('.tape-line-qty-num').textContent = item.qty;
           row.querySelector('.tape-line-total').textContent = fmt(item.price * item.qty);
           if (pulseProductId === item.productId) {
@@ -667,6 +700,11 @@
             row.classList.add('pulse');
           }
         }
+        // The tape is drawn in cart order: a re-added item may be holding a row
+        // that a removal left further up the list, and inserting a row where it
+        // already is costs nothing.
+        const ref = wrap.children[idx] || null;
+        if (ref !== row) wrap.insertBefore(row, ref);
       });
 
       Object.keys(existingRows).forEach(pid => {
@@ -674,7 +712,7 @@
           const row = existingRows[pid];
           if (!row.classList.contains('line-exit')) {
             row.classList.add('line-exit');
-            setTimeout(() => row.remove(), 220);
+            row._exitTimer = setTimeout(() => { row._exitTimer = null; row.remove(); }, 220);
           }
         }
       });
