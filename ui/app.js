@@ -631,6 +631,65 @@
     }, 200));
   }
 
+  // True when the line's price is not the product's own — a price set for this
+  // one sale. The tape never points it out to the customer; only the violet pen
+  // says anything, and only to the cashier.
+  function lineIsPriceEdited(item) {
+    const product = DATA.products.find(p => p.id === item.productId);
+    return !!product && Math.abs(product.price - item.price) > 0.005;
+  }
+
+  // The pen on a line: a price for this sale alone, leaving the product's own
+  // price — and every future sale — untouched.
+  let priceEditPid = null;
+
+  function openPriceEdit(productId) {
+    const item = cart.find(i => i.productId === productId);
+    if (!item) return;
+    priceEditPid = productId;
+    const product = DATA.products.find(p => p.id === productId);
+    $('#priceEditName').textContent = item.name;
+    $('#priceEditNote').textContent = product
+      ? ' — normal price ' + money(product.price) + '. This price is for this sale only.'
+      : '. This price is for this sale only.';
+    const input = $('#priceEditInput');
+    input.value = item.price.toFixed(2);
+    $('#priceResetBtn').style.display = lineIsPriceEdited(item) ? '' : 'none';
+    openModal('#priceModalOverlay');
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+  }
+
+  function applyPriceEdit() {
+    const item = cart.find(i => i.productId === priceEditPid);
+    if (!item) { closeModal('#priceModalOverlay'); return; }
+    const raw = parseFloat($('#priceEditInput').value);
+    if (isNaN(raw) || raw < 0) { toast('Enter a price of 0 or more.'); return; }
+    item.price = Math.round(raw * 100) / 100;
+    renderCart(item.productId);
+    closeModal('#priceModalOverlay');
+    toast('Price for this sale: ' + money(item.price) + '.');
+  }
+
+  function resetPriceEdit() {
+    const item = cart.find(i => i.productId === priceEditPid);
+    if (!item) { closeModal('#priceModalOverlay'); return; }
+    const product = DATA.products.find(p => p.id === item.productId);
+    if (product) item.price = product.price;
+    renderCart(item.productId);
+    closeModal('#priceModalOverlay');
+    toast('Back to the normal price.');
+  }
+
+  function initPriceEdit() {
+    $('#priceApplyBtn').addEventListener('click', applyPriceEdit);
+    $('#priceCancelBtn').addEventListener('click', () => closeModal('#priceModalOverlay'));
+    $('#priceResetBtn').addEventListener('click', resetPriceEdit);
+    $('#priceEditInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); applyPriceEdit(); }
+      if (e.key === 'Escape') closeModal('#priceModalOverlay');
+    });
+  }
+
   function cartTotals() {
     const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
     const tax = subtotal * (DATA.settings.taxRate / 100);
@@ -650,10 +709,13 @@
         <button class="qty-btn" data-act="inc">+</button>
       </span>
       <span class="tape-line-total">${fmt(item.price * item.qty)}</span>
+      <span class="tape-line-edit" data-act="edit" title="Change the price for this sale only">✎</span>
       <span class="tape-line-remove" data-act="rm">✕</span>
     `;
+    row.classList.toggle('price-edited', lineIsPriceEdited(item));
     row.querySelector('[data-act=inc]').addEventListener('click', () => changeQty(item.productId, 1));
     row.querySelector('[data-act=dec]').addEventListener('click', () => changeQty(item.productId, -1));
+    row.querySelector('[data-act=edit]').addEventListener('click', () => openPriceEdit(item.productId));
     row.querySelector('[data-act=rm]').addEventListener('click', () => startLineExit(row, item.productId));
     row.addEventListener('animationend', (e) => { if (e.animationName === 'lineEnter') row.classList.remove('line-enter'); });
     return row;
@@ -692,6 +754,7 @@
             void row.offsetWidth;
             row.classList.add('line-enter');
           }
+          row.classList.toggle('price-edited', lineIsPriceEdited(item));
           row.querySelector('.tape-line-qty-num').textContent = item.qty;
           row.querySelector('.tape-line-total').textContent = fmt(item.price * item.qty);
           if (pulseProductId === item.productId) {
@@ -2803,6 +2866,86 @@
     body.appendChild(fragment);
   }
 
+  // ---------------- Appearance (Setup → Themes) ----------------
+
+  // Each choice is an id written into the data file and one attribute on
+  // <html>; the stylesheet carries the look itself, so a click re-skins every
+  // screen — charts and the night sky included — in the same frame.
+  const THEME_CHOICES = [
+    { id: 'midnight', name: 'Midnight', note: 'The original deep blue' },
+    { id: 'galaxy', name: 'Purple Galaxy', note: 'Violet, pink and deep space' },
+    { id: 'cosmos', name: 'Green Cosmos', note: 'Emerald and starlight' }
+  ];
+  const FONT_CHOICES = [
+    { id: 'segoe', name: 'Segoe UI', note: 'The app font' },
+    { id: 'calibri', name: 'Calibri', note: 'Softer and rounder' },
+    { id: 'georgia', name: 'Georgia', note: 'A warm serif' },
+    { id: 'trebuchet', name: 'Trebuchet MS', note: 'Friendly and wide' },
+    { id: 'mono', name: 'Cascadia Mono', note: 'Everything typewriter' }
+  ];
+  const SIZE_CHOICES = ['compact', 'normal', 'large', 'huge'];
+
+  function currentThemeId() {
+    return THEME_CHOICES.some(t => t.id === DATA.settings.theme) ? DATA.settings.theme : 'midnight';
+  }
+  function currentFontId() {
+    return FONT_CHOICES.some(f => f.id === DATA.settings.fontFamily) ? DATA.settings.fontFamily : 'segoe';
+  }
+  function currentSizeId() {
+    return SIZE_CHOICES.includes(DATA.settings.fontSize) ? DATA.settings.fontSize : 'normal';
+  }
+
+  function applyAppearance() {
+    if (!DATA || !DATA.settings) return;
+    document.documentElement.dataset.theme = currentThemeId();
+    document.documentElement.dataset.font = currentFontId();
+    document.documentElement.dataset.size = currentSizeId();
+  }
+
+  function renderAppearanceControls() {
+    const themes = $('#themeCards');
+    if (themes) {
+      themes.innerHTML = THEME_CHOICES.map(t =>
+        '<button type="button" class="theme-card' + (t.id === currentThemeId() ? ' active' : '') + '" data-theme="' + t.id + '">' +
+          '<span class="theme-swatch theme-swatch-' + t.id + '" aria-hidden="true"><i></i><i></i><i></i></span>' +
+          '<span class="theme-card-text"><span class="theme-card-name">' + t.name + '</span>' +
+          '<span class="theme-card-note">' + t.note + '</span></span>' +
+        '</button>'
+      ).join('');
+    }
+    const fonts = $('#fontCards');
+    if (fonts) {
+      fonts.innerHTML = FONT_CHOICES.map(f =>
+        '<button type="button" class="font-card' + (f.id === currentFontId() ? ' active' : '') + '" data-font="' + f.id + '">' +
+          '<span class="font-card-preview" style="font-family: var(--font-choice-' + f.id + ')">Aa</span>' +
+          '<span class="theme-card-text"><span class="theme-card-name">' + f.name + '</span>' +
+          '<span class="theme-card-note">' + f.note + '</span></span>' +
+        '</button>'
+      ).join('');
+    }
+    $$('#sizeSeg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.size === currentSizeId()));
+  }
+
+  // Wiring, once. Every choice is applied the moment it is clicked and then
+  // saved, so what the shop sees is what comes back on the next launch.
+  function initAppearanceControls() {
+    const pick = (selector, attr, key) => {
+      const host = $(selector);
+      if (!host) return;
+      host.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[' + attr + ']');
+        if (!btn) return;
+        DATA.settings[key] = btn.getAttribute(attr);
+        applyAppearance();
+        await persist();
+        renderAppearanceControls();
+      });
+    };
+    pick('#themeCards', 'data-theme', 'theme');
+    pick('#fontCards', 'data-font', 'fontFamily');
+    pick('#sizeSeg', 'data-size', 'fontSize');
+  }
+
   // ---------------- Settings ----------------
 
   function renderSettings() {
@@ -2827,6 +2970,7 @@
     $('#setBackupAuto').checked = s.backupAuto !== false;
     $('#setBackupEvery').value = s.backupEvery || 'week';
     renderShortcutList();
+    renderAppearanceControls();
     refreshBackupStatus();
     refreshMailStatus();
     renderSettingsCategoryChips();
@@ -3064,6 +3208,17 @@
       toast('Shortcut set to fire on ' + (sel.value === 'hold' ? 'hold.' : 'press.'));
     });
 
+    // Setup's two tabs: the shop's paperwork, and how the app looks.
+    $$('#settingsTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('#settingsTabs .seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        $('#settingsTabShop').style.display = btn.dataset.tab === 'shop' ? '' : 'none';
+        $('#settingsTabThemes').style.display = btn.dataset.tab === 'themes' ? '' : 'none';
+      });
+    });
+    initAppearanceControls();
+
     $('#testPrintBtn').addEventListener('click', async () => {
       const printer = $('#setPrinter').value;
       if (!printer) { toast('Pick a printer above first.'); return; }
@@ -3298,6 +3453,7 @@
     if (!Array.isArray(DATA.reportQueue)) DATA.reportQueue = [];
     if (!DATA.settings.adminKeyHash) DATA.settings.adminKeyHash = '';
     applyShopIdentity();
+    applyAppearance();
 
     initNav();
     updateNavPill();
@@ -3307,6 +3463,7 @@
     initCatalogToggle();
     initHeldSales();
     initChargeModal();
+    initPriceEdit();
     initReceiptModal();
     initRefundModal();
     initStockView();

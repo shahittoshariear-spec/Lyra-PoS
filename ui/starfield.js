@@ -41,16 +41,29 @@
   ];
   const LYRA_LINES = [[1, 2], [2, 3], [3, 4], [4, 1], [0, 1], [0, 4]];
 
-  const COOL = '220,233,255';
-  const WARM = '255,206,150';
-  const LINE = '127,176,255';
+  // One set of colours per theme, so the sky belongs to the shop's choice:
+  // the same stars, seen through a different atmosphere. The sprites are
+  // built once per palette, on first use.
+  const PALETTES = {
+    midnight: { cool: '220,233,255', warm: '255,206,150', line: '127,176,255', sprites: null },
+    galaxy: { cool: '232,214,255', warm: '255,188,226', line: '178,140,255', sprites: null },
+    cosmos: { cool: '214,255,234', warm: '255,240,170', line: '96,220,152', sprites: null }
+  };
+
+  function palette() {
+    return PALETTES[document.documentElement.dataset.theme] || PALETTES.midnight;
+  }
+
+  function paletteSprites(p) {
+    if (!p.sprites) p.sprites = { cool: makeSprite(p.cool), warm: makeSprite(p.warm) };
+    return p.sprites;
+  }
 
   const DPR_CAP = 2;
   const FRAME_MS = 1000 / 30;
 
   let w = 0, h = 0;
   let stars = [];
-  let coolSprite = null, warmSprite = null;
   let parallax = { x: 0, y: 0 };          // smoothed
   let parallaxTarget = { x: 0, y: 0 };    // where the pointer is
   let rafId = 0;
@@ -86,19 +99,19 @@
   }
 
   // The four-point sparkle on Vega: two hairlines fading out from the centre.
-  function flare(x, y, len, alpha) {
+  function flare(x, y, len, alpha, rgb) {
     const fade = alpha.toFixed(3);
     const across = ctx.createLinearGradient(x - len, y, x + len, y);
-    across.addColorStop(0, 'rgba(' + COOL + ',0)');
-    across.addColorStop(0.5, 'rgba(' + COOL + ',' + fade + ')');
-    across.addColorStop(1, 'rgba(' + COOL + ',0)');
+    across.addColorStop(0, 'rgba(' + rgb + ',0)');
+    across.addColorStop(0.5, 'rgba(' + rgb + ',' + fade + ')');
+    across.addColorStop(1, 'rgba(' + rgb + ',0)');
     ctx.fillStyle = across;
     ctx.fillRect(x - len, y - 0.5, len * 2, 1);
 
     const down = ctx.createLinearGradient(x, y - len, x, y + len);
-    down.addColorStop(0, 'rgba(' + COOL + ',0)');
-    down.addColorStop(0.5, 'rgba(' + COOL + ',' + fade + ')');
-    down.addColorStop(1, 'rgba(' + COOL + ',0)');
+    down.addColorStop(0, 'rgba(' + rgb + ',0)');
+    down.addColorStop(0.5, 'rgba(' + rgb + ',' + fade + ')');
+    down.addColorStop(1, 'rgba(' + rgb + ',0)');
     ctx.fillStyle = down;
     ctx.fillRect(x - 0.5, y - len, 1, len * 2);
   }
@@ -154,6 +167,8 @@
 
   function draw(now) {
     ctx.clearRect(0, 0, w, h);
+    const p = palette();
+    const sprites = paletteSprites(p);
 
     // The whole sky leans a few pixels against the pointer. Tiny on purpose:
     // enough to feel like depth, not enough to be noticed moving.
@@ -171,7 +186,7 @@
       x = ((x % w) + w) % w;
       y = ((y % h) + h) % h;
       const depth = 0.4 + s.r * 0.5;
-      stamp(s.warm ? warmSprite : coolSprite, x + px * depth, y + py * depth, s.r * 2.6, s.alpha * twinkle);
+      stamp(s.warm ? sprites.warm : sprites.cool, x + px * depth, y + py * depth, s.r * 2.6, s.alpha * twinkle);
     }
 
     // ---- Lyra ----
@@ -180,7 +195,7 @@
     const ly = py * 1.2;
 
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(' + LINE + ',' + (0.15 + breathe).toFixed(3) + ')';
+    ctx.strokeStyle = 'rgba(' + p.line + ',' + (0.15 + breathe).toFixed(3) + ')';
     ctx.beginPath();
     for (let i = 0; i < LYRA_LINES.length; i++) {
       const a = LYRA[LYRA_LINES[i][0]];
@@ -199,8 +214,8 @@
 
       // Halo, flare on the bright one, then a hard core: without the core the
       // stars read as smudges, and without the flare they read as dust.
-      stamp(s.warm ? warmSprite : coolSprite, x, y, s.r * 5, (isVega ? 0.9 : 0.6) * twinkle);
-      if (isVega) flare(x, y, 13, 0.3 * twinkle);
+      stamp(s.warm ? sprites.warm : sprites.cool, x, y, s.r * 5, (isVega ? 0.9 : 0.6) * twinkle);
+      if (isVega) flare(x, y, 13, 0.3 * twinkle, p.cool);
 
       ctx.globalAlpha = Math.min(1, twinkle * (isVega ? 1 : 0.72));
       ctx.fillStyle = s.warm ? '#FFE7C9' : '#F4F8FF';
@@ -220,8 +235,8 @@
       const tailY = headY - meteor.vy * 0.12;
       const fade = Math.sin(life * Math.PI);
       const grad = ctx.createLinearGradient(tailX, tailY, headX, headY);
-      grad.addColorStop(0, 'rgba(' + COOL + ',0)');
-      grad.addColorStop(1, 'rgba(' + COOL + ',' + (0.5 * fade).toFixed(3) + ')');
+      grad.addColorStop(0, 'rgba(' + p.cool + ',0)');
+      grad.addColorStop(1, 'rgba(' + p.cool + ',' + (0.5 * fade).toFixed(3) + ')');
       ctx.strokeStyle = grad;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -306,8 +321,6 @@
     else if (motionQuery.addListener) motionQuery.addListener(onChange);
   }
 
-  coolSprite = makeSprite(COOL);
-  warmSprite = makeSprite(WARM);
   resize();
   start();
 })();

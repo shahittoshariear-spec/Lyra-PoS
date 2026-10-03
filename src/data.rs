@@ -75,6 +75,15 @@ fn default_backup_every() -> String {
     // readable; a week is the middle of what Setup offers.
     "week".to_string()
 }
+fn default_theme() -> String {
+    "midnight".to_string()
+}
+fn default_font_family() -> String {
+    "segoe".to_string()
+}
+fn default_font_size() -> String {
+    "normal".to_string()
+}
 
 /// One key the shop has bound in Setup, as the screens wrote it. The shape is
 /// theirs; this end only has to keep it.
@@ -126,6 +135,12 @@ pub struct Settings {
     /// The shop's own keyboard shortcuts, by action id, exactly as Setup wrote
     /// them. Opaque here: only the screens know what an action does.
     pub shortcuts: BTreeMap<String, ShortcutBinding>,
+    /// The look of the screens, chosen in Setup → Themes: a theme id, a font id
+    /// and a text size id. Kept as written; the screens fall back to their
+    /// defaults for anything they do not recognise.
+    pub theme: String,
+    pub font_family: String,
+    pub font_size: String,
 }
 
 impl Default for Settings {
@@ -150,6 +165,9 @@ impl Default for Settings {
             backup_auto: true,
             backup_every: default_backup_every(),
             shortcuts: BTreeMap::new(),
+            theme: default_theme(),
+            font_family: default_font_family(),
+            font_size: default_font_size(),
         }
     }
 }
@@ -661,6 +679,9 @@ mod tests {
         assert_eq!(data.settings.backup_every, "week");
         assert_eq!(data.settings.mail_port, 465);
         assert!(data.settings.shortcuts.is_empty());
+        assert_eq!(data.settings.theme, "midnight");
+        assert_eq!(data.settings.font_family, "segoe");
+        assert_eq!(data.settings.font_size, "normal");
         assert!(data.last_backup_at.is_none());
         assert_eq!(data.last_auto_report, "");
         assert!(data.report_queue.is_empty());
@@ -682,6 +703,9 @@ mod tests {
                 "reportAutoTime": "17:45",
                 "backupAuto": true,
                 "backupEvery": "day",
+                "theme": "galaxy",
+                "fontFamily": "georgia",
+                "fontSize": "large",
                 "shortcuts": {
                     "tillCharge": { "key": "F9", "mode": "press" },
                     "stockDelete": { "key": "", "mode": "hold" }
@@ -699,6 +723,9 @@ mod tests {
         assert!(!back.settings.report_auto);
         assert_eq!(back.settings.report_auto_time, "17:45");
         assert_eq!(back.settings.backup_every, "day");
+        assert_eq!(back.settings.theme, "galaxy");
+        assert_eq!(back.settings.font_family, "georgia");
+        assert_eq!(back.settings.font_size, "large");
         assert_eq!(back.settings.shortcuts["tillCharge"].key, "F9");
         assert_eq!(back.settings.shortcuts["tillCharge"].mode, "press");
         assert_eq!(back.settings.shortcuts["stockDelete"].key, "");

@@ -359,6 +359,12 @@
           </div>
         </div>
 
+        <div class="segmented settings-tabs" id="settingsTabs">
+          <button class="seg-btn active" data-tab="shop">Shop</button>
+          <button class="seg-btn" data-tab="themes">Themes</button>
+        </div>
+
+        <div class="settings-tab" id="settingsTabShop">
         <div class="settings-grid">
           <div class="panel">
             <h2>Shop details</h2>
@@ -520,6 +526,32 @@
             </div>
           </div>
         </div>
+        </div>
+
+        <div class="settings-tab" id="settingsTabThemes" style="display:none;">
+          <div class="settings-grid">
+            <div class="panel panel-full">
+              <h2>Theme</h2>
+              <p class="panel-note">The colours of every screen. Each one is a full re-skin — the panels, the buttons, the charts and the night sky all follow it.</p>
+              <div class="theme-cards" id="themeCards"></div>
+            </div>
+            <div class="panel">
+              <h2>Font</h2>
+              <p class="panel-note">What the shop reads all day. Figures and receipts stay monospaced unless you pick the typewriter face, which sets the whole app in it.</p>
+              <div class="font-cards" id="fontCards"></div>
+            </div>
+            <div class="panel">
+              <h2>Text size</h2>
+              <p class="panel-note">Grows every label, figure and button in the app — handy on a screen that sits across the counter.</p>
+              <div class="segmented" id="sizeSeg">
+                <button class="seg-btn" data-size="compact">Compact</button>
+                <button class="seg-btn active" data-size="normal">Normal</button>
+                <button class="seg-btn" data-size="large">Large</button>
+                <button class="seg-btn" data-size="huge">Extra large</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
     </main>
@@ -653,6 +685,22 @@
         <div class="modal-actions-right">
           <button class="btn btn-ghost" id="chargeCancelBtn">Cancel</button>
           <button class="btn btn-primary" id="chargeConfirmBtn">Complete sale</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Price edit modal: a price for this sale only, not the product's -->
+  <div class="modal-overlay" id="priceModalOverlay">
+    <div class="modal modal-narrow">
+      <h2>Edit price</h2>
+      <p class="panel-note"><strong id="priceEditName"></strong><span id="priceEditNote"></span></p>
+      <label class="field"><span>Price for this sale</span><input type="number" id="priceEditInput" min="0" step="0.01" /></label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="priceResetBtn" style="display:none;">Use normal price</button>
+        <div class="modal-actions-right">
+          <button class="btn btn-ghost" id="priceCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="priceApplyBtn">Apply</button>
         </div>
       </div>
     </div>
