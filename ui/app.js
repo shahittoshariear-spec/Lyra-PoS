@@ -29,6 +29,12 @@
     return DATA.settings.currency + (v < 0 ? '-' : '') + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + parts[1];
   }
   function fmt(n) { return Number(n || 0).toFixed(2); }
+
+  // A whole number with a comma every three digits — "1,204" rather than
+  // "1204" — for counts that grow past a thousand.
+  function groupedInt(n) {
+    return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
   function uid(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function nextProductId() { return 'p' + (DATA.nextProductId++); }
 
@@ -2905,8 +2911,8 @@
     animateStatNumber('#statTodayProfit', t.profit, moneyGrouped);
     const marginPct = t.total !== 0 ? (t.profit / t.total) * 100 : 0;
     animateStatNumber('#statTodayMargin', marginPct, (v) => v.toFixed(1) + '%');
-    animateStatNumber('#statTodayCount', t.transactions, (v) => Math.round(v).toString());
-    animateStatNumber('#statTodayItems', t.itemsSold, (v) => Math.round(v).toString());
+    animateStatNumber('#statTodayCount', t.transactions, groupedInt);
+    animateStatNumber('#statTodayItems', t.itemsSold, groupedInt);
 
     const lowStockItems = lowStockProducts();
     $('#statLowStock').textContent = lowStockItems.length;
@@ -2935,7 +2941,7 @@
     const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const rankList = $('#topSellersList');
     rankList.innerHTML = ranked.length
-      ? ranked.map(([name, qty], i) => `<li><span class="rank-num">${i + 1}.</span>${escapeHtml(name)} — ${qty} sold</li>`).join('')
+      ? ranked.map(([name, qty], i) => `<li><span class="rank-num">${i + 1}.</span>${escapeHtml(name)} — ${groupedInt(qty)} sold</li>`).join('')
       : `<li class="plain-empty">No sales ${phrase} yet.</li>`;
 
     renderLowStockList(lowStockItems);
@@ -2974,13 +2980,13 @@
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${label}</td>
-        <td class="num">${money(dt.total)}</td>
-        <td class="num">${money(dt.cash)}</td>
-        <td class="num">${money(dt.card)}</td>${splitOther ? `
-        <td class="num">${money(dt.other)}</td>` : ''}
-        <td class="num" style="${dt.profit < 0 ? 'color:var(--stamp-red);' : ''}">${money(dt.profit)}</td>
+        <td class="num">${moneyGrouped(dt.total)}</td>
+        <td class="num">${moneyGrouped(dt.cash)}</td>
+        <td class="num">${moneyGrouped(dt.card)}</td>${splitOther ? `
+        <td class="num">${moneyGrouped(dt.other)}</td>` : ''}
+        <td class="num" style="${dt.profit < 0 ? 'color:var(--stamp-red);' : ''}">${moneyGrouped(dt.profit)}</td>
         <td class="num" style="${margin < 0 ? 'color:var(--stamp-red);' : ''}">${margin.toFixed(1)}%</td>
-        <td class="num">${dt.transactions}${dt.refunds ? ` <span class="text-muted-inline">(${dt.refunds} refund${dt.refunds > 1 ? 's' : ''})</span>` : ''}</td>
+        <td class="num">${groupedInt(dt.transactions)}${dt.refunds ? ` <span class="text-muted-inline">(${groupedInt(dt.refunds)} refund${dt.refunds > 1 ? 's' : ''})</span>` : ''}</td>
       `;
       fragment.appendChild(tr);
     });
@@ -4010,14 +4016,31 @@
     hideSplash();
   }
 
+  // A short title sequence opens the app: the constellation draws itself, the
+  // mark lands with a band of light across it, the ribbons of its ring trace
+  // past, and the whole figure leans into the screen. About two and a half
+  // seconds of it, and any key or click ends it at once — a shop that opens the
+  // till twenty times a day should never have to sit through it.
+  const SPLASH_MS = 2450;
+
   function hideSplash() {
     const el = $('#splashScreen');
     if (!el) return;
-    // Minimum show time so it reads as a real splash, not a flash.
-    setTimeout(() => {
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let done = false;
+    let timer = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      window.removeEventListener('keydown', finish, true);
+      window.removeEventListener('pointerdown', finish, true);
       el.classList.add('hide');
       setTimeout(() => el.remove(), 550);
-    }, 950);
+    };
+    timer = setTimeout(finish, still ? 400 : SPLASH_MS);
+    window.addEventListener('keydown', finish, true);
+    window.addEventListener('pointerdown', finish, true);
   }
 
   document.addEventListener('DOMContentLoaded', boot);

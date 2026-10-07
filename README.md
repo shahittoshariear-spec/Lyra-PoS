@@ -9,14 +9,16 @@
 >
 > 1. **The S.S. / “Shariear's Software” credit** still shows on the splash screen
 >    and in the app window.
-> 2. **The app icon** is the same blue/ocean-cyan wave mark (`icons/`).
+> 2. **The app icon** is the same mark (`icons/`, and `ui/app-icon.png` on the
+>    splash screen): Lyra's four-pointed star with its cyan-to-violet ring, on
+>    the deep indigo sky.
 > 3. **Versions move in single `0.01` steps**, with a major update now and
->    then — this build is `v2.3.0`: two new showpiece themes (**Moonlight** and
->    **Rust**), three theme slots the shop can fill in itself, screens that can
->    move **across the top** the way a browser keeps its tabs, and a silent
->    record of every stock figure edited by hand — printed in red at the foot
->    of the day report — over the v2.2 work (a readable Overview chart, a
->    resizeable receipt, sliding tab highlights) and everything under it.
+>    then — this build is `v2.33`: the app's own mark and icon set redrawn, a
+>    short title sequence on startup, the maker's mark (S.S) carried into the
+>    top tab bar, and figures read at a glance grouped with commas throughout
+>    the Overview — over the v2.3 work (Moonlight and Rust, three theme slots of
+>    your own, screens across the top, the silent stock audit) and everything
+>    under it.
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -116,7 +118,10 @@ so there is no browser to install and no Node.js to install.
   to spot at any zoom level. Low-stock warnings, and the two inventory value
   figures — what the shelf is worth at cost and at sell — are always current
   regardless of the tab selected, and carry a comma every three digits, so a
-  big number can be counted at a glance. Each tab also draws its period: the
+  big number can be counted at a glance. So does the sales history table, its
+  transaction counts and the top-seller counts: a year of trade reads
+  "R79,926.14" across 788 sales rather than a wall of digits. Each tab also
+  draws its period: the
   takings and profit as an animated line that sweeps in when you switch tabs,
   and the payment split as a ring with the amounts spelled out beside it. The
   axis labels thin themselves out to the width of the longest one, so a week
@@ -438,6 +443,7 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 | Path | What's in it |
 |---|---|
 | `ui/` | The screens: `index.html`, `styles.css`, `app.js`, `bridge.js` |
+| `ui/app-icon.png` | The mark as the screens draw it — the brand, the title sequence, the window icon |
 | `ui/charts.js` | The Overview's graphs — the takings/profit line and the payment-split ring |
 | `src/main.rs` | The commands the screens can call, and the window setup |
 | `src/data.rs` | The shape of the saved data, and reading/writing it |
