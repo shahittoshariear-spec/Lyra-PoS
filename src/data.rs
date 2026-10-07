@@ -141,6 +141,9 @@ pub struct Settings {
     pub theme: String,
     pub font_family: String,
     pub font_size: String,
+    /// How much of the Till the receipt takes, as a fraction of the window
+    /// (0.28–0.70). 0 means "never set", which the screens read as one half.
+    pub receipt_width: f64,
 }
 
 impl Default for Settings {
@@ -168,6 +171,7 @@ impl Default for Settings {
             theme: default_theme(),
             font_family: default_font_family(),
             font_size: default_font_size(),
+            receipt_width: 0.0,
         }
     }
 }
@@ -682,6 +686,7 @@ mod tests {
         assert_eq!(data.settings.theme, "midnight");
         assert_eq!(data.settings.font_family, "segoe");
         assert_eq!(data.settings.font_size, "normal");
+        assert_eq!(data.settings.receipt_width, 0.0);
         assert!(data.last_backup_at.is_none());
         assert_eq!(data.last_auto_report, "");
         assert!(data.report_queue.is_empty());
@@ -706,6 +711,7 @@ mod tests {
                 "theme": "galaxy",
                 "fontFamily": "georgia",
                 "fontSize": "large",
+                "receiptWidth": 0.62,
                 "shortcuts": {
                     "tillCharge": { "key": "F9", "mode": "press" },
                     "stockDelete": { "key": "", "mode": "hold" }
@@ -726,6 +732,7 @@ mod tests {
         assert_eq!(back.settings.theme, "galaxy");
         assert_eq!(back.settings.font_family, "georgia");
         assert_eq!(back.settings.font_size, "large");
+        assert_eq!(back.settings.receipt_width, 0.62);
         assert_eq!(back.settings.shortcuts["tillCharge"].key, "F9");
         assert_eq!(back.settings.shortcuts["tillCharge"].mode, "press");
         assert_eq!(back.settings.shortcuts["stockDelete"].key, "");

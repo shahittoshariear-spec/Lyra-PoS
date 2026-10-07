@@ -783,7 +783,10 @@ input[type=date]::-webkit-calendar-picker-indicator {
      reads back to the customer, so it gets the room rather than the product
      list: a wide tape fits the names and totals that a narrow strip had to
      truncate. */
-  grid-template-columns: minmax(0, 1fr) minmax(50%, 1fr);
+  /* The receipt's share is the shop's own, dragged by its edge: the fraction
+     lives in --receipt-frac, with a floor so the tape can never be squeezed
+     out. */
+  grid-template-columns: minmax(0, 1fr) minmax(340px, calc(var(--receipt-frac, 0.5) * 100%));
   /* Row one is the search bar, spanning both columns; row two is the list
      and the tape. The bar stays put when the list is hidden, over the
      receipt, because a scan has to work whatever the screen is showing. */
@@ -938,8 +941,12 @@ input[type=date]::-webkit-calendar-picker-indicator {
      panels beside it. It scales with the window so that on a small screen — a
      1024-wide till, where the tape still keeps half of it — the names keep
      breaking between words instead of through the middle of one. */
-  --tape-font: clamp(15px, 1.45vw, 20px);
-  --tape-font-small: clamp(12.5px, 1.1vw, 15px);
+  /* The tape's own scale is set from its measured width (fitTapeType in
+     app.js): drag the tape narrow and the figures come down with it, drag it
+     wide and they grow, so the 32-column receipt stays readable at both. */
+  --tape-scale: 1;
+  --tape-font: clamp(13px, calc(19px * var(--tape-scale)), 26px);
+  --tape-font-small: clamp(11px, calc(15.5px * var(--tape-scale)), 21px);
   /* The paper itself, sampled from the tape body's own gradient at each end,
      and the sky the notches are cut out of. */
   --tape-cut: var(--bg);
@@ -1514,7 +1521,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 
 @media (max-width: 1180px) {
   /* The receipt keeps its half of the window; only the gap tightens. */
-  .till-grid { grid-template-columns: minmax(0, 1fr) minmax(50%, 1fr); column-gap: var(--space-8); }
+  .till-grid { column-gap: var(--space-8); }
   .stat-row { grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
   .panel-row, .settings-grid { grid-template-columns: 1fr; }
   .till-action-bar { gap: var(--space-6); }
@@ -1695,7 +1702,12 @@ input[type=date]::-webkit-calendar-picker-indicator {
 
 .till-grid.catalog-hidden { grid-template-columns: 1fr; }
 .till-grid.catalog-hidden .till-catalog { display: none; }
-.till-grid.catalog-hidden .receipt-tape { max-width: 760px; margin: 0 auto; width: 100%; }
+.till-grid.catalog-hidden .receipt-tape {
+  width: calc(var(--receipt-frac, 0.5) * 100%);
+  min-width: 340px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
 
 /* The hide/show toggle sits on the summary bar rather than in the product
    list, so it is still there to bring the list back once it is hidden. It
@@ -2273,10 +2285,6 @@ html[data-theme="galaxy"] .btn-charge:not(:disabled) { animation-name: chargeGlo
   0%, 100% { box-shadow: 0 8px 22px rgba(124, 77, 255, 0.35), 0 0 0 0 rgba(196, 155, 255, 0); }
   50% { box-shadow: 0 8px 22px rgba(124, 77, 255, 0.45), 0 0 0 8px rgba(196, 155, 255, 0.12), 0 0 26px rgba(196, 155, 255, 0.32); }
 }
-html[data-theme="galaxy"] .seg-btn.active {
-  background: linear-gradient(180deg, #8B5CFF, #6A34E8);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 0 20px rgba(160, 120, 255, 0.28);
-}
 html[data-theme="galaxy"] .search-input:focus, html[data-theme="galaxy"] .select-input:focus,
 html[data-theme="galaxy"] input:focus, html[data-theme="galaxy"] select:focus {
   border-color: rgba(196, 167, 255, 0.65);
@@ -2415,10 +2423,6 @@ html[data-theme="cosmos"] .btn-charge:not(:disabled) { animation-name: chargeGlo
   0%, 100% { box-shadow: 0 8px 22px rgba(43, 196, 160, 0.32), 0 0 0 0 rgba(125, 242, 210, 0); }
   50% { box-shadow: 0 8px 22px rgba(43, 196, 160, 0.42), 0 0 0 8px rgba(125, 242, 210, 0.12), 0 0 26px rgba(125, 242, 210, 0.3); }
 }
-html[data-theme="cosmos"] .seg-btn.active {
-  background: linear-gradient(180deg, #35D48F, #1E9E63);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 0 20px rgba(70, 220, 150, 0.26);
-}
 html[data-theme="cosmos"] .search-input:focus, html[data-theme="cosmos"] .select-input:focus,
 html[data-theme="cosmos"] input:focus, html[data-theme="cosmos"] select:focus {
   border-color: rgba(150, 240, 190, 0.6);
@@ -2454,3 +2458,100 @@ html[data-theme="cosmos"] ::-webkit-scrollbar-thumb:hover { background: rgba(150
 html[data-theme="cosmos"] .aurora i:nth-child(1) { background: radial-gradient(circle at 50% 50%, rgba(43, 182, 115, 0.3), rgba(43, 182, 115, 0.08) 55%, transparent 72%); }
 html[data-theme="cosmos"] .aurora i:nth-child(2) { background: radial-gradient(circle at 50% 50%, rgba(111, 232, 208, 0.18), rgba(111, 232, 208, 0.05) 55%, transparent 70%); }
 html[data-theme="cosmos"] .aurora i:nth-child(3) { background: radial-gradient(circle at 50% 50%, rgba(190, 255, 170, 0.14), transparent 68%); }
+
+/* ===========================================================================
+   V2.2 — the travelling highlight, a resizable receipt, small chrome
+   =========================================================================== */
+
+/* ---------------- The travelling highlight on segmented controls ----------------
+   A pill that slides under the active button of every `.segmented` — the
+   period tabs, Setup's tabs, the payment methods, the text-size picker. It is
+   made of the theme's own tokens, so it re-skins along with everything else. */
+
+.segmented { position: relative; }
+.seg-glider {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: linear-gradient(180deg, var(--blue), var(--blue-deep));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 18px var(--blue-glow);
+  transition: transform var(--dur-slow) var(--ease-spring-soft), width var(--dur-slow) var(--ease-spring-soft);
+  pointer-events: none;
+  z-index: 0;
+}
+/* With a pill behind the buttons, the active button keeps its own colour but
+   lends its background to the pill, and the hairline separators step aside. */
+.segmented.has-glider .seg-btn {
+  position: relative;
+  z-index: 1;
+  border-right: none;
+  background: transparent;
+}
+.segmented.has-glider .seg-btn.active { background: transparent; box-shadow: none; }
+
+/* ---------------- Resizing the receipt ----------------
+   The grip on the tape's left edge; the width itself lives in --receipt-frac
+   (set from app.js and saved in the shop's settings). */
+
+.tape-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -11px;
+  width: 22px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.tape-resizer::before {
+  content: '';
+  width: 3px;
+  height: 46px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+              height var(--dur-slow) var(--ease-spring);
+}
+.tape-resizer:hover::before,
+.tape-resizer:focus-visible::before,
+.tape-resizer.dragging::before {
+  background: var(--blue-bright);
+  box-shadow: 0 0 14px var(--blue-glow);
+  height: 78px;
+}
+body.tape-resizing, body.tape-resizing * { cursor: col-resize !important; user-select: none; }
+
+/* ---------------- Small chrome ---------------- */
+
+/* A slim filament beside each panel heading, like the one on the nav pill. */
+.panel h2 { display: flex; align-items: center; gap: var(--space-4); }
+.panel h2::before {
+  content: '';
+  width: 3px;
+  height: 15px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--blue-bright), var(--blue));
+  box-shadow: 0 0 10px var(--blue-glow);
+}
+
+/* Dropdowns draw their own chevron: the platform glyph cannot be coloured, and
+   the system one sits hard against a dark field. */
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23A9C9FF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+
+/* Checkboxes take the theme's accent rather than the platform blue. */
+input[type="checkbox"] { accent-color: var(--blue); }

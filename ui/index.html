@@ -121,7 +121,11 @@
             <div class="product-grid" id="productGrid"></div>
           </div>
 
-          <aside class="receipt-tape">
+          <aside class="receipt-tape" id="receiptTape">
+            <!-- Dragged to resize the receipt; the tape's own type follows its
+                 width (see fitTapeType in app.js). -->
+            <div class="tape-resizer" id="tapeResizer" role="separator" aria-orientation="vertical" tabindex="0"
+                 title="Drag to resize the receipt — double-click to reset"></div>
             <div class="tape-scallop tape-scallop-top"></div>
             <div class="tape-body">
               <div class="tape-header">

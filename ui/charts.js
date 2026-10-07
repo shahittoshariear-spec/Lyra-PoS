@@ -624,9 +624,16 @@
     svg.appendChild(dots);
 
     // X labels run backwards from the newest bucket so "today" is always
-    // named, and only every stride-th one is drawn — the labels can then never
-    // collide, however long the period is.
-    var stride = Math.max(1, Math.ceil(n / X_LABEL_CAP));
+    // named, and only every stride-th one is drawn. The stride counts both the
+    // cap on how many fit and the widest label's own width — the font is
+    // monospaced, so the width is predictable — which is what stops a week of
+    // long day names from colliding into an unreadable row.
+    var widest = 0;
+    for (i = 0; i < n; i++) {
+      if (labels[i].length > widest) widest = labels[i].length;
+    }
+    var span = widest * 7.9 + 12;      // 13px mono glyph ≈ 7.9 view-box units
+    var stride = Math.max(1, Math.ceil(n / X_LABEL_CAP), Math.ceil(span / step));
     for (i = n - 1; i >= 0; i -= stride) {
       var anchor = n === 1 ? 'middle' : (i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle'));
       var xText = svgEl('text', 'lyra-tick');

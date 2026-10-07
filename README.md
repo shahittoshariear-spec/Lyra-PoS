@@ -11,9 +11,10 @@
 >    and in the app window.
 > 2. **The app icon** is the same blue/ocean-cyan wave mark (`icons/`).
 > 3. **Versions move in single `0.01` steps**, with a major update now and
->    then — this build is `v2.1.0`: per-sale price editing at the till, and a
->    Themes tab with Midnight, Purple Galaxy and Green Cosmos, a font picker
->    and a text size, over the V2 release and the v1.9 work.
+>    then — this build is `v2.2.0`: a readable Overview chart, a receipt that
+>    resizes by its edge (its text following the width), sliding tab
+>    highlights and general polish, over the v2.1 work (price pen, Themes) and
+>    everything under it.
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -57,10 +58,10 @@ so there is no browser to install and no Node.js to install.
   split one sale across both — type either side and the other fills in the
   rest — with automatic change calculation and one-tap cash sums; the ✎ on a
   line sets a price **just for that sale**, without touching the product's own
-  price; print or save a receipt. In the payment dialog, Enter completes the
-  sale — type what the customer handed over and press Enter, and the change is
-  worked out for you. Pressing Enter twice in a hurry still records the sale
-  once.
+  price; drag the receipt's edge to resize it, and its text follows the width;
+  print or save a receipt. In the payment dialog, Enter completes the sale —
+  type what the customer handed over and press Enter, and the change is worked
+  out for you. Pressing Enter twice in a hurry still records the sale once.
 - **Barcode scanning** — plug in any USB or Bluetooth barcode scanner (the
   cheap kind that "types" like a keyboard). Scan a product at the till to add
   it straight to the cart; scan while adding/editing a product to fill in its
@@ -115,7 +116,10 @@ so there is no browser to install and no Node.js to install.
   regardless of the tab selected, and carry a comma every three digits, so a
   big number can be counted at a glance. Each tab also draws its period: the
   takings and profit as an animated line that sweeps in when you switch tabs,
-  and the payment split as a ring with the amounts spelled out beside it.
+  and the payment split as a ring with the amounts spelled out beside it. The
+  axis labels thin themselves out to the width of the longest one, so a week
+  of day names or a month of dates never collides into an unreadable row, and
+  the tab strip carries a highlight that slides between the periods.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales

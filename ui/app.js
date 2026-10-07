@@ -71,6 +71,8 @@
     el.dataset.openToken = String(Number(el.dataset.openToken || 0) + 1);
     el.classList.remove('closing');
     el.classList.add('active');
+    // A pill inside a modal cannot measure itself until the modal is shown.
+    repositionSegGliders();
   }
   function closeModal(el) {
     if (typeof el === 'string') el = $(el);
@@ -182,6 +184,7 @@
     if (view === 'reports') renderReports();
     if (view === 'settings') renderSettings();
     if (view === 'till') { renderCatalog(); focusScanTarget(); }
+    repositionSegGliders();
   }
 
   // The pill's geometry only changes when the window is resized, but this used to
@@ -201,6 +204,44 @@
     }
     pill.style.transform = `translateY(${metrics.top}px)`;
     pill.style.height = metrics.height + 'px';
+  }
+
+  // ---------------- The travelling highlight on segmented controls ----------------
+
+  // Every `.segmented` gets a pill that slides under whichever button is
+  // active — the Day/Week/Month/Year tabs, Setup's tabs, the payment dialog
+  // and the text-size picker all share it. Pure chrome: the buttons keep
+  // their own handlers, and the pill is placed from the active button's
+  // geometry whenever the selection changes.
+  function moveSegGlider(seg) {
+    const glider = seg.querySelector(':scope > .seg-glider');
+    const btn = seg.querySelector('.seg-btn.active');
+    if (!glider || !btn) return;
+    glider.style.width = btn.offsetWidth + 'px';
+    glider.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
+  }
+
+  function repositionSegGliders() {
+    $$('.segmented.has-glider').forEach(moveSegGlider);
+  }
+
+  function initSegGliders() {
+    $$('.segmented').forEach(seg => {
+      if (seg.querySelector(':scope > .seg-glider')) return;
+      const glider = document.createElement('span');
+      glider.className = 'seg-glider';
+      glider.setAttribute('aria-hidden', 'true');
+      seg.insertBefore(glider, seg.firstChild);
+      seg.classList.add('has-glider');
+      moveSegGlider(seg);
+    });
+
+    // One listener for every control on every screen: after a click has moved
+    // `.active`, the pill travels to wherever the highlight went.
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.seg-btn')) repositionSegGliders();
+    });
+    window.addEventListener('resize', () => repositionSegGliders());
   }
 
   function initClock() {
@@ -2309,6 +2350,109 @@
     setInterval(check, 30 * 60 * 1000);
   }
 
+  // ---------------- Resizing the receipt -------------
+
+  // The tape can be dragged by its left edge; its type follows its width, so
+  // the 32-column receipt reads the same whether it is a strip beside the
+  // catalogue or most of the counter. The fraction is remembered in the shop's
+  // settings, so it comes back on the next launch.
+
+  const TAPE_FRAC_MIN = 0.28;
+  const TAPE_FRAC_MAX = 0.7;
+
+  function tapeFraction() {
+    const f = Number(DATA.settings.receiptWidth);
+    return f >= TAPE_FRAC_MIN && f <= TAPE_FRAC_MAX ? f : 0.5;
+  }
+
+  function applyTapeFraction() {
+    document.documentElement.style.setProperty('--receipt-frac', String(tapeFraction()));
+    fitTapeType();
+  }
+
+  // The tape's own text size: a strip gets smaller figures, a wide tape
+  // larger ones, and the receipt's column layout stays readable at both ends.
+  // The reference width is the tape's own default share of the window.
+  function fitTapeType() {
+    const tape = $('#receiptTape');
+    if (!tape) return;
+    const width = tape.getBoundingClientRect().width;
+    if (!width) return;
+    const scale = Math.max(0.78, Math.min(1.4, width / 560));
+    tape.style.setProperty('--tape-scale', scale.toFixed(3));
+  }
+
+  function initTapeResizer() {
+    const handle = $('#tapeResizer');
+    const grid = $('.till-grid');
+    const tape = $('#receiptTape');
+    if (!handle || !grid || !tape) return;
+
+    let dragging = false;
+    let dragStartX = 0;
+    let dragStartWidth = 0;
+
+    const setFraction = (frac) => {
+      const clamped = Math.min(TAPE_FRAC_MAX, Math.max(TAPE_FRAC_MIN, frac));
+      document.documentElement.style.setProperty('--receipt-frac', clamped.toFixed(4));
+      fitTapeType();
+      return clamped;
+    };
+
+    const stopDrag = (save) => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      document.body.classList.remove('tape-resizing');
+      try { handle.releasePointerCapture(handle._pointerId); } catch (err) { /* already gone */ }
+      if (!save) return;
+      const raw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--receipt-frac'));
+      DATA.settings.receiptWidth = Math.round((isFinite(raw) ? raw : 0.5) * 1000) / 1000;
+      persist();
+    };
+
+    handle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      // The tape's size follows the pointer's travel: dragging the left edge
+      // 40px left makes the tape 40px wider, wherever it is sitting.
+      dragStartX = e.clientX;
+      dragStartWidth = tape.getBoundingClientRect().width;
+      handle._pointerId = e.pointerId;
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+      handle.classList.add('dragging');
+      document.body.classList.add('tape-resizing');
+      e.preventDefault();
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const rect = grid.getBoundingClientRect();
+      const width = dragStartWidth + (dragStartX - e.clientX);
+      setFraction(width / rect.width);
+    });
+
+    handle.addEventListener('pointerup', () => stopDrag(true));
+    handle.addEventListener('pointercancel', () => stopDrag(false));
+
+    // Double-click puts the tape back where it started.
+    handle.addEventListener('dblclick', () => {
+      DATA.settings.receiptWidth = 0.5;
+      applyTapeFraction();
+      persist();
+    });
+
+    // Keyboard: the arrows nudge the edge, a little at a time.
+    handle.addEventListener('keydown', (e) => {
+      const step = e.key === 'ArrowLeft' ? 0.02 : e.key === 'ArrowRight' ? -0.02 : 0;
+      if (!step) return;
+      e.preventDefault();
+      DATA.settings.receiptWidth = setFraction(tapeFraction() + step);
+      persist();
+    });
+
+    window.addEventListener('resize', () => fitTapeType());
+  }
+
   // ---------------- The period as a picture ----------------
 
   // The same figures the cards at the top are built from, cut into buckets the
@@ -2347,7 +2491,7 @@
         const key = dayKeyAgo(d);
         const t = computePeriodTotals(key, 'day');
         out.push({
-          label: period === 'week' ? periodLabel(key, 'day') : key.slice(8, 10),
+          label: period === 'week' ? chartDayLabel(key) : key.slice(8, 10),
           sales: t.total,
           profit: t.profit
         });
@@ -2367,6 +2511,13 @@
       });
     }
     return out;
+  }
+
+  // A compact weekday-and-day for the chart's x axis: "Wed 7" fits seven
+  // times across a week where the full "Wed, 7 Oct" cannot.
+  function chartDayLabel(key) {
+    const d = new Date(key + 'T12:00:00Z');
+    return d.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }) + ' ' + d.getUTCDate();
   }
 
   function renderSalesChart(period) {
@@ -3456,6 +3607,7 @@
     applyAppearance();
 
     initNav();
+    initSegGliders();
     updateNavPill();
     initClock();
     initAdminModal();
@@ -3481,6 +3633,8 @@
     startReportClock();
     startBackupClock();
     applyShortcutHints();
+    applyTapeFraction();
+    initTapeResizer();
 
     $('#productSearch').addEventListener('input', debounce(renderCatalog, 80));
     // Enter is handled document-wide by initBarcodeScanning, which reads the box
