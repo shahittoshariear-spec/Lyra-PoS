@@ -554,6 +554,41 @@
                 <button class="seg-btn" data-size="huge">Extra large</button>
               </div>
             </div>
+            <div class="panel panel-full">
+              <h2>Your own themes</h2>
+              <p class="panel-note">Three slots to make your own. Pick an accent and a night and every surface, hairline and glow is worked out from those two colours — a night too pale to read figures on is taken down until it is not. They will not be as finished as the ones above, and that is the trade.</p>
+              <div class="custom-themes" id="customThemes">
+                <div class="custom-theme" data-slot="0">
+                  <span class="custom-theme-name">Yours I</span>
+                  <label class="custom-color"><span>Accent</span><input type="color" data-color="accent" value="#2EC4B6" /></label>
+                  <label class="custom-color"><span>Night</span><input type="color" data-color="background" value="#071417" /></label>
+                  <button type="button" class="btn btn-ghost btn-sm custom-use" data-use="custom-1">Use it</button>
+                  <button type="button" class="custom-reset" data-reset-slot="0" title="Back to the colours this slot came with">Reset</button>
+                </div>
+                <div class="custom-theme" data-slot="1">
+                  <span class="custom-theme-name">Yours II</span>
+                  <label class="custom-color"><span>Accent</span><input type="color" data-color="accent" value="#E8A33D" /></label>
+                  <label class="custom-color"><span>Night</span><input type="color" data-color="background" value="#171008" /></label>
+                  <button type="button" class="btn btn-ghost btn-sm custom-use" data-use="custom-2">Use it</button>
+                  <button type="button" class="custom-reset" data-reset-slot="1" title="Back to the colours this slot came with">Reset</button>
+                </div>
+                <div class="custom-theme" data-slot="2">
+                  <span class="custom-theme-name">Yours III</span>
+                  <label class="custom-color"><span>Accent</span><input type="color" data-color="accent" value="#C86BFA" /></label>
+                  <label class="custom-color"><span>Night</span><input type="color" data-color="background" value="#150A1A" /></label>
+                  <button type="button" class="btn btn-ghost btn-sm custom-use" data-use="custom-3">Use it</button>
+                  <button type="button" class="custom-reset" data-reset-slot="2" title="Back to the colours this slot came with">Reset</button>
+                </div>
+              </div>
+            </div>
+            <div class="panel panel-full">
+              <h2>Where the screens sit</h2>
+              <p class="panel-note">Down the side is the app's own shape. Across the top arranges them as tabs over the window, the way a browser does — a narrow window keeps them down the side all the same.</p>
+              <div class="segmented" id="navLayoutSeg">
+                <button class="seg-btn active" data-nav="side">Down the side</button>
+                <button class="seg-btn" data-nav="top">Across the top</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>

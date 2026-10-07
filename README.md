@@ -11,10 +11,12 @@
 >    and in the app window.
 > 2. **The app icon** is the same blue/ocean-cyan wave mark (`icons/`).
 > 3. **Versions move in single `0.01` steps**, with a major update now and
->    then — this build is `v2.2.0`: a readable Overview chart, a receipt that
->    resizes by its edge (its text following the width), sliding tab
->    highlights and general polish, over the v2.1 work (price pen, Themes) and
->    everything under it.
+>    then — this build is `v2.3.0`: two new showpiece themes (**Moonlight** and
+>    **Rust**), three theme slots the shop can fill in itself, screens that can
+>    move **across the top** the way a browser keeps its tabs, and a silent
+>    record of every stock figure edited by hand — printed in red at the foot
+>    of the day report — over the v2.2 work (a readable Overview chart, a
+>    resizeable receipt, sliding tab highlights) and everything under it.
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -148,8 +150,16 @@ so there is no browser to install and no Node.js to install.
   tax rate, low-stock threshold, categories, Admin Key management, backup
   export/import, bulk product import, when the day report sends itself,
   automatic backups, the Shortcuts screen, and the **Themes** tab: Midnight,
-  Purple Galaxy and Green Cosmos, five fonts and four text sizes, applied the
-  moment they are picked.
+  Purple Galaxy, Green Cosmos, **Moonlight** and **Rust**, three slots to make
+  your own from an accent and a night, five fonts, four text sizes, and where
+  the screens sit — down the side, or **across the top** as browser-style tabs.
+  Everything applies the moment it is picked.
+- **Stock edits are recorded, quietly** — a stock figure typed over by hand in
+  the product form is written down as it happens: the time, the product, what it
+  was and what it became. Nothing on screen mentions it, no message appears and
+  the till behaves exactly as before. The record surfaces in one place only: the
+  day report, at the foot of the PDF, **in bold red** — the one change to the
+  shop that the takings cannot account for.
 - **Import products from POS Maid (or any spreadsheet)** — bring in a
   product list exported from POS Maid's Excel/CSV export, or any spreadsheet
   with name/SKU/price/stock columns. Lyra PoS guesses which column is which

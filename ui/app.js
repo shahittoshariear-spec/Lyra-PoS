@@ -1709,6 +1709,37 @@
     setTimeout(() => (isEdit ? $('#pmName') : $('#pmSku')).focus(), 50);
   }
 
+  // ---------------- Hand-edited stock (written down, never announced) ----------------
+
+  // A stock figure typed over in the product form is the one change to the shop
+  // that nothing else accounts for: the takings balance, the ledger agrees with
+  // itself, the shelf quietly empties. So every hand edit is written down as it
+  // happens — and no screen says a word about it. The record surfaces in one
+  // place only: the day report, printed in red. See src/report.rs.
+
+  const STOCK_LOG_MAX = 600;
+
+  function logStockEdit(product, from, to) {
+    if (!product || from === to) return;
+    if (!Array.isArray(DATA.stockLog)) DATA.stockLog = [];
+    DATA.stockLog.push({
+      at: new Date().toISOString(),
+      productId: product.id,
+      name: product.name,
+      from: from,
+      to: to
+    });
+    // Newest last. A till that runs for months must not grow this without end.
+    if (DATA.stockLog.length > STOCK_LOG_MAX) {
+      DATA.stockLog.splice(0, DATA.stockLog.length - STOCK_LOG_MAX);
+    }
+  }
+
+  function stockEditTime(at) {
+    const d = new Date(at);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
   function initProductModal() {
     $('#pmCancelBtn').addEventListener('click', () => closeModal('#productModalOverlay'));
     $('#pmSaveBtn').addEventListener('click', async () => {
@@ -1729,7 +1760,9 @@
 
       if (editingProductId) {
         const p = DATA.products.find(pp => pp.id === editingProductId);
+        const stockWas = p.stock;
         Object.assign(p, { name, sku, alias, category, price, cost, stock, supplier });
+        logStockEdit(p, stockWas, stock);
       } else {
         DATA.products.push({ id: nextProductId(), name, sku, alias, category, price, cost, stock, supplier });
       }
@@ -1855,6 +1888,12 @@
     const threshold = DATA.settings.lowStockThreshold || 0;
     const low = lowStockProducts();
 
+    // Stock figures somebody typed over today, oldest first. Printed in red at
+    // the foot of the emailed report.
+    const stockEdits = (Array.isArray(DATA.stockLog) ? DATA.stockLog : [])
+      .filter(e => (e.at || '').slice(0, 10) === todayKey)
+      .map(e => ({ time: stockEditTime(e.at), name: e.name, from: e.from, to: e.to }));
+
     return {
       shopName: DATA.settings.shopName || '',
       address: DATA.settings.address || '',
@@ -1878,6 +1917,7 @@
         marginPct: t.total !== 0 ? (t.profit / t.total) * 100 : 0
       },
       topSellers,
+      stockEdits,
       recentDays,
       monthToDate: {
         sales: month.total,
@@ -3025,8 +3065,152 @@
   const THEME_CHOICES = [
     { id: 'midnight', name: 'Midnight', note: 'The original deep blue' },
     { id: 'galaxy', name: 'Purple Galaxy', note: 'Violet, pink and deep space' },
-    { id: 'cosmos', name: 'Green Cosmos', note: 'Emerald and starlight' }
+    { id: 'cosmos', name: 'Green Cosmos', note: 'Emerald and starlight' },
+    { id: 'moonlight', name: 'Moonlight', note: 'Silver over deep indigo' },
+    { id: 'rust', name: 'Rust', note: 'Burnt orange on cold iron' },
+    { id: 'custom-1', name: 'Yours I', note: 'Your own two colours', slot: 0 },
+    { id: 'custom-2', name: 'Yours II', note: 'Your own two colours', slot: 1 },
+    { id: 'custom-3', name: 'Yours III', note: 'Your own two colours', slot: 2 }
   ];
+
+  // ---- The shop's own three themes ----
+  //
+  // Two colours each — an accent and a night — and every other colour on the
+  // screen is worked out from those two: the raised surfaces, the hairlines, the
+  // glows, and the shade the accent takes for type (light on a dark page, dark
+  // on a pale one). Nothing ends up a colour nobody chose.
+  const DEFAULT_CUSTOM_THEMES = [
+    { accent: '#2EC4B6', background: '#071417' },
+    { accent: '#E8A33D', background: '#171008' },
+    { accent: '#C86BFA', background: '#150A1A' }
+  ];
+
+  const WHITE = [255, 255, 255];
+  const BLACK = [0, 0, 0];
+
+  // Every token a custom theme writes onto <html>, so a switch back to one of
+  // the built-in looks can take them all away again.
+  const CUSTOM_VAR_NAMES = [
+    '--bg-deep', '--bg', '--bg-1', '--bg-2', '--bg-3', '--bg-4',
+    '--glass', '--glass-soft', '--glass-lift', '--line', '--line-strong',
+    '--blue', '--blue-bright', '--blue-soft', '--blue-deep',
+    '--blue-tint', '--blue-tint-strong', '--blue-glow',
+    '--cyan', '--violet', '--mint', '--accent-card', '--accent-rgb', '--on-accent',
+    '--text-ink', '--text-muted', '--text-dim', '--text-on-ink', '--text-on-ink-muted',
+    '--side-top', '--side-bottom', '--panel-a', '--panel-b', '--stat-a', '--stat-b',
+    '--modal-a', '--modal-b', '--overlay-wash', '--toast-a', '--toast-b',
+    '--scroll-thumb', '--scroll-thumb-hover', '--sel-bg', '--row-hover', '--hover-line',
+    '--chip-top', '--chip-bottom', '--focus-tint', '--aurora-1', '--aurora-2', '--aurora-3'
+  ];
+
+  function hexToRgb(hex) {
+    const body = String(hex || '').trim().replace(/^#/, '');
+    const full = body.length === 3 ? body[0] + body[0] + body[1] + body[1] + body[2] + body[2] : body;
+    if (!/^[0-9a-f]{6}$/i.test(full)) return null;
+    return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
+  }
+  function rgbToHex(rgb) {
+    return '#' + rgb.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  }
+  function mixRgb(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+  function mixTo(a, b, t) { return rgbToHex(mixRgb(a, b, t)); }
+  function rgbaOf(rgb, alpha) {
+    return 'rgba(' + Math.round(rgb[0]) + ', ' + Math.round(rgb[1]) + ', ' + Math.round(rgb[2]) + ', ' + alpha + ')';
+  }
+  function luminance(rgb) { return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255; }
+
+  function customThemes() {
+    if (!Array.isArray(DATA.settings.customThemes)) DATA.settings.customThemes = [];
+    return DATA.settings.customThemes;
+  }
+
+  // What a slot is right now: what the shop picked, or the colours it came with.
+  function customThemeAt(slot) {
+    const fallback = DEFAULT_CUSTOM_THEMES[slot] || DEFAULT_CUSTOM_THEMES[0];
+    const saved = customThemes()[slot];
+    return {
+      accent: saved && hexToRgb(saved.accent) ? saved.accent : fallback.accent,
+      background: saved && hexToRgb(saved.background) ? saved.background : fallback.background
+    };
+  }
+
+  // The slots are nights. A colour pale enough that white figures would drown
+  // in it is walked down towards black until they don't — a screen the shop
+  // cannot read is worse than one that is a shade darker than the swatch.
+  function readableNight(hex) {
+    const rgb = hexToRgb(hex) || hexToRgb(DEFAULT_CUSTOM_THEMES[0].background);
+    let out = rgb;
+    for (let i = 0; i < 26 && luminance(out) > 0.28; i++) out = mixRgb(out, BLACK, 0.08);
+    return rgbToHex(out);
+  }
+
+  function setCustomTheme(slot, patch) {
+    const list = customThemes();
+    while (list.length < DEFAULT_CUSTOM_THEMES.length) {
+      list.push(Object.assign({}, DEFAULT_CUSTOM_THEMES[list.length]));
+    }
+    list[slot] = Object.assign(customThemeAt(slot), patch);
+  }
+
+  function customThemeVars(slot) {
+    const t = customThemeAt(slot);
+    const a = hexToRgb(t.accent);
+    // The slot is a night. A background too pale to carry white figures on is
+    // taken down until it is, rather than leaving a screen nobody can read.
+    const b = hexToRgb(readableNight(t.background));
+    const glowAt = (alpha) => rgbaOf(a, alpha);
+    const surface = (toward, amount, alpha) => rgbaOf(mixRgb(b, toward, amount), alpha);
+    const bright = mixTo(a, WHITE, 0.34);
+    const soft = mixTo(a, WHITE, 0.62);
+    return {
+      '--bg-deep': mixTo(b, BLACK, 0.45),
+      '--bg': rgbToHex(b),
+      '--bg-1': mixTo(b, a, 0.06),
+      '--bg-2': mixTo(b, a, 0.12),
+      '--bg-3': mixTo(b, a, 0.18),
+      '--bg-4': mixTo(b, a, 0.26),
+      '--glass': surface(a, 0.12, 0.62),
+      '--glass-soft': rgbaOf(WHITE, 0.045),
+      '--glass-lift': rgbaOf(WHITE, 0.08),
+      '--line': glowAt(0.1),
+      '--line-strong': glowAt(0.2),
+      '--blue': t.accent,
+      '--blue-bright': bright,
+      '--blue-soft': soft,
+      '--blue-deep': mixTo(a, BLACK, 0.3),
+      '--blue-tint': glowAt(0.13),
+      '--blue-tint-strong': glowAt(0.22),
+      '--blue-glow': glowAt(0.42),
+      '--accent-rgb': a.map(v => Math.round(v)).join(', '),
+      '--on-accent': luminance(a) > 0.62 ? '#0B0C12' : '#FFFFFF',
+      '--cyan': mixTo(a, [111, 224, 226], 0.5),
+      '--mint': mixTo(a, [95, 224, 176], 0.5),
+      '--violet': mixTo(a, [157, 140, 255], 0.45),
+      '--accent-card': soft,
+      '--side-top': surface(a, 0.12, 0.9),
+      '--side-bottom': surface(BLACK, 0.34, 0.8),
+      '--panel-a': surface(a, 0.14, 0.72),
+      '--panel-b': surface(BLACK, 0.36, 0.72),
+      '--stat-a': surface(a, 0.2, 0.75),
+      '--stat-b': surface(BLACK, 0.42, 0.75),
+      '--modal-a': surface(a, 0.18, 0.96),
+      '--modal-b': surface(BLACK, 0.32, 0.97),
+      '--overlay-wash': 'rgba(2, 4, 10, 0.68)',
+      '--toast-a': surface(a, 0.22, 0.95),
+      '--toast-b': surface(BLACK, 0.32, 0.95),
+      '--scroll-thumb': glowAt(0.26),
+      '--scroll-thumb-hover': glowAt(0.44),
+      '--sel-bg': glowAt(0.38),
+      '--row-hover': glowAt(0.09),
+      '--hover-line': glowAt(0.45),
+      '--chip-top': mixTo(a, WHITE, 0.16),
+      '--chip-bottom': mixTo(a, BLACK, 0.24),
+      '--focus-tint': glowAt(0.22),
+      '--aurora-1': 'radial-gradient(circle at 50% 50%, ' + glowAt(0.3) + ', ' + glowAt(0.08) + ' 55%, transparent 72%)',
+      '--aurora-2': 'radial-gradient(circle at 50% 50%, ' + rgbaOf(mixRgb(a, WHITE, 0.3), 0.18) + ', transparent 70%)',
+      '--aurora-3': 'radial-gradient(circle at 50% 50%, ' + rgbaOf(mixRgb(b, a, 0.6), 0.2) + ', transparent 68%)'
+    };
+  }
   const FONT_CHOICES = [
     { id: 'segoe', name: 'Segoe UI', note: 'The app font' },
     { id: 'calibri', name: 'Calibri', note: 'Softer and rounder' },
@@ -3048,9 +3232,35 @@
 
   function applyAppearance() {
     if (!DATA || !DATA.settings) return;
-    document.documentElement.dataset.theme = currentThemeId();
-    document.documentElement.dataset.font = currentFontId();
-    document.documentElement.dataset.size = currentSizeId();
+    const html = document.documentElement;
+    const theme = currentThemeId();
+    html.dataset.theme = theme;
+    html.dataset.font = currentFontId();
+    html.dataset.size = currentSizeId();
+    // The built-in looks carry every colour in the stylesheet, so any token a
+    // custom theme left on <html> has to come back out before it is read again.
+    CUSTOM_VAR_NAMES.forEach(name => html.style.removeProperty(name));
+    const choice = THEME_CHOICES.find(t => t.id === theme);
+    if (choice && choice.slot != null) {
+      const vars = customThemeVars(choice.slot);
+      Object.keys(vars).forEach(name => html.style.setProperty(name, vars[name]));
+    }
+  }
+
+  // A preview of a theme, built the same way its screen is: the slot's own two
+  // colours for the custom ones, the published palette for the rest.
+  function themeSwatch(t) {
+    if (t.slot == null) {
+      return '<span class="theme-swatch theme-swatch-' + t.id + '" aria-hidden="true"><i></i><i></i><i></i></span>';
+    }
+    const v = customThemeVars(t.slot);
+    const a = hexToRgb(v['--blue']);
+    return '<span class="theme-swatch" aria-hidden="true" style="background:linear-gradient(160deg, ' +
+        v['--bg-2'] + ', ' + v['--bg-deep'] + ')">' +
+      '<i style="width:18px;height:18px;left:7px;top:6px;background:' + v['--blue'] + '"></i>' +
+      '<i style="width:11px;height:11px;right:8px;top:11px;background:' + mixTo(a, WHITE, 0.36) + '"></i>' +
+      '<i style="width:8px;height:8px;left:21px;bottom:7px;background:' + mixTo(a, WHITE, 0.64) + '"></i>' +
+    '</span>';
   }
 
   function renderAppearanceControls() {
@@ -3058,7 +3268,7 @@
     if (themes) {
       themes.innerHTML = THEME_CHOICES.map(t =>
         '<button type="button" class="theme-card' + (t.id === currentThemeId() ? ' active' : '') + '" data-theme="' + t.id + '">' +
-          '<span class="theme-swatch theme-swatch-' + t.id + '" aria-hidden="true"><i></i><i></i><i></i></span>' +
+          themeSwatch(t) +
           '<span class="theme-card-text"><span class="theme-card-name">' + t.name + '</span>' +
           '<span class="theme-card-note">' + t.note + '</span></span>' +
         '</button>'
@@ -3075,6 +3285,71 @@
       ).join('');
     }
     $$('#sizeSeg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.size === currentSizeId()));
+    renderCustomThemeEditor();
+    renderNavLayoutControl();
+  }
+
+  // The three slots, kept in step with what is saved: the pickers show the
+  // colours in the file, and the button says whether that slot is the one
+  // currently on screen.
+  function renderCustomThemeEditor() {
+    const host = $('#customThemes');
+    if (!host) return;
+    $$('#customThemes [data-slot]').forEach(row => {
+      const t = customThemeAt(Number(row.dataset.slot));
+      const accent = row.querySelector('input[data-color="accent"]');
+      const background = row.querySelector('input[data-color="background"]');
+      if (accent && accent.value !== t.accent.toLowerCase()) accent.value = t.accent;
+      if (background && background.value !== t.background.toLowerCase()) background.value = t.background;
+      const use = row.querySelector('[data-use]');
+      if (use) {
+        const on = currentThemeId() === use.dataset.use;
+        use.classList.toggle('btn-primary', on);
+        use.classList.toggle('btn-ghost', !on);
+        use.classList.toggle('custom-use-on', on);
+        use.textContent = on ? 'In use' : 'Use it';
+      }
+    });
+  }
+
+  // ---- Where the screens sit: down the side, or across the top ----
+
+  function navLayoutId() {
+    return DATA.settings.navLayout === 'top' ? 'top' : 'side';
+  }
+
+  function renderNavLayoutControl() {
+    $$('#navLayoutSeg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === navLayoutId()));
+    // A hidden control measures zero, so its pill is only placed while the panel
+    // is actually on screen — and only this one, so nothing else is disturbed.
+    const seg = $('#navLayoutSeg');
+    if (seg && seg.classList.contains('has-glider') && seg.offsetParent !== null) moveSegGlider(seg);
+  }
+
+  let navSwitchTimer = null;
+
+  // One attribute on <html> does the rearranging — the stylesheet knows how a
+  // browser tab bar looks — and a short animation plays when the shop changes
+  // its mind, so the screens are seen moving rather than just appearing
+  // somewhere else.
+  function applyNavLayout(animate) {
+    const html = document.documentElement;
+    const app = $('#app');
+    const next = navLayoutId();
+    const moved = !!app && app.dataset.navShown && app.dataset.navShown !== next;
+    html.dataset.nav = next;
+    if (app) app.dataset.navShown = next;
+    navPillMetrics.clear();
+    if (app && animate && moved) {
+      app.classList.remove('nav-switching');
+      void app.offsetWidth;                       // let the animation start again
+      app.classList.add('nav-switching');
+      clearTimeout(navSwitchTimer);
+      navSwitchTimer = setTimeout(() => app.classList.remove('nav-switching'), 1100);
+    }
+    // The metrics that place the travelling highlight are read one frame after
+    // the layout has actually moved, or they describe the old one.
+    requestAnimationFrame(() => { updateNavPill(); repositionSegGliders(); });
   }
 
   // Wiring, once. Every choice is applied the moment it is clicked and then
@@ -3095,6 +3370,59 @@
     pick('#themeCards', 'data-theme', 'theme');
     pick('#fontCards', 'data-font', 'fontFamily');
     pick('#sizeSeg', 'data-size', 'fontSize');
+
+    const navSeg = $('#navLayoutSeg');
+    if (navSeg) {
+      navSeg.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-nav]');
+        if (!btn || btn.dataset.nav === navLayoutId()) return;
+        DATA.settings.navLayout = btn.dataset.nav;
+        renderNavLayoutControl();
+        applyNavLayout(true);
+        await persist();
+      });
+    }
+
+    // The colour pickers fire continuously while a colour is being dragged
+    // around, so the screen follows immediately and the file is written once
+    // the hand comes off it.
+    const writeCustomThemes = debounce(() => persist(), 300);
+    const editor = $('#customThemes');
+    if (editor) {
+      editor.addEventListener('input', (e) => {
+        const input = e.target.closest('input[data-color]');
+        if (!input) return;
+        const row = input.closest('[data-slot]');
+        if (!row) return;
+        const patch = {};
+        patch[input.dataset.color] = input.value;
+        setCustomTheme(Number(row.dataset.slot), patch);
+        applyAppearance();
+        renderAppearanceControls();
+        writeCustomThemes();
+      });
+
+      editor.addEventListener('click', async (e) => {
+        const use = e.target.closest('[data-use]');
+        if (use) {
+          DATA.settings.theme = use.dataset.use;
+          applyAppearance();
+          await persist();
+          renderAppearanceControls();
+          return;
+        }
+        const reset = e.target.closest('[data-reset-slot]');
+        if (reset) {
+          const slot = Number(reset.dataset.resetSlot);
+          const back = DEFAULT_CUSTOM_THEMES[slot] || DEFAULT_CUSTOM_THEMES[0];
+          setCustomTheme(slot, { accent: back.accent, background: back.background });
+          applyAppearance();
+          await persist();
+          renderAppearanceControls();
+          toast('Theme slot reset.');
+        }
+      });
+    }
   }
 
   // ---------------- Settings ----------------
@@ -3602,9 +3930,16 @@
     DATA = await window.pos.loadData();
     if (!DATA.heldSales) DATA.heldSales = [];
     if (!Array.isArray(DATA.reportQueue)) DATA.reportQueue = [];
+    if (!Array.isArray(DATA.stockLog)) DATA.stockLog = [];
     if (!DATA.settings.adminKeyHash) DATA.settings.adminKeyHash = '';
+    // A file written before this batch has no slots in it, and a shop should
+    // never be shown an empty row of squares to fill in.
+    if (!Array.isArray(DATA.settings.customThemes) || DATA.settings.customThemes.length < DEFAULT_CUSTOM_THEMES.length) {
+      DATA.settings.customThemes = DEFAULT_CUSTOM_THEMES.map((t, i) => Object.assign({}, t, (DATA.settings.customThemes || [])[i] || {}));
+    }
     applyShopIdentity();
     applyAppearance();
+    applyNavLayout(false);
 
     initNav();
     initSegGliders();

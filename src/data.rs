@@ -84,6 +84,24 @@ fn default_font_family() -> String {
 fn default_font_size() -> String {
     "normal".to_string()
 }
+fn default_custom_themes() -> Vec<CustomTheme> {
+    // Three finished starting points, one per mood, so the slots look like
+    // something before they are touched — and are easy to tell apart after.
+    vec![
+        CustomTheme {
+            accent: "#2EC4B6".to_string(),
+            background: "#071417".to_string(),
+        },
+        CustomTheme {
+            accent: "#E8A33D".to_string(),
+            background: "#171008".to_string(),
+        },
+        CustomTheme {
+            accent: "#C86BFA".to_string(),
+            background: "#150A1A".to_string(),
+        },
+    ]
+}
 
 /// One key the shop has bound in Setup, as the screens wrote it. The shape is
 /// theirs; this end only has to keep it.
@@ -95,6 +113,36 @@ pub struct ShortcutBinding {
     /// "press" fires at once, "hold" only after the key is kept down. Empty
     /// falls back to whatever the action's own default is.
     pub mode: String,
+}
+
+/// One of the shop's own theme slots: an accent and a night, picked in Setup.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CustomTheme {
+    pub accent: String,
+    pub background: String,
+}
+
+impl Default for CustomTheme {
+    fn default() -> Self {
+        Self {
+            accent: "#2EC4B6".to_string(),
+            background: "#071417".to_string(),
+        }
+    }
+}
+
+/// A stock figure that was edited by hand at the till, recorded without any
+/// screen saying so. The day report draws these in red (see report.rs).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StockEdit {
+    /// RFC 3339 in UTC, as the screens write every other timestamp.
+    pub at: String,
+    pub product_id: String,
+    pub name: String,
+    pub from: i64,
+    pub to: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -144,6 +192,11 @@ pub struct Settings {
     /// How much of the Till the receipt takes, as a fraction of the window
     /// (0.28–0.70). 0 means "never set", which the screens read as one half.
     pub receipt_width: f64,
+    /// "side" keeps the screens down the left; "top" arranges them as tabs
+    /// across the top, browser-style.
+    pub nav_layout: String,
+    /// The shop's own three themes, picked in Setup → Themes.
+    pub custom_themes: Vec<CustomTheme>,
 }
 
 impl Default for Settings {
@@ -172,6 +225,8 @@ impl Default for Settings {
             font_family: default_font_family(),
             font_size: default_font_size(),
             receipt_width: 0.0,
+            nav_layout: "side".to_string(),
+            custom_themes: default_custom_themes(),
         }
     }
 }
@@ -290,6 +345,9 @@ pub struct Data {
     /// The local day key ("YYYY-MM-DD") the automatic report last went out on,
     /// or empty. A restart on the same day must not send it twice.
     pub last_auto_report: String,
+    /// Stock figures edited by hand, newest last. Pruned by the screens so a
+    /// long-running till cannot grow it without bound.
+    pub stock_log: Vec<StockEdit>,
 }
 
 impl Default for Data {
@@ -305,6 +363,7 @@ impl Default for Data {
             report_queue: Vec::new(),
             last_backup_at: None,
             last_auto_report: String::new(),
+            stock_log: Vec::new(),
         }
     }
 }
@@ -687,6 +746,10 @@ mod tests {
         assert_eq!(data.settings.font_family, "segoe");
         assert_eq!(data.settings.font_size, "normal");
         assert_eq!(data.settings.receipt_width, 0.0);
+        assert_eq!(data.settings.nav_layout, "side");
+        assert_eq!(data.settings.custom_themes.len(), 3);
+        assert_eq!(data.settings.custom_themes[0].accent, "#2EC4B6");
+        assert!(data.stock_log.is_empty());
         assert!(data.last_backup_at.is_none());
         assert_eq!(data.last_auto_report, "");
         assert!(data.report_queue.is_empty());
@@ -698,7 +761,7 @@ mod tests {
         // so a key with no field here would be dropped on the next save — the
         // email setup, the shortcuts and the timers all have to come back out
         // exactly as they went in.
-        let raw = r#"{
+        let raw = r##"{
             "settings": {
                 "reportEmail": "owner@example.com",
                 "mailFrom": "shop@example.com",
@@ -712,6 +775,12 @@ mod tests {
                 "fontFamily": "georgia",
                 "fontSize": "large",
                 "receiptWidth": 0.62,
+                "navLayout": "top",
+                "customThemes": [
+                    { "accent": "#22CCAA", "background": "#06120F" },
+                    { "accent": "#E8A33D", "background": "#171008" },
+                    { "accent": "#C86BFA", "background": "#150A1A" }
+                ],
                 "shortcuts": {
                     "tillCharge": { "key": "F9", "mode": "press" },
                     "stockDelete": { "key": "", "mode": "hold" }
@@ -719,8 +788,9 @@ mod tests {
             },
             "lastBackupAt": 1759100000000,
             "lastAutoReport": "2026-09-28",
+            "stockLog": [{ "at": "2026-09-28T14:32:00Z", "productId": "p1", "name": "Puppy Food 2kg", "from": 12, "to": 5 }],
             "reportQueue": [{ "dateKey": "2026-09-28", "attempts": 2, "report": { "totals": { "sales": 12.5 } } }]
-        }"#;
+        }"##;
         let data: Data = serde_json::from_str(raw).unwrap();
 
         let back: Data = serde_json::from_str(&serde_json::to_string(&data).unwrap()).unwrap();
@@ -733,11 +803,17 @@ mod tests {
         assert_eq!(back.settings.font_family, "georgia");
         assert_eq!(back.settings.font_size, "large");
         assert_eq!(back.settings.receipt_width, 0.62);
+        assert_eq!(back.settings.nav_layout, "top");
+        assert_eq!(back.settings.custom_themes[0].accent, "#22CCAA");
         assert_eq!(back.settings.shortcuts["tillCharge"].key, "F9");
         assert_eq!(back.settings.shortcuts["tillCharge"].mode, "press");
         assert_eq!(back.settings.shortcuts["stockDelete"].key, "");
         assert_eq!(back.last_backup_at, Some(1759100000000.0));
         assert_eq!(back.last_auto_report, "2026-09-28");
+        assert_eq!(back.stock_log.len(), 1);
+        assert_eq!(back.stock_log[0].name, "Puppy Food 2kg");
+        assert_eq!(back.stock_log[0].from, 12);
+        assert_eq!(back.stock_log[0].to, 5);
         assert_eq!(back.report_queue.len(), 1);
         assert_eq!(back.report_queue[0]["dateKey"], "2026-09-28");
     }

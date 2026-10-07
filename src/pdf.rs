@@ -40,6 +40,9 @@ enum Mark {
         size: f64,
         face: Face,
         grey: f64,
+        /// Set for the few lines that must stand out on the page; `None` is
+        /// ordinary grey ink, which is almost everything.
+        rgb: Option<(f64, f64, f64)>,
         text: String,
     },
     Rule {
@@ -67,6 +70,33 @@ pub struct Page {
 impl Page {
     /// Writes `text` with its baseline at `y`, starting at `x`.
     pub fn text(&mut self, x: f64, y: f64, size: f64, face: Face, grey: f64, text: &str) {
+        self.push_text(x, y, size, face, grey, None, text);
+    }
+
+    /// The same, in a colour rather than a grey — kept apart so that the grey
+    /// sheets stay the default and a red line is a deliberate choice.
+    pub fn text_colour(
+        &mut self,
+        x: f64,
+        y: f64,
+        size: f64,
+        face: Face,
+        rgb: (f64, f64, f64),
+        text: &str,
+    ) {
+        self.push_text(x, y, size, face, 0.0, Some(rgb), text);
+    }
+
+    fn push_text(
+        &mut self,
+        x: f64,
+        y: f64,
+        size: f64,
+        face: Face,
+        grey: f64,
+        rgb: Option<(f64, f64, f64)>,
+        text: &str,
+    ) {
         if text.is_empty() {
             return;
         }
@@ -76,6 +106,7 @@ impl Page {
             size,
             face,
             grey,
+            rgb,
             text: text.to_string(),
         });
     }
@@ -410,16 +441,22 @@ fn content(page: &Page, height: f64) -> Vec<u8> {
                 size,
                 face,
                 grey,
+                rgb,
                 text,
             } => {
                 let font = match face {
                     Face::Regular => "F1",
                     Face::Bold => "F2",
                 };
+                // Grey ink is the `g` operator; a coloured line uses `rg`.
+                let ink = match rgb {
+                    Some((r, g, b)) => format!("{r:.3} {g:.3} {b:.3} rg\n"),
+                    None => format!("{grey:.3} g\n"),
+                };
                 // PDF's origin is the bottom left, so y counts upwards from it.
                 out.extend_from_slice(
                     format!(
-                        "BT\n/{font} {size:.2} Tf\n{grey:.3} g\n1 0 0 1 {x:.2} {:.2} Tm\n(",
+                        "BT\n/{font} {size:.2} Tf\n{ink}1 0 0 1 {x:.2} {:.2} Tm\n(",
                         height - y
                     )
                     .as_bytes(),

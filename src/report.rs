@@ -38,6 +38,23 @@ pub struct DailyReport {
     /// Sales left open at the till when the report was asked for.
     #[serde(deserialize_with = "list")]
     pub held_sales: Vec<HeldSale>,
+    /// Stock figures that were edited by hand during the day, exactly as the
+    /// screens recorded them. Drawn in red (see `stock_edits`).
+    #[serde(deserialize_with = "list")]
+    pub stock_edits: Vec<StockEditRow>,
+}
+
+/// One hand edit of a product's stock, as the till wrote it down.
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StockEditRow {
+    /// The local time the edit was made, "HH:MM" as the screens read it.
+    pub time: String,
+    pub name: String,
+    #[serde(deserialize_with = "whole")]
+    pub from: i64,
+    #[serde(deserialize_with = "whole")]
+    pub to: i64,
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
@@ -127,6 +144,17 @@ pub struct HeldSale {
     pub total: f64,
 }
 
+/// A whole number that survives whatever JSON arrives, the way `number`
+/// does for money.
+fn whole<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Number(n) => n.as_i64().unwrap_or(0),
+        serde_json::Value::String(s) => s.trim().parse().unwrap_or(0),
+        serde_json::Value::Bool(true) => 1,
+        _ => 0,
+    })
+}
+
 /// A list that takes `null` for an empty one. A quiet day, or a section the
 /// screens chose not to send, is a normal day rather than a failed render.
 fn list<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
@@ -182,6 +210,11 @@ const TEENY: f64 = 8.0;
 /// The height of one row, baseline to baseline, before its rule.
 const LEAD: f64 = 14.5;
 
+/// The ink the stock-edit section is set in. Everything else on the sheet is
+/// grey on purpose; this is the one section a shop owner is meant to see
+/// before anything else, so it is the one section in colour.
+const RED: (f64, f64, f64) = (0.72, 0.05, 0.05);
+
 /// The most rows any one list draws, so that a shop with a thousand products in
 /// stock trouble gets a report rather than a ream of paper. What is left out is
 /// counted in a line of its own.
@@ -190,6 +223,8 @@ const MAX_LOW_STOCK: usize = 30;
 const MAX_OUT_OF_STOCK: usize = 20;
 const MAX_HELD: usize = 20;
 const MAX_DAYS: usize = 14;
+/// The most hand-edited stock lines one report draws; the rest are counted.
+const MAX_STOCK_EDITS: usize = 16;
 /// The most lines one paragraph of prose may take.
 const MAX_PROSE_LINES: usize = 40;
 
@@ -200,6 +235,7 @@ pub fn render_pdf(report: &DailyReport) -> Vec<u8> {
     sheet.takings(report);
     sheet.trade(report);
     sheet.profit(report);
+    sheet.stock_edits(report);
     sheet.top_sellers(report);
     sheet.recent_days(report);
     sheet.month_to_date(report);
@@ -470,6 +506,52 @@ impl Sheet {
         );
         self.row("Profit", &money(&report.currency, totals.profit));
         self.row("Margin", &percent(totals.margin_pct));
+    }
+
+    /// Stock figures edited by hand during the day, in red and bold. A stock
+    /// figure that moves without a sale behind it is the one change at a till
+    /// that can hide money, so this section is drawn to be noticed — and the
+    /// till records it without any screen saying so at the time.
+    fn stock_edits(&mut self, report: &DailyReport) {
+        self.heading("Stock edited by hand");
+        if report.stock_edits.is_empty() {
+            self.nothing("No stock was edited by hand on this day.");
+            return;
+        }
+        let shown = report.stock_edits.len().min(MAX_STOCK_EDITS);
+        for edit in report.stock_edits.iter().take(shown) {
+            self.needs(LEAD + 4.0);
+            let delta = edit.to - edit.from;
+            let left = pdf::truncate(
+                &format!("{}  {}", edit.time, edit.name),
+                CONTENT - FIGURE_COLUMN - 10.0,
+                SMALL,
+                Face::Bold,
+            );
+            // An ASCII arrow on purpose: the report's font is WinAnsi, and the
+            // real thing would come out as a question mark.
+            let right = pdf::truncate(
+                &format!(
+                    "{} -> {}  ({}{})",
+                    figure(edit.from),
+                    figure(edit.to),
+                    if delta > 0 { "+" } else { "" },
+                    figure(delta)
+                ),
+                FIGURE_COLUMN,
+                SMALL,
+                Face::Bold,
+            );
+            self.page
+                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &left);
+            let width = pdf::text_width(&right, SMALL, Face::Bold);
+            self.page
+                .text_colour(RIGHT - width, self.y, SMALL, Face::Bold, RED, &right);
+            self.y += 4.0;
+            self.page.rule(MARGIN, RIGHT, self.y, 0.78, 0.4);
+            self.y += LEAD - 4.0;
+        }
+        self.cut_short(shown, report.stock_edits.len());
     }
 
     fn top_sellers(&mut self, report: &DailyReport) {
@@ -820,6 +902,20 @@ mod tests {
                 top_seller("Paraffin 5 ℓ", 21, 483.00, 84.00),
                 top_seller("Cold drink 2 ℓ", 44, 440.00, 132.00),
             ],
+            stock_edits: vec![
+                StockEditRow {
+                    time: "14:32".to_string(),
+                    name: "Sunflower oil 750 ml".to_string(),
+                    from: 24,
+                    to: 18,
+                },
+                StockEditRow {
+                    time: "09:05".to_string(),
+                    name: "Cold drink 2 ℓ".to_string(),
+                    from: 60,
+                    to: 66,
+                },
+            ],
             recent_days: vec![
                 day("Wed 17 Sep", 9_140.00, 2_540.00, 71),
                 day("Thu 18 Sep", 8_620.50, 2_310.00, 66),
@@ -909,6 +1005,40 @@ mod tests {
         // opens, so it is the thing that has to be a PDF.
         let on_disk = std::fs::read(&path).expect("the sample report could not be read back");
         (on_disk, path)
+    }
+
+    #[test]
+    fn a_hand_edited_stock_figure_is_called_out_in_red() {
+        let mut report = quiet_day();
+        report.stock_edits = vec![StockEditRow {
+            time: "14:32".to_string(),
+            name: "Puppy Food 2kg".to_string(),
+            from: 12,
+            to: 5,
+        }];
+        let (bytes, path) = write(&report, "daily-report-stock-edit.pdf");
+        assert!(bytes.starts_with(b"%PDF-"), "{path:?} is not a PDF");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("STOCK EDITED BY HAND"),
+            "the section is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Puppy Food 2kg"),
+            "the product is missing: {path:?}"
+        );
+        assert!(text.contains("12 -> 5"), "the change is missing: {path:?}");
+        // Braces round a figure are escaped in the content stream, so the
+        // bytes on disk carry backslashes before them.
+        assert!(
+            text.contains("\\(-7\\)"),
+            "the difference is missing: {path:?}"
+        );
+        // The one section set in colour; 0.720 0.050 0.050 rg is the red.
+        assert!(
+            text.contains("0.720 0.050 0.050 rg"),
+            "the line is not red: {path:?}"
+        );
     }
 
     #[test]

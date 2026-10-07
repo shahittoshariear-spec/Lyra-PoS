@@ -47,11 +47,31 @@
   const PALETTES = {
     midnight: { cool: '220,233,255', warm: '255,206,150', line: '127,176,255', sprites: null },
     galaxy: { cool: '232,214,255', warm: '255,188,226', line: '178,140,255', sprites: null },
-    cosmos: { cool: '214,255,234', warm: '255,240,170', line: '96,220,152', sprites: null }
+    cosmos: { cool: '214,255,234', warm: '255,240,170', line: '96,220,152', sprites: null },
+    moonlight: { cool: '236,242,255', warm: '255,240,214', line: '176,198,255', sprites: null },
+    rust: { cool: '255,226,199', warm: '255,176,104', line: '226,122,48', sprites: null }
   };
 
+  // A sky for the shop's own three themes, built from the accent they picked:
+  // the stars take the colour of the screen they are hanging over.
+  let customPalette = null;
+
+  function customSky() {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim();
+    if (!accent) return null;
+    if (!customPalette || customPalette.cool !== accent) {
+      customPalette = { cool: accent, warm: accent, line: accent, sprites: null };
+    }
+    return customPalette;
+  }
+
   function palette() {
-    return PALETTES[document.documentElement.dataset.theme] || PALETTES.midnight;
+    const id = document.documentElement.dataset.theme || '';
+    if (id.indexOf('custom-') === 0) {
+      const sky = customSky();
+      if (sky) return sky;
+    }
+    return PALETTES[id] || PALETTES.midnight;
   }
 
   function paletteSprites(p) {

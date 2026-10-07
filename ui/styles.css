@@ -2555,3 +2555,597 @@ select:not([multiple]) {
 
 /* Checkboxes take the theme's accent rather than the platform blue. */
 input[type="checkbox"] { accent-color: var(--blue); }
+
+/* ===========================================================================
+   V2.3 — Moonlight, Rust, the shop's own themes, and screens across the top
+   =========================================================================== */
+
+/* ---------------- Moonlight ----------------
+   A cold, quiet theme: deep indigo surfaces, silver type, and one small moon
+   low in the sidebar with the light it throws across the page. Nothing here is
+   brighter than a figure has to be — the whole theme is the moon and the dark
+   around it. */
+
+html[data-theme="moonlight"] {
+  --bg-deep: #03060E;
+  --bg: #070D1B;
+  --bg-1: #0B1526;
+  --bg-2: #101C33;
+  --bg-3: #172742;
+  --bg-4: #203452;
+  --glass: rgba(15, 26, 46, 0.62);
+  --line: rgba(206, 220, 255, 0.09);
+  --line-strong: rgba(206, 220, 255, 0.18);
+  --blue: #6E8BF0;
+  --blue-bright: #B9CBFF;
+  --blue-soft: #DCE6FF;
+  --blue-deep: #4A63C8;
+  --blue-tint: rgba(140, 166, 255, 0.12);
+  --blue-tint-strong: rgba(140, 166, 255, 0.2);
+  --blue-glow: rgba(150, 176, 255, 0.42);
+  --cyan: #A9D8F0;
+  --violet: #BEB8FF;
+  --mint: #A5E7D4;
+  --accent-card: var(--blue-soft);
+  /* Type in moonlight: a cold white, and two greys that keep their distance
+     from it without going blue-grey against the indigo. */
+  --text-ink: #E9EFFF;
+  --text-muted: #9EB0D8;
+  --text-dim: #7E8FB8;
+  --text-on-ink: #E9EFFF;
+  --text-on-ink-muted: #9EB0D8;
+}
+html[data-theme="moonlight"] body {
+  background-image:
+    radial-gradient(1200px 780px at 82% -14%, rgba(158, 184, 255, 0.16), transparent 64%),
+    radial-gradient(760px 620px at 90% 4%, rgba(226, 236, 255, 0.08), transparent 62%),
+    radial-gradient(900px 700px at 2% 112%, rgba(104, 132, 226, 0.12), transparent 62%),
+    linear-gradient(180deg, #08101F 0%, #03060E 100%);
+}
+html[data-theme="moonlight"] .sidebar {
+  background: linear-gradient(180deg, rgba(11, 19, 36, 0.92) 0%, rgba(4, 7, 16, 0.8) 100%);
+}
+/* The moon itself, sitting low behind Lyra's constellation: a small disc with
+   the halo it throws, and the cold light it spills down the column. */
+html[data-theme="moonlight"] .sidebar::before {
+  inset: auto -40% 210px -40%;
+  height: 340px;
+  background:
+    radial-gradient(circle at 50% 62%, rgba(248, 251, 255, 0.85) 0 20px, rgba(224, 234, 255, 0.32) 21px, rgba(184, 206, 255, 0.12) 54px, transparent 70%),
+    radial-gradient(58% 60% at 50% 60%, rgba(150, 178, 255, 0.22), transparent 72%);
+}
+html[data-theme="moonlight"] .brand-name {
+  background-image: linear-gradient(100deg, #FFFFFF 10%, var(--blue-soft) 52%, #E6ECFF 95%);
+}
+html[data-theme="moonlight"] .brand-mark {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 26px rgba(184, 206, 255, 0.4);
+}
+html[data-theme="moonlight"] .nav-pill {
+  background: linear-gradient(100deg, rgba(150, 176, 255, 0.26), rgba(150, 176, 255, 0.09) 70%);
+  border-color: rgba(206, 220, 255, 0.34);
+  box-shadow: 0 10px 26px rgba(43, 66, 140, 0.46), var(--shadow-inner-hairline);
+}
+html[data-theme="moonlight"] .nav-pill::before { background: linear-gradient(180deg, #FFFFFF, #8FA8FF); }
+html[data-theme="moonlight"] .nav-btn.active .nav-icon {
+  color: #FFFFFF;
+  background: rgba(150, 176, 255, 0.18);
+  border-color: rgba(206, 220, 255, 0.36);
+  box-shadow: 0 0 20px rgba(184, 206, 255, 0.42);
+}
+html[data-theme="moonlight"] .panel { background: linear-gradient(165deg, rgba(18, 30, 54, 0.6) 0%, rgba(5, 9, 20, 0.7) 100%); }
+html[data-theme="moonlight"] .stat-card { background: linear-gradient(160deg, rgba(21, 35, 62, 0.66) 0%, rgba(6, 11, 24, 0.72) 100%); }
+html[data-theme="moonlight"] .modal { background: linear-gradient(165deg, rgba(19, 32, 58, 0.95) 0%, rgba(5, 9, 20, 0.97) 100%); }
+html[data-theme="moonlight"] .modal-overlay {
+  background:
+    radial-gradient(900px 600px at 50% 0%, rgba(150, 176, 255, 0.12), transparent 70%),
+    rgba(1, 3, 8, 0.7);
+}
+html[data-theme="moonlight"] .modal::before,
+html[data-theme="moonlight"] .till-action-bar::after {
+  background: linear-gradient(90deg, transparent, rgba(226, 236, 255, 0.8), transparent);
+}
+html[data-theme="moonlight"] .btn-primary {
+  background: linear-gradient(180deg, #8FA8FF, #5B76DA);
+  color: #060C1A;
+  border-color: rgba(206, 220, 255, 0.44);
+  box-shadow: 0 6px 18px rgba(52, 78, 160, 0.44), var(--shadow-inner-hairline);
+}
+html[data-theme="moonlight"] .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 10px 26px rgba(60, 86, 170, 0.54), 0 0 24px rgba(184, 206, 255, 0.34), var(--shadow-inner-hairline);
+}
+html[data-theme="moonlight"] .btn-ghost:hover:not(:disabled) {
+  border-color: rgba(206, 220, 255, 0.4);
+  box-shadow: 0 0 18px rgba(184, 206, 255, 0.18);
+}
+html[data-theme="moonlight"] .btn-charge {
+  background: linear-gradient(180deg, #F2F6FF, #A9BFFF);
+  color: #070D1B;
+  border-color: rgba(236, 242, 255, 0.6);
+  box-shadow: 0 8px 22px rgba(120, 148, 235, 0.42), var(--shadow-inner-hairline);
+}
+html[data-theme="moonlight"] .btn-charge:not(:disabled) { animation-name: chargeGlowMoon; }
+@keyframes chargeGlowMoon {
+  0%, 100% { box-shadow: 0 8px 22px rgba(120, 148, 235, 0.34), 0 0 0 0 rgba(226, 236, 255, 0); }
+  50% { box-shadow: 0 8px 22px rgba(120, 148, 235, 0.46), 0 0 0 8px rgba(226, 236, 255, 0.14), 0 0 28px rgba(226, 236, 255, 0.36); }
+}
+html[data-theme="moonlight"] .search-input:focus, html[data-theme="moonlight"] .select-input:focus,
+html[data-theme="moonlight"] input:focus, html[data-theme="moonlight"] select:focus {
+  border-color: rgba(206, 220, 255, 0.62);
+}
+html[data-theme="moonlight"] .data-table tbody tr:hover,
+html[data-theme="moonlight"] .data-table tbody tr:focus-within { background: rgba(150, 176, 255, 0.08); }
+html[data-theme="moonlight"] .data-table tbody tr:hover td:first-child,
+html[data-theme="moonlight"] .data-table tbody tr:focus-within td:first-child { box-shadow: inset 3px 0 0 rgba(206, 220, 255, 0.6); }
+html[data-theme="moonlight"] .qty-btn:hover,
+html[data-theme="moonlight"] .table-more-btn:hover,
+html[data-theme="moonlight"] .shortcut-key:hover,
+html[data-theme="moonlight"] .quick-cash:hover {
+  border-color: rgba(206, 220, 255, 0.5);
+  background: rgba(150, 176, 255, 0.14);
+  box-shadow: 0 0 14px rgba(184, 206, 255, 0.22);
+}
+html[data-theme="moonlight"] .held-item:hover,
+html[data-theme="moonlight"] .bulk-bar {
+  background: linear-gradient(100deg, rgba(150, 176, 255, 0.2), rgba(150, 176, 255, 0.07));
+  border-color: rgba(206, 220, 255, 0.3);
+}
+html[data-theme="moonlight"] .pay-card { color: var(--blue-soft); border-color: rgba(206, 220, 255, 0.36); background: rgba(150, 176, 255, 0.12); }
+html[data-theme="moonlight"] .pay-split {
+  color: var(--violet);
+  border-color: rgba(190, 184, 255, 0.42);
+  background: linear-gradient(100deg, rgba(190, 184, 255, 0.1), rgba(150, 176, 255, 0.16));
+}
+html[data-theme="moonlight"] .bar-fill.bar-card { box-shadow: 0 0 14px rgba(184, 206, 255, 0.4); }
+html[data-theme="moonlight"] .toast { background: linear-gradient(100deg, rgba(20, 33, 58, 0.95), rgba(4, 8, 18, 0.95)); }
+html[data-theme="moonlight"] ::selection { background: rgba(150, 176, 255, 0.4); color: #FFFFFF; }
+html[data-theme="moonlight"] ::-webkit-scrollbar-thumb { background: rgba(206, 220, 255, 0.24); background-clip: content-box; border: 2px solid transparent; }
+html[data-theme="moonlight"] ::-webkit-scrollbar-thumb:hover { background: rgba(206, 220, 255, 0.42); background-clip: content-box; }
+html[data-theme="moonlight"] .aurora i:nth-child(1) { background: radial-gradient(circle at 50% 50%, rgba(110, 139, 240, 0.3), rgba(110, 139, 240, 0.08) 55%, transparent 72%); }
+html[data-theme="moonlight"] .aurora i:nth-child(2) { background: radial-gradient(circle at 50% 50%, rgba(226, 236, 255, 0.16), rgba(226, 236, 255, 0.04) 55%, transparent 70%); }
+html[data-theme="moonlight"] .aurora i:nth-child(3) { background: radial-gradient(circle at 50% 50%, rgba(190, 184, 255, 0.16), transparent 68%); }
+html[data-theme="moonlight"] .chip.active {
+  background: linear-gradient(180deg, #8FA8FF, #5B76DA);
+  color: #060C1A;
+  border-color: rgba(206, 220, 255, 0.5);
+}
+html[data-theme="moonlight"] .chip:hover { border-color: rgba(206, 220, 255, 0.46); background: rgba(150, 176, 255, 0.12); }
+html[data-theme="moonlight"] .product-card-price { text-shadow: 0 0 14px rgba(184, 206, 255, 0.34); }
+
+/* ---------------- Rust ----------------
+   Iron and fire. Cold, brushed metal for the surfaces and a burnt orange that
+   only ever appears as heat: the button you press, the figure that matters, the
+   edge that catches the light. */
+
+html[data-theme="rust"] {
+  --bg-deep: #0A0705;
+  --bg: #120C08;
+  --bg-1: #1A120B;
+  --bg-2: #23170F;
+  --bg-3: #2F1F13;
+  --bg-4: #3E2A19;
+  --glass: rgba(32, 22, 15, 0.62);
+  --line: rgba(255, 186, 128, 0.09);
+  --line-strong: rgba(255, 186, 128, 0.18);
+  --blue: #C2571F;
+  --blue-bright: #FF9A4D;
+  --blue-soft: #FFC79A;
+  --blue-deep: #8F3D12;
+  --blue-tint: rgba(226, 122, 48, 0.13);
+  --blue-tint-strong: rgba(226, 122, 48, 0.22);
+  --blue-glow: rgba(255, 138, 56, 0.42);
+  --cyan: #F2B379;
+  --violet: #E58C6A;
+  --mint: #E8C57E;
+  --accent-card: var(--blue-soft);
+  /* Type on iron: warm off-whites, so nothing on the screen reads cool blue
+     against the orange. */
+  --text-ink: #F5E7D9;
+  --text-muted: #B69C86;
+  --text-dim: #8C7763;
+  --text-on-ink: #F5E7D9;
+  --text-on-ink-muted: #B69C86;
+}
+html[data-theme="rust"] body {
+  background-image:
+    radial-gradient(1000px 720px at -6% -12%, rgba(255, 122, 40, 0.16), transparent 62%),
+    radial-gradient(880px 660px at 104% 8%, rgba(196, 88, 32, 0.12), transparent 64%),
+    radial-gradient(700px 520px at 60% 116%, rgba(255, 168, 92, 0.08), transparent 66%),
+    linear-gradient(180deg, #150E09 0%, #080503 100%);
+}
+/* Brushed iron: a hairline pattern over the column, the way a sheet of the real
+   thing catches the light differently as you move past it. */
+html[data-theme="rust"] .sidebar {
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(38, 25, 16, 0.92) 0%, rgba(9, 6, 4, 0.82) 100%);
+}
+html[data-theme="rust"] .sidebar::before {
+  background: radial-gradient(60% 70% at 50% 26%, rgba(255, 138, 56, 0.2), transparent 72%);
+}
+html[data-theme="rust"] .brand-name {
+  background-image: linear-gradient(100deg, #FFFFFF 8%, #FFC79A 48%, #F0793A 96%);
+}
+html[data-theme="rust"] .brand-mark {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 24px rgba(255, 122, 40, 0.4);
+}
+html[data-theme="rust"] .constellation-line { stroke: rgba(255, 150, 80, 0.42); }
+html[data-theme="rust"] .constellation-star { fill: #FFE0C4; }
+html[data-theme="rust"] .constellation-star-star { fill: #FFF1E2; filter: drop-shadow(0 0 6px rgba(255, 150, 80, 0.85)); }
+html[data-theme="rust"] .nav-pill {
+  background: linear-gradient(100deg, rgba(226, 122, 48, 0.28), rgba(226, 122, 48, 0.09) 70%);
+  border-color: rgba(255, 186, 128, 0.34);
+  box-shadow: 0 10px 26px rgba(126, 49, 12, 0.48), var(--shadow-inner-hairline);
+}
+html[data-theme="rust"] .nav-pill::before { background: linear-gradient(180deg, #FFD3A6, #E0691F); }
+html[data-theme="rust"] .nav-btn.active .nav-icon {
+  color: #FFD9B4;
+  background: rgba(226, 122, 48, 0.18);
+  border-color: rgba(255, 186, 128, 0.36);
+  box-shadow: 0 0 20px rgba(255, 138, 56, 0.38);
+}
+html[data-theme="rust"] .panel { background: linear-gradient(165deg, rgba(38, 25, 16, 0.6) 0%, rgba(9, 6, 4, 0.7) 100%); }
+html[data-theme="rust"] .stat-card { background: linear-gradient(160deg, rgba(44, 29, 18, 0.66) 0%, rgba(10, 7, 5, 0.72) 100%); }
+html[data-theme="rust"] .modal { background: linear-gradient(165deg, rgba(42, 27, 17, 0.95) 0%, rgba(9, 6, 4, 0.97) 100%); }
+html[data-theme="rust"] .modal-overlay {
+  background:
+    radial-gradient(900px 600px at 50% 0%, rgba(255, 122, 40, 0.12), transparent 70%),
+    rgba(4, 2, 1, 0.7);
+}
+html[data-theme="rust"] .modal::before,
+html[data-theme="rust"] .till-action-bar::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 186, 128, 0.8), transparent);
+}
+html[data-theme="rust"] .btn-primary {
+  background: linear-gradient(180deg, #E0742A, #AE4712);
+  color: #170B04;
+  border-color: rgba(255, 186, 128, 0.42);
+  box-shadow: 0 6px 18px rgba(126, 49, 12, 0.46), var(--shadow-inner-hairline);
+}
+html[data-theme="rust"] .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 10px 26px rgba(126, 49, 12, 0.56), 0 0 24px rgba(255, 138, 56, 0.34), var(--shadow-inner-hairline);
+}
+html[data-theme="rust"] .btn-ghost:hover:not(:disabled) {
+  border-color: rgba(255, 186, 128, 0.38);
+  box-shadow: 0 0 18px rgba(255, 138, 56, 0.2);
+}
+html[data-theme="rust"] .btn-charge {
+  background: linear-gradient(180deg, #FFCD9C, #EE7F2C);
+  color: #1A0D04;
+  border-color: rgba(255, 214, 176, 0.55);
+  box-shadow: 0 8px 22px rgba(214, 96, 26, 0.46), var(--shadow-inner-hairline);
+}
+html[data-theme="rust"] .btn-charge:not(:disabled) { animation-name: chargeGlowRust; }
+@keyframes chargeGlowRust {
+  0%, 100% { box-shadow: 0 8px 22px rgba(214, 96, 26, 0.36), 0 0 0 0 rgba(255, 168, 92, 0); }
+  50% { box-shadow: 0 8px 22px rgba(214, 96, 26, 0.5), 0 0 0 8px rgba(255, 168, 92, 0.14), 0 0 28px rgba(255, 168, 92, 0.36); }
+}
+html[data-theme="rust"] .search-input:focus, html[data-theme="rust"] .select-input:focus,
+html[data-theme="rust"] input:focus, html[data-theme="rust"] select:focus {
+  border-color: rgba(255, 186, 128, 0.6);
+}
+html[data-theme="rust"] .data-table tbody tr:hover,
+html[data-theme="rust"] .data-table tbody tr:focus-within { background: rgba(226, 122, 48, 0.09); }
+html[data-theme="rust"] .data-table tbody tr:hover td:first-child,
+html[data-theme="rust"] .data-table tbody tr:focus-within td:first-child { box-shadow: inset 3px 0 0 rgba(255, 186, 128, 0.6); }
+html[data-theme="rust"] .qty-btn:hover,
+html[data-theme="rust"] .table-more-btn:hover,
+html[data-theme="rust"] .shortcut-key:hover,
+html[data-theme="rust"] .quick-cash:hover {
+  border-color: rgba(255, 186, 128, 0.48);
+  background: rgba(226, 122, 48, 0.14);
+  box-shadow: 0 0 14px rgba(255, 138, 56, 0.22);
+}
+html[data-theme="rust"] .held-item:hover,
+html[data-theme="rust"] .bulk-bar {
+  background: linear-gradient(100deg, rgba(226, 122, 48, 0.2), rgba(226, 122, 48, 0.07));
+  border-color: rgba(255, 186, 128, 0.3);
+}
+html[data-theme="rust"] .pay-card { color: var(--blue-soft); border-color: rgba(255, 186, 128, 0.36); background: rgba(226, 122, 48, 0.12); }
+html[data-theme="rust"] .pay-split {
+  color: var(--violet);
+  border-color: rgba(229, 140, 106, 0.42);
+  background: linear-gradient(100deg, rgba(229, 140, 106, 0.1), rgba(226, 122, 48, 0.16));
+}
+html[data-theme="rust"] .bar-fill.bar-card { box-shadow: 0 0 14px rgba(255, 138, 56, 0.4); }
+html[data-theme="rust"] .toast { background: linear-gradient(100deg, rgba(44, 28, 17, 0.95), rgba(8, 5, 3, 0.95)); }
+html[data-theme="rust"] ::selection { background: rgba(226, 122, 48, 0.42); color: #FFF3E6; }
+html[data-theme="rust"] ::-webkit-scrollbar-thumb { background: rgba(255, 186, 128, 0.24); background-clip: content-box; border: 2px solid transparent; }
+html[data-theme="rust"] ::-webkit-scrollbar-thumb:hover { background: rgba(255, 186, 128, 0.42); background-clip: content-box; }
+html[data-theme="rust"] .aurora i:nth-child(1) { background: radial-gradient(circle at 50% 50%, rgba(255, 122, 40, 0.3), rgba(255, 122, 40, 0.08) 55%, transparent 72%); }
+html[data-theme="rust"] .aurora i:nth-child(2) { background: radial-gradient(circle at 50% 50%, rgba(255, 190, 120, 0.18), rgba(255, 190, 120, 0.05) 55%, transparent 70%); }
+html[data-theme="rust"] .aurora i:nth-child(3) { background: radial-gradient(circle at 50% 50%, rgba(196, 88, 32, 0.2), transparent 68%); }
+html[data-theme="rust"] .chip.active {
+  background: linear-gradient(180deg, #E0742A, #AE4712);
+  color: #170B04;
+  border-color: rgba(255, 186, 128, 0.5);
+}
+html[data-theme="rust"] .chip:hover { border-color: rgba(255, 186, 128, 0.44); background: rgba(226, 122, 48, 0.12); }
+html[data-theme="rust"] .product-card-price { text-shadow: 0 0 14px rgba(255, 138, 56, 0.32); }
+
+/* ---------------- The shop's own three themes ----------------
+   Every colour here comes from the two the shop picked (app.js writes them onto
+   <html>), so these rules say where each token goes rather than what it is. */
+
+html[data-theme^="custom-"] body {
+  background-image:
+    radial-gradient(1100px 760px at 4% -10%, rgba(var(--accent-rgb), 0.2), transparent 62%),
+    radial-gradient(900px 680px at 26% 112%, rgba(var(--accent-rgb), 0.1), transparent 62%),
+    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-deep) 100%);
+}
+html[data-theme^="custom-"] .sidebar { background: linear-gradient(180deg, var(--side-top) 0%, var(--side-bottom) 100%); }
+html[data-theme^="custom-"] .sidebar::before { background: radial-gradient(50% 60% at 50% 40%, var(--blue-tint-strong), transparent 70%); }
+html[data-theme^="custom-"] .brand-name { background-image: linear-gradient(100deg, #FFFFFF 10%, var(--blue-soft) 55%, var(--cyan) 95%); }
+html[data-theme^="custom-"] .brand-mark { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 22px var(--blue-glow); }
+html[data-theme^="custom-"] .nav-pill {
+  background: linear-gradient(100deg, var(--blue-tint-strong), var(--blue-tint) 70%);
+  border-color: var(--line-strong);
+  box-shadow: 0 10px 26px var(--blue-glow), var(--shadow-inner-hairline);
+}
+html[data-theme^="custom-"] .nav-pill::before { background: linear-gradient(180deg, var(--blue-soft), var(--blue)); }
+html[data-theme^="custom-"] .nav-btn.active .nav-icon {
+  color: var(--blue-bright);
+  background: var(--blue-tint);
+  border-color: var(--line-strong);
+  box-shadow: 0 0 18px var(--blue-glow);
+}
+html[data-theme^="custom-"] .panel { background: linear-gradient(165deg, var(--panel-a) 0%, var(--panel-b) 100%); }
+html[data-theme^="custom-"] .stat-card { background: linear-gradient(160deg, var(--stat-a) 0%, var(--stat-b) 100%); }
+html[data-theme^="custom-"] .modal { background: linear-gradient(165deg, var(--modal-a) 0%, var(--modal-b) 100%); }
+html[data-theme^="custom-"] .modal-overlay {
+  background:
+    radial-gradient(900px 600px at 50% 0%, var(--blue-tint), transparent 70%),
+    var(--overlay-wash);
+}
+html[data-theme^="custom-"] .modal::before,
+html[data-theme^="custom-"] .till-action-bar::after {
+  background: linear-gradient(90deg, transparent, var(--hover-line), transparent);
+}
+html[data-theme^="custom-"] .btn-primary {
+  background: linear-gradient(180deg, var(--chip-top), var(--chip-bottom));
+  color: var(--on-accent);
+  border-color: var(--line-strong);
+  box-shadow: 0 6px 18px var(--blue-glow), var(--shadow-inner-hairline);
+}
+html[data-theme^="custom-"] .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 10px 26px var(--blue-glow), 0 0 22px var(--blue-glow), var(--shadow-inner-hairline);
+}
+html[data-theme^="custom-"] .btn-ghost:hover:not(:disabled) {
+  border-color: var(--hover-line);
+  box-shadow: 0 0 18px var(--blue-glow);
+}
+html[data-theme^="custom-"] .btn-charge {
+  background: linear-gradient(180deg, var(--blue-bright), var(--blue));
+  color: var(--on-accent);
+  border-color: var(--line-strong);
+  box-shadow: 0 8px 22px var(--blue-glow), var(--shadow-inner-hairline);
+}
+html[data-theme^="custom-"] .btn-charge:not(:disabled) { animation-name: chargeGlowCustom; }
+@keyframes chargeGlowCustom {
+  0%, 100% { box-shadow: 0 8px 22px var(--blue-glow); }
+  50% { box-shadow: 0 10px 26px var(--blue-glow), 0 0 0 8px var(--blue-tint), 0 0 26px var(--blue-glow); }
+}
+html[data-theme^="custom-"] .search-input:focus, html[data-theme^="custom-"] .select-input:focus,
+html[data-theme^="custom-"] input:focus, html[data-theme^="custom-"] select:focus { border-color: var(--hover-line); }
+html[data-theme^="custom-"] .data-table tbody tr:hover,
+html[data-theme^="custom-"] .data-table tbody tr:focus-within { background: var(--row-hover); }
+html[data-theme^="custom-"] .data-table tbody tr:hover td:first-child,
+html[data-theme^="custom-"] .data-table tbody tr:focus-within td:first-child { box-shadow: inset 3px 0 0 var(--hover-line); }
+html[data-theme^="custom-"] .qty-btn:hover,
+html[data-theme^="custom-"] .table-more-btn:hover,
+html[data-theme^="custom-"] .shortcut-key:hover,
+html[data-theme^="custom-"] .quick-cash:hover {
+  border-color: var(--hover-line);
+  background: var(--blue-tint);
+  box-shadow: 0 0 14px var(--blue-glow);
+}
+html[data-theme^="custom-"] .held-item:hover,
+html[data-theme^="custom-"] .bulk-bar {
+  background: linear-gradient(100deg, var(--blue-tint-strong), var(--blue-tint));
+  border-color: var(--line-strong);
+}
+html[data-theme^="custom-"] .pay-card { color: var(--blue-soft); border-color: var(--line-strong); background: var(--blue-tint); }
+html[data-theme^="custom-"] .pay-split {
+  color: var(--violet);
+  border-color: var(--line-strong);
+  background: linear-gradient(100deg, var(--blue-tint), var(--blue-tint-strong));
+}
+html[data-theme^="custom-"] .bar-fill.bar-card { box-shadow: 0 0 14px var(--blue-glow); }
+html[data-theme^="custom-"] .toast { background: linear-gradient(100deg, var(--toast-a), var(--toast-b)); }
+html[data-theme^="custom-"] ::selection { background: var(--sel-bg); color: var(--text-ink); }
+html[data-theme^="custom-"] ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); background-clip: content-box; border: 2px solid transparent; }
+html[data-theme^="custom-"] ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
+html[data-theme^="custom-"] .aurora i:nth-child(1) { background: var(--aurora-1); }
+html[data-theme^="custom-"] .aurora i:nth-child(2) { background: var(--aurora-2); }
+html[data-theme^="custom-"] .aurora i:nth-child(3) { background: var(--aurora-3); }
+html[data-theme^="custom-"] .chip.active {
+  background: linear-gradient(180deg, var(--chip-top), var(--chip-bottom));
+  color: var(--on-accent);
+  border-color: var(--line-strong);
+}
+html[data-theme^="custom-"] .chip:hover { border-color: var(--hover-line); background: var(--blue-tint); }
+html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--blue-glow); }
+
+/* ---------------- Previews for the two new themes ---------------- */
+
+.theme-swatch-moonlight { background: linear-gradient(160deg, #101C33, #03060E); }
+.theme-swatch-moonlight i:nth-child(1) { width: 18px; height: 18px; left: 7px; top: 6px; background: #6E8BF0; }
+.theme-swatch-moonlight i:nth-child(2) { width: 11px; height: 11px; right: 8px; top: 11px; background: #DCE6FF; }
+.theme-swatch-moonlight i:nth-child(3) { width: 8px; height: 8px; left: 21px; bottom: 7px; background: #B9CBFF; }
+.theme-swatch-rust { background: linear-gradient(160deg, #23170F, #0A0705); }
+.theme-swatch-rust i:nth-child(1) { width: 18px; height: 18px; left: 7px; top: 6px; background: #C2571F; }
+.theme-swatch-rust i:nth-child(2) { width: 11px; height: 11px; right: 8px; top: 11px; background: #FF9A4D; }
+.theme-swatch-rust i:nth-child(3) { width: 8px; height: 8px; left: 21px; bottom: 7px; background: #FFC79A; }
+
+/* ---------------- Setup: the three slots the shop fills in ---------------- */
+
+.custom-themes { display: flex; flex-direction: column; gap: var(--space-4); }
+.custom-theme {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) repeat(2, minmax(110px, 140px)) 96px 62px;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+.custom-theme:hover { border-color: var(--line-strong); }
+.custom-theme-name { font-size: var(--text-sm); font-weight: 600; color: var(--text-ink); }
+.custom-color { display: flex; align-items: center; gap: var(--space-4); font-size: var(--text-2xs); color: var(--text-muted); }
+.custom-color input[type="color"] {
+  width: 46px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  cursor: pointer;
+  transition: box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+}
+.custom-color input[type="color"]:hover { transform: translateY(-1px); box-shadow: 0 0 14px var(--blue-glow); }
+.custom-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+.custom-color input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
+.custom-use { justify-content: center; }
+.custom-reset {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-2xs);
+  color: var(--text-dim);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.custom-reset:hover { color: var(--blue-bright); }
+
+/* ===========================================================================
+   Screens across the top, the way a browser keeps them
+   ===========================================================================
+   The same buttons, moved by one attribute on <html>. Below the width where
+   tabs would be squeezed the side layout stays, whatever the shop chose: a
+   cramped row of tabs is worse than a column it already knows. */
+
+@media (min-width: 1181px) {
+  html[data-nav="top"] .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  html[data-nav="top"] .sidebar {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: var(--space-7);
+    padding: var(--space-7) var(--space-9) 0 var(--space-9);
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+  /* The light over the tabs, and no moonlit column behind them. */
+  html[data-nav="top"] .sidebar::before { inset: -140px -10% auto -10%; height: 220px; }
+  html[data-nav="top"] .sidebar-constellation,
+  html[data-nav="top"] .ss-watermark { display: none; }
+
+  html[data-nav="top"] .brand { align-self: center; padding: 0 var(--space-6) var(--space-4) 0; }
+  html[data-nav="top"] .brand-mark { width: 30px; height: 30px; }
+  html[data-nav="top"] .nav-group {
+    flex: 1 1 auto;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 2px;
+    margin: 0;
+    min-width: 0;
+    align-self: stretch;
+  }
+  /* The travelling highlight belongs to the column; tabs carry their own. */
+  html[data-nav="top"] .nav-pill { display: none; }
+
+  html[data-nav="top"] .nav-btn {
+    position: relative;
+    align-self: flex-end;
+    gap: var(--space-3);
+    padding: var(--space-6) var(--space-8) var(--space-5);
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    margin-bottom: -1px;
+    white-space: nowrap;
+    transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out),
+                transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out);
+  }
+  html[data-nav="top"] .nav-btn:hover { background: rgba(255, 255, 255, 0.05); transform: translateY(-2px); }
+  html[data-nav="top"] .nav-btn.active {
+    background: linear-gradient(180deg, var(--blue-tint-strong), var(--blue-tint) 58%, transparent 100%);
+    border-color: var(--line-strong);
+    box-shadow: 0 -10px 26px -14px var(--blue-glow);
+    transform: none;
+  }
+  /* A hairline of the accent along the top of the tab that is open. */
+  html[data-nav="top"] .nav-btn.active::after {
+    content: '';
+    position: absolute;
+    inset: 0 10px auto 10px;
+    height: 2px;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(90deg, transparent, var(--blue-bright), transparent);
+    box-shadow: 0 0 12px var(--blue-glow);
+  }
+  html[data-nav="top"] .nav-btn .nav-icon { width: 22px; height: 22px; border: none; background: none; box-shadow: none; }
+  html[data-nav="top"] .nav-btn .nav-icon svg { width: 16px; height: 16px; }
+  html[data-nav="top"] .nav-btn.active .nav-icon { background: none; border: none; box-shadow: none; transform: none; }
+  html[data-nav="top"] .nav-lock { margin-left: var(--space-2); }
+
+  html[data-nav="top"] .sidebar-foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    align-self: center;
+    flex: 0 0 auto;
+    margin: 0 0 var(--space-4) auto;
+    padding: 0 0 0 var(--space-6);
+    border-top: none;
+    border-left: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  /* The column's foot becomes one short row along the right of the tabs. */
+  html[data-nav="top"] .sidebar-foot .lock-toggle { width: auto; padding: var(--space-2) var(--space-5); }
+  html[data-nav="top"] .sidebar-foot .clock { font-size: var(--text-lg); text-shadow: none; }
+  html[data-nav="top"] .sidebar-foot .shop-name-mini { margin-top: 0; max-width: 18ch; }
+  html[data-nav="top"] .sidebar-foot .ss-watermark { display: none; }
+  html[data-nav="top"] .content { grid-row: 2; min-height: 0; }
+}
+
+/* ---------------- Changing the shop's mind ----------------
+   Played once, on the click that moves the screens, so the change is seen
+   rather than found: the bar drops, the tabs arrive one after another and the
+   screen lifts to meet them. */
+
+.app.nav-switching .sidebar { animation: navSwitchBar 0.5s var(--ease-out-expo) both; }
+.app.nav-switching .nav-group { animation: navSwitchFade 0.45s var(--ease-out) both; }
+.app.nav-switching .nav-btn { animation: navSwitchTab 0.5s var(--ease-spring-soft) both; }
+.app.nav-switching .nav-btn:nth-child(2) { animation-delay: 40ms; }
+.app.nav-switching .nav-btn:nth-child(3) { animation-delay: 80ms; }
+.app.nav-switching .nav-btn:nth-child(4) { animation-delay: 120ms; }
+.app.nav-switching .nav-btn:nth-child(5) { animation-delay: 160ms; }
+.app.nav-switching .nav-btn:nth-child(6) { animation-delay: 200ms; }
+.app.nav-switching .nav-btn:nth-child(7) { animation-delay: 240ms; }
+.app.nav-switching .brand { animation: navSwitchTab 0.55s var(--ease-spring-soft) both; }
+.app.nav-switching .content { animation: navSwitchScreen 0.55s var(--ease-out-expo) both; animation-delay: 60ms; }
+.app.nav-switching .nav-pill { animation: navSwitchFade 0.45s var(--ease-out) both; }
+
+@keyframes navSwitchBar {
+  from { transform: translateY(-14px); opacity: 0.2; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes navSwitchTab {
+  from { transform: translateY(10px) scale(0.96); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes navSwitchFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes navSwitchScreen {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
