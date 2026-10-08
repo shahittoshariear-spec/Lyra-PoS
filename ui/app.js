@@ -35,6 +35,13 @@
   function groupedInt(n) {
     return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   }
+
+  // "  (12 sales)" — the count that sits beside a payment figure, because one
+  // big card sale and thirty small cash ones read the same without it.
+  function paidCount(count) {
+    if (!count) return '';
+    return '   (' + groupedInt(count) + (count === 1 ? ' sale)' : ' sales)');
+  }
   function uid(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function nextProductId() { return 'p' + (DATA.nextProductId++); }
 
@@ -1902,7 +1909,20 @@
     for (let d = 6; d >= 0; d--) {
       const key = dayKeyAgo(d);
       const dt = computePeriodTotals(key, 'day');
-      recentDays.push({ label: periodLabel(key, 'day'), sales: dt.total, profit: dt.profit, transactions: dt.transactions });
+      // Each day carries its own cash and card split, with the number of sales
+      // each way, so the week can be read day by day rather than as one line.
+      recentDays.push({
+        label: periodLabel(key, 'day'),
+        sales: dt.total,
+        profit: dt.profit,
+        transactions: dt.transactions,
+        cash: dt.cash,
+        card: dt.card,
+        other: dt.other,
+        cashCount: dt.cashCount,
+        cardCount: dt.cardCount,
+        otherCount: dt.otherCount
+      });
     }
 
     const threshold = DATA.settings.lowStockThreshold || 0;
@@ -1927,6 +1947,9 @@
         cash: t.cash,
         card: t.card,
         other: t.other,
+        cashCount: t.cashCount,
+        cardCount: t.cardCount,
+        otherCount: t.otherCount,
         refundsValue: refunded,
         refundCount: t.refunds,
         transactions: t.transactions,
@@ -1962,18 +1985,25 @@
     const cfg = reportSettings();
     const t = entry.report.totals;
     const money = (v) => (entry.report.currency || '') + Number(v || 0).toFixed(2);
+    // The week behind the report, cash and card the way the Ledger reads it.
+    const short = (n) => (n ? ' (' + groupedInt(n) + ')' : '');
+    const week = (entry.report.recentDays || []).slice().reverse().map(d =>
+      d.label + '   cash ' + money(d.cash) + short(d.cashCount) +
+      '   card ' + money(d.card) + short(d.cardCount));
     return [
       entry.report.shopName,
       'Day report - ' + entry.dateLabel,
       '',
       'Takings        ' + money(t.sales),
-      'Paid in cash   ' + money(t.cash),
-      'Paid by card   ' + money(t.card),
-      (t.other ? 'Other payment  ' + money(t.other) + '\n' : '') +
+      'Paid in cash   ' + money(t.cash) + paidCount(t.cashCount),
+      'Paid by card   ' + money(t.card) + paidCount(t.cardCount),
+      (t.other ? 'Other payment  ' + money(t.other) + paidCount(t.otherCount) + '\n' : '') +
       'Sales          ' + t.transactions + '     Items sold ' + t.itemsSold,
       'Profit         ' + money(t.profit) + '  (' + t.marginPct.toFixed(1) + '% margin)',
       '',
       'The full report is attached as a PDF.',
+      ...(week.length ? ['', 'Cash and card, day by day'] : []),
+      ...week,
       '',
       entry.report.footerNote || '',
       'Sent by Lyra PoS' + (cfg.senderName ? ' — ' + cfg.senderName : '')
@@ -2603,6 +2633,33 @@
     return '<span class="pay-badge ' + cls + '">' + escapeHtml(method || '—') + '</span>';
   }
 
+  // The band that sits above a day's sales in the Ledger: what the day took in
+  // cash and on card, and how many trips to the till each of those was. A count
+  // beside the money answers the question the money alone cannot — one big card
+  // sale and thirty small cash ones look the same in a single total.
+  function ledgerDayBand(dayKey, day) {
+    const chip = (cls, label, amount, count, title) =>
+      '<span class="day-part ' + cls + '"' + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' +
+        label + ' <b>' + moneyGrouped(amount) + '</b>' +
+        (count ? ' <i>' + groupedInt(count) + '</i>' : '') +
+      '</span>';
+    const parts = [
+      chip('day-cash', 'Cash', day.cash, day.cashCount,
+        groupedInt(day.cashCount) + (day.cashCount === 1 ? ' sale' : ' sales') + ' paid in cash'),
+      chip('day-card', 'Card', day.card, day.cardCount,
+        groupedInt(day.cardCount) + (day.cardCount === 1 ? ' sale' : ' sales') + ' paid by card')
+    ];
+    if (day.other) parts.push(chip('day-other', 'Other', day.other, 0, 'Paid some other way'));
+    parts.push(chip('day-total', 'Total', day.total, day.count,
+      groupedInt(day.count) + (day.count === 1 ? ' entry' : ' entries') + ' in the ledger'));
+    return '<tr class="ledger-day"><td colspan="6">' +
+      '<div class="ledger-day-inner">' +
+        '<span class="ledger-day-name">' + escapeHtml(periodLabel(dayKey, 'day')) + '</span>' +
+        '<span class="ledger-day-split">' + parts.join('') + '</span>' +
+      '</div>' +
+    '</td></tr>';
+  }
+
   function renderLedger() {
     const dateVal = $('#ledgerDateFilter').value;
     const body = $('#ledgerTableBody');
@@ -2624,7 +2681,41 @@
       ledgerRowLimit = MAX_LEDGER_ROWS;
     }
     const shownSales = sales.slice(0, ledgerRowLimit);
-    let rowsHtml = shownSales.map(sale => {
+
+    // What each day took, worked out from the shop's whole ledger rather than
+    // from the part of it on screen, so a day's figure is the day's figure no
+    // matter how far down the list has been read.
+    const dayTotals = new Map();
+    sales.forEach(entry => {
+      const key = entry.date.slice(0, 10);
+      let day = dayTotals.get(key);
+      if (!day) {
+        day = { cash: 0, card: 0, other: 0, cashCount: 0, cardCount: 0, total: 0, count: 0 };
+        dayTotals.set(key, day);
+      }
+      const cash = saleCashPart(entry);
+      const card = saleCardPart(entry);
+      day.cash += cash;
+      day.card += card;
+      day.other += saleOtherPart(entry);
+      day.total += entry.total;
+      day.count += 1;
+      // Money going back moves the money but is not a sale, so it is left out
+      // of the counts.
+      if (entry.type !== 'return') {
+        if (cash !== 0) day.cashCount += 1;
+        if (card !== 0) day.cardCount += 1;
+      }
+    });
+
+    let rowsHtml = '';
+    let bandedDay = null;
+    shownSales.forEach(sale => {
+      const dayKey = sale.date.slice(0, 10);
+      if (dayKey !== bandedDay) {
+        bandedDay = dayKey;
+        rowsHtml += ledgerDayBand(dayKey, dayTotals.get(dayKey));
+      }
       const itemCount = sale.items.reduce((n, i) => n + i.qty, 0);
       const isReturn = sale.type === 'return';
       const original = isReturn ? findSaleById(sale.refundOf) : null;
@@ -2632,16 +2723,16 @@
       const label = isReturn
         ? 'Refund #' + sale.number + (originalNumber ? ' <span class="row-sub">of #' + originalNumber + '</span>' : '')
         : '#' + sale.number;
-      return `
-        <tr data-id="${sale.id}">
-          <td>${label}</td>
-          <td>${new Date(sale.date).toLocaleString()}</td>
-          <td>${itemCount}</td>
-          <td class="num" style="${isReturn ? 'color:var(--stamp-red);' : ''}">${money(sale.total)}</td>
-          <td>${paymentBadge(sale.paymentMethod)}</td>
-          <td><span class="row-link" data-action="print">Reprint</span> <span class="row-link" data-action="view">View</span></td>
-        </tr>`;
-    }).join('');
+      rowsHtml +=
+        '<tr data-id="' + sale.id + '">' +
+          '<td>' + label + '</td>' +
+          '<td>' + new Date(sale.date).toLocaleString() + '</td>' +
+          '<td>' + itemCount + '</td>' +
+          '<td class="num" style="' + (isReturn ? 'color:var(--stamp-red);' : '') + '">' + money(sale.total) + '</td>' +
+          '<td>' + paymentBadge(sale.paymentMethod) + '</td>' +
+          '<td><span class="row-link" data-action="print">Reprint</span> <span class="row-link" data-action="view">View</span></td>' +
+        '</tr>';
+    });
     if (sales.length > shownSales.length) {
       const next = Math.min(MAX_LEDGER_ROWS, sales.length - shownSales.length);
       rowsHtml += `<tr class="table-more"><td colspan="6">
@@ -2685,6 +2776,22 @@
   function saleProfit(sale) {
     const cogs = sale.items.reduce((s, li) => s + (li.cost || 0) * li.qty, 0);
     return sale.type === 'return' ? (sale.subtotal + cogs) : (sale.subtotal - cogs);
+  }
+
+  // How much of one record went each way. A sale split across cash and card
+  // carries each half on the record; every other record is its whole total on
+  // the one method it names. The Ledger adds these up per day, and the day
+  // report reads the same figures, so both agree to the cent.
+  function saleCashPart(r) {
+    if (typeof r.cashPaid === 'number') return r.cashPaid;
+    return r.paymentMethod === 'Cash' ? r.total : 0;
+  }
+  function saleCardPart(r) {
+    if (typeof r.cardPaid === 'number') return r.cardPaid;
+    return r.paymentMethod === 'Card' ? r.total : 0;
+  }
+  function saleOtherPart(r) {
+    return r.paymentMethod === 'Other' ? r.total : 0;
   }
 
   // All grouping is derived from the sale's UTC calendar day-key (dateStr.slice(0,10)),
@@ -2740,16 +2847,22 @@
     // A sale split across cash and card carries each half on the record; every
     // other record is its whole total on the one method it names. Refund
     // records are negative, so they come off the same way.
-    const cashPart = (r) => (typeof r.cashPaid === 'number' ? r.cashPaid : (r.paymentMethod === 'Cash' ? r.total : 0));
-    const cardPart = (r) => (typeof r.cardPaid === 'number' ? r.cardPaid : (r.paymentMethod === 'Card' ? r.total : 0));
-    const otherPart = (r) => (r.paymentMethod === 'Other' ? r.total : 0);
+    const cashPart = saleCashPart;
+    const cardPart = saleCardPart;
+    const otherPart = saleOtherPart;
+    // How many trips to the till each method was. A refund is money going back
+    // rather than a sale, so it moves the money but not the count.
+    const paidSales = saleRecords;
     return {
       key, period, total, profit, itemsSold,
       transactions: saleRecords.length,
       refunds: returnRecords.length,
       cash: records.reduce((s, r) => s + cashPart(r), 0),
       card: records.reduce((s, r) => s + cardPart(r), 0),
-      other: records.reduce((s, r) => s + otherPart(r), 0)
+      other: records.reduce((s, r) => s + otherPart(r), 0),
+      cashCount: paidSales.filter(r => cashPart(r) !== 0).length,
+      cardCount: paidSales.filter(r => cardPart(r) !== 0).length,
+      otherCount: paidSales.filter(r => otherPart(r) !== 0).length
     };
   }
 
@@ -3115,6 +3228,9 @@
     '--glass', '--glass-soft', '--glass-lift', '--line', '--line-strong',
     '--blue', '--blue-bright', '--blue-soft', '--blue-deep',
     '--blue-tint', '--blue-tint-strong', '--blue-glow',
+    '--blue-rgb', '--blue-bright-rgb', '--blue-deep-rgb',
+    '--surface-rgb', '--surface-deep-rgb', '--ink-rgb', '--ink-deep-rgb',
+    '--tape-top', '--tape-bottom', '--tape-top-rgb', '--tape-bottom-rgb',
     '--cyan', '--violet', '--mint', '--accent-card', '--accent-rgb', '--on-accent',
     '--text-ink', '--text-muted', '--text-dim', '--text-on-ink', '--text-on-ink-muted',
     '--side-top', '--side-bottom', '--panel-a', '--panel-b', '--stat-a', '--stat-b',
@@ -3182,6 +3298,14 @@
     const surface = (toward, amount, alpha) => rgbaOf(mixRgb(b, toward, amount), alpha);
     const bright = mixTo(a, WHITE, 0.34);
     const soft = mixTo(a, WHITE, 0.62);
+    const deep = mixTo(a, BLACK, 0.3);
+    const rgbOf = (hex) => { const c = hexToRgb(hex); return c.map(v => Math.round(v)).join(', '); };
+    // The card surface and the receipt's own paper, both lifted out of the
+    // night towards the accent so a card still reads as paper on this screen.
+    const tapeTop = mixTo(b, a, 0.1);
+    const tapeBottom = mixTo(b, BLACK, 0.26);
+    const surface = mixTo(b, a, 0.16);
+    const surfaceDeep = mixTo(b, BLACK, 0.3);
     return {
       '--bg-deep': mixTo(b, BLACK, 0.45),
       '--bg': rgbToHex(b),
@@ -3197,10 +3321,24 @@
       '--blue': t.accent,
       '--blue-bright': bright,
       '--blue-soft': soft,
-      '--blue-deep': mixTo(a, BLACK, 0.3),
+      '--blue-deep': deep,
       '--blue-tint': glowAt(0.13),
       '--blue-tint-strong': glowAt(0.22),
       '--blue-glow': glowAt(0.42),
+      // The same accent again as components: every rule in the stylesheet that
+      // mixes its own alpha — the receipt, the cards, the hovers, the tab strip
+      // — reads these, so none of them stays midnight blue on a custom theme.
+      '--blue-rgb': rgbOf(t.accent),
+      '--blue-bright-rgb': rgbOf(bright),
+      '--blue-deep-rgb': rgbOf(deep),
+      '--surface-rgb': rgbOf(surface),
+      '--surface-deep-rgb': rgbOf(surfaceDeep),
+      '--tape-top': tapeTop,
+      '--tape-bottom': tapeBottom,
+      '--tape-top-rgb': rgbOf(tapeTop),
+      '--tape-bottom-rgb': rgbOf(tapeBottom),
+      '--ink-rgb': rgbOf(mixTo(b, a, 0.14)),
+      '--ink-deep-rgb': rgbOf(mixTo(b, BLACK, 0.2)),
       '--accent-rgb': a.map(v => Math.round(v)).join(', '),
       '--on-accent': luminance(a) > 0.62 ? '#0B0C12' : '#FFFFFF',
       '--cyan': mixTo(a, [111, 224, 226], 0.5),

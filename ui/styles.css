@@ -45,6 +45,28 @@
   --blue-tint-strong: rgba(77, 141, 255, 0.2);
   --blue-glow: rgba(77, 141, 255, 0.38);
 
+  /* The same accent again as raw components, for the places that need it mixed
+     into a gradient or a shadow at an alpha of their own. Every theme rewrites
+     these — including the shop's own colours — so a rule written once (the
+     receipt, the cards, the tab strip, every hover) follows whatever the shop
+     picked rather than staying midnight blue. */
+  --blue-rgb: 77, 141, 255;
+  --blue-bright-rgb: 127, 176, 255;
+  --blue-deep-rgb: 36, 86, 196;
+
+  /* The raised card surface, and the receipt's own paper. */
+  --surface-rgb: 28, 40, 72;
+  --surface-deep-rgb: 12, 18, 34;
+  --tape-top: #10182C;
+  --tape-bottom: #090E1B;
+  --tape-top-rgb: 17, 25, 45;
+  --tape-bottom-rgb: 9, 14, 27;
+
+  /* The table chrome and the bars that carry the shop's own status: the header
+     band, the "showing N of M" strip, the action bar over the till. */
+  --ink-rgb: 22, 32, 60;
+  --ink-deep-rgb: 11, 18, 34;
+
   /* ---- Rust orange: warnings, the danger zone, a little light in the corner ---- */
   --rust: #F97316;
   --rust-soft: #FBA968;
@@ -209,7 +231,7 @@ body {
   padding: 0;
   background-color: var(--bg);
   background-image:
-    radial-gradient(1100px 760px at 4% -10%, rgba(77, 141, 255, 0.16), transparent 62%),
+    radial-gradient(1100px 760px at 4% -10%, rgba(var(--blue-rgb), 0.16), transparent 62%),
     radial-gradient(900px 680px at 26% 112%, rgba(124, 92, 255, 0.11), transparent 62%),
     radial-gradient(520px 420px at 96% 4%, rgba(249, 115, 22, 0.07), transparent 66%),
     linear-gradient(180deg, #080D1B 0%, #05080F 100%);
@@ -225,7 +247,7 @@ body {
 
 button, input, select { font-family: inherit; }
 
-::selection { background: rgba(77, 141, 255, 0.35); color: #FFFFFF; }
+::selection { background: rgba(var(--blue-rgb), 0.35); color: #FFFFFF; }
 
 /* Keyboard-only focus ring. Rules further down override the colour where the
    surface is dark (.nav-btn, .lock-toggle, .bulk-bar) or clipped (.seg-btn). */
@@ -281,7 +303,7 @@ summary:focus-visible {
   position: absolute;
   inset: -60px -40% auto -40%;
   height: 320px;
-  background: radial-gradient(50% 60% at 50% 40%, rgba(77, 141, 255, 0.22), transparent 70%);
+  background: radial-gradient(50% 60% at 50% 40%, rgba(var(--blue-rgb), 0.22), transparent 70%);
   pointer-events: none;
 }
 
@@ -302,7 +324,7 @@ summary:focus-visible {
   object-fit: cover;
   display: block;
   border: 1px solid var(--line-strong);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), 0 0 22px rgba(77, 141, 255, 0.28);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), 0 0 22px rgba(var(--blue-rgb), 0.28);
 }
 
 .brand-name {
@@ -342,9 +364,9 @@ summary:focus-visible {
   top: 0;
   height: 44px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(100deg, rgba(77, 141, 255, 0.26), rgba(77, 141, 255, 0.08) 70%);
-  border: 1px solid rgba(127, 176, 255, 0.34);
-  box-shadow: 0 10px 26px rgba(36, 86, 196, 0.34), var(--shadow-inner-hairline);
+  background: linear-gradient(100deg, rgba(var(--blue-rgb), 0.26), rgba(var(--blue-rgb), 0.08) 70%);
+  border: 1px solid rgba(var(--blue-bright-rgb), 0.34);
+  box-shadow: 0 10px 26px rgba(var(--blue-deep-rgb), 0.34), var(--shadow-inner-hairline);
   z-index: 0;
   transition: transform var(--dur-slower) var(--ease-spring-soft), height var(--dur-slow) var(--ease-out);
 }
@@ -410,9 +432,9 @@ summary:focus-visible {
 .nav-btn.active .nav-icon {
   opacity: 1;
   color: var(--blue-bright);
-  background: rgba(77, 141, 255, 0.18);
-  border-color: rgba(127, 176, 255, 0.32);
-  box-shadow: 0 0 18px rgba(77, 141, 255, 0.3);
+  background: rgba(var(--blue-rgb), 0.18);
+  border-color: rgba(var(--blue-bright-rgb), 0.32);
+  box-shadow: 0 0 18px rgba(var(--blue-rgb), 0.3);
   transform: scale(1.04);
 }
 
@@ -444,13 +466,13 @@ summary:focus-visible {
 
 .constellation-line {
   fill: none;
-  stroke: rgba(127, 176, 255, 0.5);
+  stroke: rgba(var(--blue-bright-rgb), 0.5);
   stroke-width: 1;
   stroke-linecap: round;
 }
 
 .constellation-star { fill: #DCE9FF; }
-.constellation-star-star { fill: #FFFFFF; filter: drop-shadow(0 0 5px rgba(127, 176, 255, 0.9)); }
+.constellation-star-star { fill: #FFFFFF; filter: drop-shadow(0 0 5px rgba(var(--blue-bright-rgb), 0.9)); }
 .constellation-star-warm { fill: var(--rust-soft); filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.55)); }
 
 .sidebar .constellation-star-star { animation: starTwinkle 5.5s ease-in-out infinite; }
@@ -500,7 +522,7 @@ summary:focus-visible {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   color: var(--text-on-ink);
-  text-shadow: 0 0 20px rgba(127, 176, 255, 0.35), 0 0 30px rgba(249, 115, 22, calc(var(--warmth) * 0.3));
+  text-shadow: 0 0 20px rgba(var(--blue-bright-rgb), 0.35), 0 0 30px rgba(249, 115, 22, calc(var(--warmth) * 0.3));
 }
 
 .shop-name-mini {
@@ -581,15 +603,15 @@ summary:focus-visible {
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-primary {
-  background: linear-gradient(180deg, #2F6AE4, #2456C4);
+  background: linear-gradient(180deg, var(--blue), var(--blue-deep));
   color: #FFFFFF;
-  border-color: rgba(127, 176, 255, 0.35);
-  box-shadow: 0 6px 18px rgba(36, 86, 196, 0.32), var(--shadow-inner-hairline);
+  border-color: rgba(var(--blue-bright-rgb), 0.35);
+  box-shadow: 0 6px 18px rgba(var(--blue-deep-rgb), 0.32), var(--shadow-inner-hairline);
 }
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 10px 26px rgba(36, 86, 196, 0.42), 0 0 22px rgba(77, 141, 255, 0.28), var(--shadow-inner-hairline);
+  box-shadow: 0 10px 26px rgba(var(--blue-deep-rgb), 0.42), 0 0 22px rgba(var(--blue-rgb), 0.28), var(--shadow-inner-hairline);
 }
 
 .btn-ghost {
@@ -599,8 +621,8 @@ summary:focus-visible {
 }
 .btn-ghost:hover:not(:disabled) {
   background: var(--glass-lift);
-  border-color: rgba(127, 176, 255, 0.36);
-  box-shadow: 0 0 18px rgba(77, 141, 255, 0.16);
+  border-color: rgba(var(--blue-bright-rgb), 0.36);
+  box-shadow: 0 0 18px rgba(var(--blue-rgb), 0.16);
 }
 
 /* Charge is the one button a cashier presses with a customer waiting, so it is
@@ -666,7 +688,7 @@ summary:focus-visible {
   border-color: var(--line-strong);
 }
 .search-input:focus, .select-input:focus, input:focus, select:focus {
-  border-color: rgba(127, 176, 255, 0.65);
+  border-color: rgba(var(--blue-bright-rgb), 0.65);
   background: rgba(7, 13, 26, 0.8);
   box-shadow: var(--focus-glow);
 }
@@ -697,11 +719,11 @@ input[type=date]::-webkit-calendar-picker-indicator {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
-  background: linear-gradient(100deg, rgba(77, 141, 255, 0.18), rgba(77, 141, 255, 0.06));
+  background: linear-gradient(100deg, rgba(var(--blue-rgb), 0.18), rgba(var(--blue-rgb), 0.06));
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   color: var(--text-on-ink);
-  border: 1px solid rgba(127, 176, 255, 0.3);
+  border: 1px solid rgba(var(--blue-bright-rgb), 0.3);
   border-radius: var(--radius-sm);
   padding: var(--space-4) var(--space-7);
   margin-bottom: var(--space-5);
@@ -752,18 +774,18 @@ input[type=date]::-webkit-calendar-picker-indicator {
               transform var(--dur-fast) var(--ease-spring);
 }
 .chip:hover {
-  border-color: rgba(127, 176, 255, 0.45);
+  border-color: rgba(var(--blue-bright-rgb), 0.45);
   color: var(--text-ink);
-  background: rgba(77, 141, 255, 0.1);
-  box-shadow: 0 0 16px rgba(77, 141, 255, 0.16);
+  background: rgba(var(--blue-rgb), 0.1);
+  box-shadow: 0 0 16px rgba(var(--blue-rgb), 0.16);
 }
 .chip:active { transform: scale(0.96); }
 .chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .chip.active {
-  background: linear-gradient(180deg, #2F6AE4, #2456C4);
+  background: linear-gradient(180deg, var(--blue), var(--blue-deep));
   color: #FFFFFF;
-  border-color: rgba(127, 176, 255, 0.5);
-  box-shadow: 0 6px 18px rgba(36, 86, 196, 0.35), var(--shadow-inner-hairline);
+  border-color: rgba(var(--blue-bright-rgb), 0.5);
+  box-shadow: 0 6px 18px rgba(var(--blue-deep-rgb), 0.35), var(--shadow-inner-hairline);
   animation: chipPop var(--dur-slow) var(--ease-spring);
 }
 .chip-remove { margin-left: var(--space-2); opacity: 0.6; transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); display: inline-block; }
@@ -803,7 +825,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   flex-wrap: wrap;
   gap: var(--space-8);
   row-gap: var(--space-4);
-  background: linear-gradient(100deg, rgba(22, 32, 60, 0.72), rgba(11, 18, 34, 0.6));
+  background: linear-gradient(100deg, rgba(var(--ink-rgb), 0.72), rgba(var(--ink-deep-rgb), 0.6));
   backdrop-filter: blur(16px) saturate(120%);
   -webkit-backdrop-filter: blur(16px) saturate(120%);
   color: var(--text-on-ink);
@@ -822,7 +844,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.75), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--blue-bright-rgb), 0.75), transparent);
   pointer-events: none;
 }
 
@@ -844,7 +866,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(160deg, rgba(28, 40, 72, 0.66) 0%, rgba(12, 18, 34, 0.72) 100%);
+    linear-gradient(160deg, rgba(var(--surface-rgb), 0.66) 0%, rgba(var(--surface-deep-rgb), 0.72) 100%);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: var(--space-6) var(--space-5);
@@ -866,7 +888,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 100% at 15% 0%, rgba(77, 141, 255, 0.18), transparent 60%);
+  background: radial-gradient(120% 100% at 15% 0%, rgba(var(--blue-rgb), 0.18), transparent 60%);
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
   pointer-events: none;
@@ -880,15 +902,15 @@ input[type=date]::-webkit-calendar-picker-indicator {
   bottom: 14%;
   width: 2px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(180deg, var(--blue-bright), rgba(77, 141, 255, 0));
+  background: linear-gradient(180deg, var(--blue-bright), rgba(var(--blue-rgb), 0));
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
   pointer-events: none;
 }
 .product-card:hover:not(:disabled) {
-  border-color: rgba(127, 176, 255, 0.45);
+  border-color: rgba(var(--blue-bright-rgb), 0.45);
   transform: translateY(-3px);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45), 0 0 24px rgba(77, 141, 255, 0.18), var(--shadow-inner-hairline);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45), 0 0 24px rgba(var(--blue-rgb), 0.18), var(--shadow-inner-hairline);
 }
 .product-card:hover:not(:disabled)::before,
 .product-card:hover:not(:disabled)::after { opacity: 1; }
@@ -917,7 +939,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--blue-bright);
-  text-shadow: 0 0 14px rgba(77, 141, 255, 0.3);
+  text-shadow: 0 0 14px rgba(var(--blue-rgb), 0.3);
 }
 .product-card-stock { font-size: var(--text-3xs); line-height: var(--leading-tight); color: var(--text-muted); text-align: right; }
 .product-card-stock.low { color: var(--rust); font-weight: 600; }
@@ -969,9 +991,9 @@ input[type=date]::-webkit-calendar-picker-indicator {
 
 .tape-body {
   position: relative;
-  background: linear-gradient(180deg, rgba(17, 25, 45, 0.95) 0%, rgba(9, 14, 27, 0.97) 100%);
-  border-left: 1px solid rgba(127, 176, 255, 0.18);
-  border-right: 1px solid rgba(127, 176, 255, 0.18);
+  background: linear-gradient(180deg, rgba(var(--tape-top-rgb), 0.95) 0%, rgba(var(--tape-bottom-rgb), 0.97) 100%);
+  border-left: 1px solid rgba(var(--blue-bright-rgb), 0.18);
+  border-right: 1px solid rgba(var(--blue-bright-rgb), 0.18);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   flex: 1;
   display: flex;
@@ -997,8 +1019,8 @@ input[type=date]::-webkit-calendar-picker-indicator {
   font-family: var(--font-mono);
   font-size: var(--tape-font);
   font-variant-numeric: tabular-nums;
-  border-top: 1px dashed rgba(127, 176, 255, 0.22);
-  border-bottom: 1px dashed rgba(127, 176, 255, 0.22);
+  border-top: 1px dashed rgba(var(--blue-bright-rgb), 0.22);
+  border-bottom: 1px dashed rgba(var(--blue-bright-rgb), 0.22);
   padding: var(--space-4) 0;
 }
 
@@ -1052,7 +1074,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
               transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out);
 }
-.qty-btn:hover { background: rgba(77, 141, 255, 0.18); border-color: rgba(127, 176, 255, 0.5); box-shadow: 0 0 14px rgba(77, 141, 255, 0.22); }
+.qty-btn:hover { background: rgba(var(--blue-rgb), 0.18); border-color: rgba(var(--blue-bright-rgb), 0.5); box-shadow: 0 0 14px rgba(var(--blue-rgb), 0.22); }
 .qty-btn:active { transform: scale(0.9); }
 .qty-btn:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
 .tape-line-total { min-width: clamp(66px, 7vw, 96px); text-align: right; font-weight: 600; display: inline-block; font-variant-numeric: tabular-nums; }
@@ -1062,7 +1084,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 }
 .tape-line-remove:hover { transform: scale(1.3) rotate(90deg); color: var(--rust); }
 
-.tape-divider { height: 1px; background: rgba(127, 176, 255, 0.16); margin: 2px 0; }
+.tape-divider { height: 1px; background: rgba(var(--blue-bright-rgb), 0.16); margin: 2px 0; }
 
 .tape-totals { padding: var(--space-4) 0 var(--space-1) 0; font-family: var(--font-mono); font-size: var(--tape-font); font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .tape-row { display: flex; justify-content: space-between; align-items: baseline; padding: var(--space-1) 0; }
@@ -1071,7 +1093,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .tape-row span:last-child { color: var(--text-ink); }
 .tape-total {
   font-size: var(--text-3xl); font-weight: 700;
-  border-top: 1px dashed rgba(127, 176, 255, 0.22); margin-top: var(--space-1); padding-top: var(--space-3);
+  border-top: 1px dashed rgba(var(--blue-bright-rgb), 0.22); margin-top: var(--space-1); padding-top: var(--space-3);
   transition: transform var(--dur-fast) var(--ease-spring);
   text-shadow: 0 0 22px rgba(111, 224, 226, 0.35);
 }
@@ -1090,7 +1112,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .tape-body.receiving { animation: tapeReceive var(--dur-slower) var(--ease-out); }
 @keyframes tapeReceive {
   0% { box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5); }
-  40% { box-shadow: 0 0 0 1px rgba(127, 176, 255, 0.5), 0 0 34px rgba(77, 141, 255, 0.35), 0 18px 42px rgba(0, 0, 0, 0.5); }
+  40% { box-shadow: 0 0 0 1px rgba(var(--blue-bright-rgb), 0.5), 0 0 34px rgba(var(--blue-rgb), 0.35), 0 18px 42px rgba(0, 0, 0, 0.5); }
   100% { box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5); }
 }
 
@@ -1116,7 +1138,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(12, 19, 35, 0.72), rgba(7, 11, 22, 0.78));
+  background: linear-gradient(180deg, rgba(var(--ink-deep-rgb), 0.72), rgba(7, 11, 22, 0.78));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36), var(--shadow-inner-hairline);
@@ -1126,18 +1148,18 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .data-table th {
   text-align: left; font-size: var(--text-3xs); text-transform: uppercase; letter-spacing: 0.07em;
   line-height: var(--leading-snug);
-  color: var(--text-dim); background: rgba(22, 32, 60, 0.55); padding: var(--space-4) var(--space-6); font-weight: 600;
+  color: var(--text-dim); background: rgba(var(--ink-rgb), 0.55); padding: var(--space-4) var(--space-6); font-weight: 600;
 }
 .data-table td { padding: var(--space-4) var(--space-6); border-top: 1px solid var(--line); }
 .data-table td.num, .data-table th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .data-table tbody tr { transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
 .data-table tbody tr:hover,
-.data-table tbody tr:focus-within { background: rgba(77, 141, 255, 0.07); cursor: pointer; }
+.data-table tbody tr:focus-within { background: rgba(var(--blue-rgb), 0.07); cursor: pointer; }
 /* The accent rail on a hovered row is drawn on its first cell: a box-shadow on
    a <tr> in a collapsed table is not something every engine will paint. */
 .data-table tbody tr:hover td:first-child,
-.data-table tbody tr:focus-within td:first-child { box-shadow: inset 3px 0 0 rgba(127, 176, 255, 0.65); }
-.data-table tbody tr:active { background: rgba(77, 141, 255, 0.12); }
+.data-table tbody tr:focus-within td:first-child { box-shadow: inset 3px 0 0 rgba(var(--blue-bright-rgb), 0.65); }
+.data-table tbody tr:active { background: rgba(var(--blue-rgb), 0.12); }
 
 .stock-badge { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .stock-badge.low { color: var(--rust); font-weight: 700; }
@@ -1147,7 +1169,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   color: var(--blue-bright);
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: rgba(127, 176, 255, 0.4);
+  text-decoration-color: rgba(var(--blue-bright-rgb), 0.4);
   cursor: pointer;
   font-size: var(--text-xs);
   transition: color var(--dur-fast) var(--ease-out), text-decoration-color var(--dur-fast) var(--ease-out);
@@ -1163,7 +1185,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   color: var(--text-muted);
   font-size: var(--text-sm);
   padding: var(--space-8) var(--space-4);
-  background: rgba(22, 32, 60, 0.4);
+  background: rgba(var(--ink-rgb), 0.4);
 }
 
 .table-more-btn {
@@ -1181,7 +1203,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
               transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out);
 }
 
-.table-more-btn:hover { background: rgba(77, 141, 255, 0.16); border-color: rgba(127, 176, 255, 0.5); box-shadow: 0 0 18px rgba(77, 141, 255, 0.2); }
+.table-more-btn:hover { background: rgba(var(--blue-rgb), 0.16); border-color: rgba(var(--blue-bright-rgb), 0.5); box-shadow: 0 0 18px rgba(var(--blue-rgb), 0.2); }
 .table-more-btn:active { transform: translateY(1px); }
 
 .table-more-hint { display: inline-block; margin-left: var(--space-4); }
@@ -1207,12 +1229,12 @@ input[type=date]::-webkit-calendar-picker-indicator {
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--blue-bright-rgb), 0.55), transparent);
 }
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(127, 176, 255, 0.32);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), 0 0 26px rgba(77, 141, 255, 0.14), var(--shadow-inner-hairline);
+  border-color: rgba(var(--blue-bright-rgb), 0.32);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), 0 0 26px rgba(var(--blue-rgb), 0.14), var(--shadow-inner-hairline);
 }
 .stat-card:nth-child(1) { animation-delay: 0.02s; }
 .stat-card:nth-child(2) { animation-delay: 0.07s; }
@@ -1268,7 +1290,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 }
 @keyframes barGrow { to { width: var(--target-width); } }
 .bar-fill.bar-cash { background: linear-gradient(90deg, #3FCB99, var(--mint)); box-shadow: 0 0 14px rgba(95, 224, 176, 0.4); }
-.bar-fill.bar-card { background: linear-gradient(90deg, var(--blue), var(--blue-bright)); box-shadow: 0 0 14px rgba(77, 141, 255, 0.4); }
+.bar-fill.bar-card { background: linear-gradient(90deg, var(--blue), var(--blue-bright)); box-shadow: 0 0 14px rgba(var(--blue-rgb), 0.4); }
 .bar-fill.bar-other { background: linear-gradient(90deg, #6E5CE0, var(--violet)); box-shadow: 0 0 14px rgba(157, 140, 255, 0.4); }
 .bar-value { font-family: var(--font-mono); text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -1301,7 +1323,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.4), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--blue-bright-rgb), 0.4), transparent);
 }
 .panel-row .panel:nth-child(1), .settings-grid .panel:nth-child(1) { animation-delay: 0.02s; }
 .panel-row .panel:nth-child(2), .settings-grid .panel:nth-child(2) { animation-delay: 0.08s; }
@@ -1363,7 +1385,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   display: flex;
   position: fixed; inset: 0;
   background:
-    radial-gradient(900px 600px at 50% 0%, rgba(77, 141, 255, 0.1), transparent 70%),
+    radial-gradient(900px 600px at 50% 0%, rgba(var(--blue-rgb), 0.1), transparent 70%),
     rgba(3, 5, 12, 0.66);
   align-items: center; justify-content: center; z-index: 50;
   opacity: 0; visibility: hidden; pointer-events: none;
@@ -1394,7 +1416,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   inset: 0 0 auto 0;
   height: 1px;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.75), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--blue-bright-rgb), 0.75), transparent);
 }
 .modal-overlay.active .modal { transform: scale(1) translateY(0); }
 .modal-overlay.closing .modal { transform: scale(0.95) translateY(6px); transition: transform var(--dur-fast) var(--ease-out); }
@@ -1421,9 +1443,9 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .seg-btn:active:not(.active) { background: rgba(255, 255, 255, 0.08); }
 .seg-btn:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .seg-btn.active {
-  background: linear-gradient(180deg, #2F6AE4, #2456C4);
+  background: linear-gradient(180deg, var(--blue), var(--blue-deep));
   color: #FFFFFF;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 20px rgba(77, 141, 255, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 20px rgba(var(--blue-rgb), 0.24);
 }
 .seg-btn.active:focus-visible { outline-color: var(--blue-bright); }
 
@@ -1435,7 +1457,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .charge-total-display span:first-child,
 .change-display span:first-child { font-size: var(--text-base); color: var(--text-muted); }
 .charge-total-display span:last-child { font-size: var(--text-2xl); font-weight: 700; color: var(--cyan); text-shadow: 0 0 22px rgba(111, 224, 226, 0.3); }
-.change-display { border-top: 1px dashed rgba(127, 176, 255, 0.22); }
+.change-display { border-top: 1px dashed rgba(var(--blue-bright-rgb), 0.22); }
 .change-display span:last-child { font-size: var(--text-xl); font-weight: 700; color: var(--mint); text-shadow: 0 0 22px rgba(95, 224, 176, 0.3); }
 
 .held-list { display: flex; flex-direction: column; gap: var(--space-3); max-height: 320px; overflow-y: auto; }
@@ -1447,7 +1469,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   box-shadow: var(--shadow-inner-hairline);
   transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
-.held-item:hover { border-color: rgba(127, 176, 255, 0.35); background: rgba(77, 141, 255, 0.08); }
+.held-item:hover { border-color: rgba(var(--blue-bright-rgb), 0.35); background: rgba(var(--blue-rgb), 0.08); }
 .held-item-info { font-size: var(--text-sm); line-height: var(--leading-snug); font-variant-numeric: tabular-nums; }
 .held-item-info .held-note { color: var(--text-muted); font-size: var(--text-2xs); margin-top: 2px; }
 .held-empty { color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); text-align: center; padding: var(--space-9); }
@@ -1462,7 +1484,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   font-family: var(--font-mono);
   font-size: 18px;
   line-height: var(--leading-snug);
-  background: linear-gradient(180deg, rgba(17, 25, 45, 0.95), rgba(9, 14, 27, 0.97));
+  background: linear-gradient(180deg, rgba(var(--tape-top-rgb), 0.95), rgba(var(--tape-bottom-rgb), 0.97));
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: var(--space-7);
@@ -1512,8 +1534,8 @@ input[type=date]::-webkit-calendar-picker-indicator {
 /* ---------------- Scrollbars ---------------- */
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: rgba(127, 176, 255, 0.22); border-radius: var(--radius-pill); border: 2px solid transparent; background-clip: content-box; }
-::-webkit-scrollbar-thumb:hover { background: rgba(127, 176, 255, 0.4); background-clip: content-box; }
+::-webkit-scrollbar-thumb { background: rgba(var(--blue-bright-rgb), 0.22); border-radius: var(--radius-pill); border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--blue-bright-rgb), 0.4); background-clip: content-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-corner { background: transparent; }
 
@@ -1535,7 +1557,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   z-index: 9999;
   overflow: hidden;
   background:
-    radial-gradient(700px 520px at 50% 38%, rgba(77, 141, 255, 0.16), transparent 68%),
+    radial-gradient(700px 520px at 50% 38%, rgba(var(--blue-rgb), 0.16), transparent 68%),
     linear-gradient(180deg, rgba(6, 9, 18, 0.96), rgba(3, 5, 12, 0.98));
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -1560,7 +1582,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   height: 260vh;
   margin: -130vh 0 0 -60px;
   opacity: 0;
-  background: linear-gradient(90deg, transparent, rgba(127, 176, 255, 0.42) 45%, rgba(200, 107, 250, 0.3) 62%, transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--blue-bright-rgb), 0.42) 45%, rgba(200, 107, 250, 0.3) 62%, transparent);
   filter: blur(26px);
 }
 .splash-streak-a { animation: splashStreakA 1s var(--ease-out-expo) 0.5s both; }
@@ -1601,7 +1623,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   margin: 0 auto var(--space-8) auto;
 }
 .splash-constellation .constellation-line {
-  stroke: rgba(127, 176, 255, 0.75);
+  stroke: rgba(var(--blue-bright-rgb), 0.75);
   stroke-width: 1.2;
   stroke-dasharray: 140;
   stroke-dashoffset: 140;
@@ -1634,7 +1656,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   border-radius: 23px;
   overflow: hidden;
   border: 1px solid var(--line-strong);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6), 0 0 40px rgba(77, 141, 255, 0.3);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6), 0 0 40px rgba(var(--blue-rgb), 0.3);
   opacity: 0;
   animation: splashPop 0.6s var(--ease-spring) 0.8s forwards;
 }
@@ -1663,7 +1685,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   /* Longer than either ellipse, so one keyframe draws the whole ring. */
   stroke-dasharray: 490;
   stroke-dashoffset: 490;
-  filter: drop-shadow(0 0 6px rgba(127, 176, 255, 0.55));
+  filter: drop-shadow(0 0 6px rgba(var(--blue-bright-rgb), 0.55));
   animation: splashRibbonTrace 1.2s var(--ease-out-expo) 0.35s forwards;
 }
 .splash-ribbon-b { animation-delay: 0.52s; }
@@ -1682,7 +1704,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
   border-radius: 50%;
   opacity: 0;
   pointer-events: none;
-  background: radial-gradient(circle, rgba(226, 236, 255, 0.5), rgba(127, 176, 255, 0.16) 45%, transparent 70%);
+  background: radial-gradient(circle, rgba(226, 236, 255, 0.5), rgba(var(--blue-bright-rgb), 0.16) 45%, transparent 70%);
   animation: splashBloom 0.9s var(--ease-out) 0.88s both;
 }
 @keyframes splashBloom {
@@ -1803,7 +1825,7 @@ input[type=date]::-webkit-calendar-picker-indicator {
 }
 .refund-total {
   display: flex; justify-content: space-between; align-items: baseline;
-  border-top: 1px dashed rgba(127, 176, 255, 0.22); padding-top: var(--space-3);
+  border-top: 1px dashed rgba(var(--blue-bright-rgb), 0.22); padding-top: var(--space-3);
   font-size: var(--text-sm); color: var(--text-muted);
 }
 .refund-total span:last-child {
@@ -1939,7 +1961,7 @@ body::after {
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
               background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.shortcut-key:hover { border-color: rgba(127, 176, 255, 0.5); box-shadow: 0 0 14px rgba(77, 141, 255, 0.18); }
+.shortcut-key:hover { border-color: rgba(var(--blue-bright-rgb), 0.5); box-shadow: 0 0 14px rgba(var(--blue-rgb), 0.18); }
 .shortcut-key:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .shortcut-key-empty { color: var(--text-dim); }
 .shortcut-key.listening {
@@ -2133,7 +2155,7 @@ body::after {
 .quick-cash:nth-child(2) { animation-delay: 0.03s; }
 .quick-cash:nth-child(3) { animation-delay: 0.06s; }
 .quick-cash:nth-child(4) { animation-delay: 0.09s; }
-.quick-cash:hover { border-color: rgba(127, 176, 255, 0.5); background: rgba(77, 141, 255, 0.12); box-shadow: 0 0 14px rgba(77, 141, 255, 0.18); }
+.quick-cash:hover { border-color: rgba(var(--blue-bright-rgb), 0.5); background: rgba(var(--blue-rgb), 0.12); box-shadow: 0 0 14px rgba(var(--blue-rgb), 0.18); }
 .quick-cash:active { transform: scale(0.95); }
 .quick-cash-exact { color: var(--cyan); border-color: rgba(111, 224, 226, 0.4); }
 
@@ -2179,8 +2201,8 @@ body::after {
   white-space: nowrap;
 }
 .pay-cash { color: var(--mint); border-color: rgba(95, 224, 176, 0.35); background: rgba(95, 224, 176, 0.08); }
-.pay-card { color: var(--blue-soft); border-color: rgba(169, 201, 255, 0.35); background: rgba(77, 141, 255, 0.1); }
-.pay-split { color: var(--violet); border-color: rgba(157, 140, 255, 0.42); background: linear-gradient(100deg, rgba(95, 224, 176, 0.1), rgba(77, 141, 255, 0.14)); }
+.pay-card { color: var(--blue-soft); border-color: rgba(169, 201, 255, 0.35); background: rgba(var(--blue-rgb), 0.1); }
+.pay-split { color: var(--violet); border-color: rgba(157, 140, 255, 0.42); background: linear-gradient(100deg, rgba(95, 224, 176, 0.1), rgba(var(--blue-rgb), 0.14)); }
 .pay-other { color: var(--text-muted); }
 
 /* ===========================================================================
@@ -2214,9 +2236,9 @@ body::after {
 }
 .theme-card:hover, .font-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
 .theme-card.active, .font-card.active {
-  border-color: rgba(127, 176, 255, 0.6);
+  border-color: rgba(var(--blue-bright-rgb), 0.6);
   background: var(--blue-tint);
-  box-shadow: 0 0 0 1px rgba(127, 176, 255, 0.35), 0 0 22px rgba(77, 141, 255, 0.16);
+  box-shadow: 0 0 0 1px rgba(var(--blue-bright-rgb), 0.35), 0 0 22px rgba(var(--blue-rgb), 0.16);
 }
 .theme-card-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .theme-card-name { font-size: var(--text-sm); font-weight: 600; color: var(--text-ink); }
@@ -2338,6 +2360,17 @@ html[data-theme="galaxy"] {
   --violet: #FF9BE0;
   --mint: #7FE8B8;
   --accent-card: var(--blue-soft);
+  --blue-rgb: 124, 77, 255;
+  --blue-bright-rgb: 196, 167, 255;
+  --blue-deep-rgb: 106, 52, 232;
+  --surface-rgb: 30, 19, 60;
+  --surface-deep-rgb: 11, 6, 24;
+  --tape-top: #1E133C;
+  --tape-bottom: #0B0618;
+  --tape-top-rgb: 30, 19, 60;
+  --tape-bottom-rgb: 11, 6, 24;
+  --ink-rgb: 26, 17, 52;
+  --ink-deep-rgb: 12, 7, 24;
 }
 html[data-theme="galaxy"] body {
   background-image:
@@ -2472,10 +2505,21 @@ html[data-theme="cosmos"] {
   --blue-tint: rgba(70, 210, 140, 0.12);
   --blue-tint-strong: rgba(70, 210, 140, 0.2);
   --blue-glow: rgba(70, 220, 150, 0.4);
-  --cyan: #6FE8D0;
+  --cyan: #7FE8B0;
   --violet: #9BE8B0;
   --mint: #5FE0B0;
   --accent-card: var(--blue-soft);
+  --blue-rgb: 43, 182, 115;
+  --blue-bright-rgb: 180, 245, 212;
+  --blue-deep-rgb: 30, 143, 90;
+  --surface-rgb: 18, 50, 38;
+  --surface-deep-rgb: 5, 15, 11;
+  --tape-top: #12332A;
+  --tape-bottom: #050F0B;
+  --tape-top-rgb: 18, 51, 42;
+  --tape-bottom-rgb: 5, 15, 11;
+  --ink-rgb: 12, 34, 26;
+  --ink-deep-rgb: 5, 15, 11;
 }
 html[data-theme="cosmos"] body {
   background-image:
@@ -2704,6 +2748,17 @@ html[data-theme="moonlight"] {
   --violet: #BEB8FF;
   --mint: #A5E7D4;
   --accent-card: var(--blue-soft);
+  --blue-rgb: 110, 139, 240;
+  --blue-bright-rgb: 185, 203, 255;
+  --blue-deep-rgb: 74, 99, 200;
+  --surface-rgb: 21, 37, 67;
+  --surface-deep-rgb: 6, 12, 24;
+  --tape-top: #152543;
+  --tape-bottom: #060C18;
+  --tape-top-rgb: 21, 37, 67;
+  --tape-bottom-rgb: 6, 12, 24;
+  --ink-rgb: 16, 27, 49;
+  --ink-deep-rgb: 8, 13, 26;
   /* Type in moonlight: a cold white, and two greys that keep their distance
      from it without going blue-grey against the indigo. */
   --text-ink: #E9EFFF;
@@ -2854,6 +2909,17 @@ html[data-theme="rust"] {
   --violet: #E58C6A;
   --mint: #E8C57E;
   --accent-card: var(--blue-soft);
+  --blue-rgb: 194, 87, 31;
+  --blue-bright-rgb: 255, 154, 77;
+  --blue-deep-rgb: 143, 61, 18;
+  --surface-rgb: 44, 29, 18;
+  --surface-deep-rgb: 10, 7, 5;
+  --tape-top: #2C1D12;
+  --tape-bottom: #0A0705;
+  --tape-top-rgb: 44, 29, 18;
+  --tape-bottom-rgb: 10, 7, 5;
+  --ink-rgb: 32, 21, 14;
+  --ink-deep-rgb: 15, 10, 7;
   /* Type on iron: warm off-whites, so nothing on the screen reads cool blue
      against the orange. */
   --text-ink: #F5E7D9;

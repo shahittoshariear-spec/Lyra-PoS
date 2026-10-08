@@ -68,6 +68,14 @@ pub struct Totals {
     pub card: f64,
     #[serde(deserialize_with = "number")]
     pub other: f64,
+    /// How many trips to the till each method was. Money alone does not say
+    /// whether a day was one big card sale or thirty small cash ones.
+    #[serde(deserialize_with = "count")]
+    pub cash_count: i64,
+    #[serde(deserialize_with = "count")]
+    pub card_count: i64,
+    #[serde(deserialize_with = "count")]
+    pub other_count: i64,
     #[serde(deserialize_with = "number")]
     pub refunds_value: f64,
     #[serde(deserialize_with = "count")]
@@ -224,7 +232,7 @@ const MAX_OUT_OF_STOCK: usize = 20;
 const MAX_HELD: usize = 20;
 const MAX_DAYS: usize = 14;
 /// The most hand-edited stock lines one report draws; the rest are counted.
-const MAX_STOCK_EDITS: usize = 16;
+const MAX_STOCK_EDITS: usize = 40;
 /// The most lines one paragraph of prose may take.
 const MAX_PROSE_LINES: usize = 40;
 
@@ -466,9 +474,18 @@ impl Sheet {
             return;
         }
         self.row("Takings", &money(&report.currency, totals.sales));
-        self.row("Paid in cash", &money(&report.currency, totals.cash));
-        self.row("Paid by card", &money(&report.currency, totals.card));
-        self.row("Other payment", &money(&report.currency, totals.other));
+        self.row(
+            "Paid in cash",
+            &with_count(&money(&report.currency, totals.cash), totals.cash_count),
+        );
+        self.row(
+            "Paid by card",
+            &with_count(&money(&report.currency, totals.card), totals.card_count),
+        );
+        self.row(
+            "Other payment",
+            &with_count(&money(&report.currency, totals.other), totals.other_count),
+        );
         if totals.refund_count > 0 || totals.refunds_value != 0.0 {
             let label = match totals.refund_count {
                 1 => "Refunded (1)".to_string(),
@@ -520,14 +537,7 @@ impl Sheet {
         }
         let shown = report.stock_edits.len().min(MAX_STOCK_EDITS);
         for edit in report.stock_edits.iter().take(shown) {
-            self.needs(LEAD + 4.0);
             let delta = edit.to - edit.from;
-            let left = pdf::truncate(
-                &format!("{}  {}", edit.time, edit.name),
-                CONTENT - FIGURE_COLUMN - 10.0,
-                SMALL,
-                Face::Bold,
-            );
             // An ASCII arrow on purpose: the report's font is WinAnsi, and the
             // real thing would come out as a question mark.
             let right = pdf::truncate(
@@ -542,11 +552,22 @@ impl Sheet {
                 SMALL,
                 Face::Bold,
             );
+            let right_width = pdf::text_width(&right, SMALL, Face::Bold);
+            // The name takes whatever the change does not need, and wraps onto a
+            // second line rather than being cut: which product was edited is the
+            // whole point of this section.
+            let room = (CONTENT - right_width - 14.0).max(140.0);
+            let lines = wrap_bold(&format!("{}  {}", edit.time, edit.name), room, SMALL, 2);
+            self.needs(LEAD + 4.0 + LEAD * (lines.len().saturating_sub(1)) as f64);
             self.page
-                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &left);
-            let width = pdf::text_width(&right, SMALL, Face::Bold);
+                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &lines[0]);
             self.page
-                .text_colour(RIGHT - width, self.y, SMALL, Face::Bold, RED, &right);
+                .text_colour(RIGHT - right_width, self.y, SMALL, Face::Bold, RED, &right);
+            if lines.len() > 1 {
+                self.page
+                    .text_colour(MARGIN, self.y - LEAD, SMALL, Face::Bold, RED, &lines[1]);
+                self.y -= LEAD;
+            }
             self.y += 4.0;
             self.page.rule(MARGIN, RIGHT, self.y, 0.78, 0.4);
             self.y += LEAD - 4.0;
@@ -796,6 +817,17 @@ fn percent(value: f64) -> String {
     }
 }
 
+/// "R1,234.50  (12 sales)" — the count that belongs beside a payment figure,
+/// because one big card sale and thirty small cash ones read the same without
+/// it. A day with none of that payment says nothing extra rather than "(0)".
+fn with_count(amount: &str, count: i64) -> String {
+    match count {
+        n if n <= 0 => amount.to_string(),
+        1 => format!("{amount}  (1 sale)"),
+        n => format!("{amount}  ({} sales)", figure(n)),
+    }
+}
+
 /// `digits` with a comma every three digits. The sign comes off first, so the
 /// commas still count in threes from the right of the figure itself.
 fn grouped(digits: &str) -> String {
@@ -841,6 +873,39 @@ fn wrap(text: &str, width: f64, size: f64) -> Vec<String> {
     lines
 }
 
+/// The same wrapping, in the bold face this section is set in, and cut to the
+/// number of lines a row is allowed: a name that needs more than that is
+/// truncated for the last line, so nothing ever runs off the page.
+fn wrap_bold(text: &str, width: f64, size: f64, most: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        let candidate = if line.is_empty() {
+            word.to_string()
+        } else {
+            format!("{line} {word}")
+        };
+        if pdf::text_width(&candidate, size, Face::Bold) <= width {
+            line = candidate;
+            continue;
+        }
+        if !line.is_empty() {
+            lines.push(std::mem::take(&mut line));
+            if lines.len() == most {
+                let last = lines.pop().unwrap_or_default();
+                let joined = format!("{last} {word}");
+                lines.push(pdf::truncate(&joined, width, size, Face::Bold));
+                return lines;
+            }
+        }
+        line = pdf::truncate(word, width, size, Face::Bold);
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -878,6 +943,9 @@ mod tests {
                 cash: 7_310.00,
                 card: 4_900.50,
                 other: 270.00,
+                cash_count: 71,
+                card_count: 22,
+                other_count: 3,
                 refunds_value: 420.00,
                 refund_count: 3,
                 transactions: 96,
@@ -1039,6 +1107,66 @@ mod tests {
             text.contains("0.720 0.050 0.050 rg"),
             "the line is not red: {path:?}"
         );
+    }
+
+    #[test]
+    fn a_long_product_name_is_wrapped_rather_than_cut_out_of_the_stock_list() {
+        let long = "Heavy-duty galvanised garden rake, 12 tine, with an ash handle and a \
+                    replacement head";
+        let mut report = quiet_day();
+        report.stock_edits = (0..2)
+            .map(|i| StockEditRow {
+                time: format!("1{}:05", i),
+                name: long.to_string(),
+                from: 40 - i,
+                to: 12 - i,
+            })
+            .collect();
+        let (bytes, path) = write(&report, "daily-report-long-edit.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        // The whole name makes it onto the page — the second half on a second
+        // line rather than being cut away.
+        assert!(
+            text.contains("Heavy-duty galvanised garden rake, 12 tine"),
+            "the head of the name is missing: {path:?}"
+        );
+        assert!(
+            text.contains("replacement head"),
+            "the tail of the name was cut off: {path:?}"
+        );
+        assert!(
+            text.contains("40 -> 12"),
+            "the change itself is missing: {path:?}"
+        );
+    }
+
+    #[test]
+    fn a_long_list_of_edits_keeps_going_rather_than_stopping_at_a_page() {
+        let mut report = quiet_day();
+        report.stock_edits = (0..30)
+            .map(|i| StockEditRow {
+                time: format!("{:02}:15", 8 + i % 10),
+                name: format!("Product number {i}"),
+                from: 50,
+                to: 50 - i,
+            })
+            .collect();
+        let (bytes, path) = write(&report, "daily-report-many-edits.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("Product number 0"),
+            "the first edit is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Product number 29"),
+            "the last edit was cut off: {path:?}"
+        );
+        assert!(
+            !text.contains("and 1 more"),
+            "thirty edits should all be listed: {path:?}"
+        );
+        let pages = xref_offsets_are_right(&bytes);
+        assert!(pages >= 2, "thirty edits need more than one page");
     }
 
     #[test]
