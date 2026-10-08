@@ -3168,7 +3168,7 @@ html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--bl
   html[data-nav="top"] .sidebar-constellation,
   html[data-nav="top"] .ss-watermark { display: none; }
 
-  html[data-nav="top"] .brand { align-self: center; padding: 0 var(--space-6) var(--space-4) 0; }
+  html[data-nav="top"] .brand { align-self: center; flex: 0 0 auto; padding: 0 var(--space-6) var(--space-4) 0; }
   html[data-nav="top"] .brand-mark { width: 30px; height: 30px; }
   html[data-nav="top"] .nav-group {
     flex: 1 1 auto;
@@ -3178,7 +3178,18 @@ html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--bl
     margin: 0;
     min-width: 0;
     align-self: stretch;
+    /* The strip is given a box it cannot spill out of: a bar of tabs shares its
+       width with the brand and the shop's status beside it, and a shop can run
+       the app at any text size. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
   }
+  html[data-nav="top"] .nav-group::-webkit-scrollbar { height: 0; }
+  /* When even the icons are tight the labels step aside rather than run under
+     the shop's own status: app.js adds .nav-tight only when the six screens
+     genuinely do not fit, and takes it away the moment they do. */
+  html[data-nav="top"] .sidebar.nav-tight .nav-btn { font-size: 0; }
   /* The travelling highlight belongs to the column; tabs carry their own. */
   html[data-nav="top"] .nav-pill { display: none; }
 

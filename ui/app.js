@@ -158,7 +158,21 @@
     $$('.nav-btn').forEach(btn => {
       btn.addEventListener('click', () => attemptSwitchView(btn.dataset.view));
     });
-    window.addEventListener('resize', debounce(updateNavPill, 100));
+    window.addEventListener('resize', debounce(() => { fitTopNav(); updateNavPill(); }, 100));
+  }
+
+  // A bar of tabs shares its width with the brand and the shop's own status
+  // beside it, and a shop can run the app at any text size. When the six screens
+  // no longer fit, their labels step aside and the icons carry them — the way a
+  // browser behaves when it runs out of room for tabs.
+  function fitTopNav() {
+    const bar = document.querySelector('.sidebar');
+    const group = $('#navGroup');
+    if (!bar || !group) return;
+    // Measured with the labels in, so the class can come straight back off.
+    bar.classList.remove('nav-tight');
+    if (document.documentElement.dataset.nav !== 'top') return;
+    if (group.scrollWidth > group.clientWidth + 2) bar.classList.add('nav-tight');
   }
 
   function attemptSwitchView(view) {
@@ -3355,7 +3369,7 @@
     }
     // The metrics that place the travelling highlight are read one frame after
     // the layout has actually moved, or they describe the old one.
-    requestAnimationFrame(() => { updateNavPill(); repositionSegGliders(); });
+    requestAnimationFrame(() => { fitTopNav(); updateNavPill(); repositionSegGliders(); });
   }
 
   // Wiring, once. Every choice is applied the moment it is clicked and then
