@@ -3364,3 +3364,61 @@ html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--bl
   from { transform: translateY(16px); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
+
+/* ---------------- The Ledger's day bands ----------------
+   Above each day's rows: what that day took in cash and on card, and how many
+   trips to the till each of those was. The figure on its own cannot say whether
+   a day was one big card sale or thirty small cash ones. */
+
+.ledger-day td {
+  background: rgba(var(--ink-rgb), 0.55);
+  border-top: 1px solid var(--line-strong);
+  padding: var(--space-5) var(--space-6);
+}
+.ledger-day-inner {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-7);
+}
+.ledger-day-name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-ink);
+}
+.ledger-day-split {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-7);
+  font-size: var(--text-xs);
+}
+.day-part {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.day-part b {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-ink);
+}
+.day-part i {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.day-part i::before { content: '·'; margin-right: var(--space-2); }
+.day-part.day-cash b { color: var(--mint); }
+.day-part.day-card b { color: var(--blue-soft); }
+.day-part.day-total {
+  padding-left: var(--space-7);
+  border-left: 1px solid var(--line);
+}

@@ -3304,8 +3304,8 @@
     // night towards the accent so a card still reads as paper on this screen.
     const tapeTop = mixTo(b, a, 0.1);
     const tapeBottom = mixTo(b, BLACK, 0.26);
-    const surface = mixTo(b, a, 0.16);
-    const surfaceDeep = mixTo(b, BLACK, 0.3);
+    const cardSurface = mixTo(b, a, 0.16);
+    const cardSurfaceDeep = mixTo(b, BLACK, 0.3);
     return {
       '--bg-deep': mixTo(b, BLACK, 0.45),
       '--bg': rgbToHex(b),
@@ -3331,8 +3331,8 @@
       '--blue-rgb': rgbOf(t.accent),
       '--blue-bright-rgb': rgbOf(bright),
       '--blue-deep-rgb': rgbOf(deep),
-      '--surface-rgb': rgbOf(surface),
-      '--surface-deep-rgb': rgbOf(surfaceDeep),
+      '--surface-rgb': rgbOf(cardSurface),
+      '--surface-deep-rgb': rgbOf(cardSurfaceDeep),
       '--tape-top': tapeTop,
       '--tape-bottom': tapeBottom,
       '--tape-top-rgb': rgbOf(tapeTop),
