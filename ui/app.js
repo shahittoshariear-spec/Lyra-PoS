@@ -2633,25 +2633,30 @@
     return '<span class="pay-badge ' + cls + '">' + escapeHtml(method || '—') + '</span>';
   }
 
-  // The band that sits above a day's sales in the Ledger: what the day took in
-  // cash and on card, and how many trips to the till each of those was. A count
-  // beside the money answers the question the money alone cannot — one big card
-  // sale and thirty small cash ones look the same in a single total.
+  // The band that sits above a day's sales in the Ledger: how many trips to the
+  // till that day was, cash, card and the ones paid both ways. No money here —
+  // the day's takings are the Overview's job, and the shop reads these three
+  // counts against the till's own slips.
   function ledgerDayBand(dayKey, day) {
-    const chip = (cls, label, amount, count, title) =>
-      '<span class="day-part ' + cls + '"' + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' +
-        label + ' <b>' + moneyGrouped(amount) + '</b>' +
-        (count ? ' <i>' + groupedInt(count) + '</i>' : '') +
+    const chip = (cls, label, count, title) =>
+      '<span class="day-part ' + cls + '" title="' + escapeHtml(title) + '">' +
+        label + ' <b>' + groupedInt(count) + '</b>' +
       '</span>';
     const parts = [
-      chip('day-cash', 'Cash', day.cash, day.cashCount,
+      chip('day-cash', 'Cash', day.cashCount,
         groupedInt(day.cashCount) + (day.cashCount === 1 ? ' sale' : ' sales') + ' paid in cash'),
-      chip('day-card', 'Card', day.card, day.cardCount,
+      chip('day-card', 'Card', day.cardCount,
         groupedInt(day.cardCount) + (day.cardCount === 1 ? ' sale' : ' sales') + ' paid by card')
     ];
-    if (day.other) parts.push(chip('day-other', 'Other', day.other, 0, 'Paid some other way'));
-    parts.push(chip('day-total', 'Total', day.total, day.count,
-      groupedInt(day.count) + (day.count === 1 ? ' entry' : ' entries') + ' in the ledger'));
+    // The two that are only worth a column when the day has one.
+    if (day.splitCount) {
+      parts.push(chip('day-split', 'Split', day.splitCount,
+        groupedInt(day.splitCount) + (day.splitCount === 1 ? ' sale' : ' sales') + ' paid part cash, part card'));
+    }
+    if (day.otherCount) {
+      parts.push(chip('day-other', 'Other', day.otherCount,
+        groupedInt(day.otherCount) + (day.otherCount === 1 ? ' sale' : ' sales') + ' paid some other way'));
+    }
     return '<tr class="ledger-day"><td colspan="6">' +
       '<div class="ledger-day-inner">' +
         '<span class="ledger-day-name">' + escapeHtml(periodLabel(dayKey, 'day')) + '</span>' +
@@ -2690,22 +2695,18 @@
       const key = entry.date.slice(0, 10);
       let day = dayTotals.get(key);
       if (!day) {
-        day = { cash: 0, card: 0, other: 0, cashCount: 0, cardCount: 0, total: 0, count: 0 };
+        day = { cashCount: 0, cardCount: 0, splitCount: 0, otherCount: 0 };
         dayTotals.set(key, day);
       }
-      const cash = saleCashPart(entry);
-      const card = saleCardPart(entry);
-      day.cash += cash;
-      day.card += card;
-      day.other += saleOtherPart(entry);
-      day.total += entry.total;
-      day.count += 1;
-      // Money going back moves the money but is not a sale, so it is left out
-      // of the counts.
-      if (entry.type !== 'return') {
-        if (cash !== 0) day.cashCount += 1;
-        if (card !== 0) day.cardCount += 1;
-      }
+      // Money going back moves the money but is not a sale, so a refund is left
+      // out of the counts.
+      if (entry.type === 'return') return;
+      const cash = saleCashPart(entry) !== 0;
+      const card = saleCardPart(entry) !== 0;
+      if (cash) day.cashCount += 1;
+      if (card) day.cardCount += 1;
+      if (cash && card) day.splitCount += 1;
+      else if (!cash && !card && saleOtherPart(entry) !== 0) day.otherCount += 1;
     });
 
     let rowsHtml = '';

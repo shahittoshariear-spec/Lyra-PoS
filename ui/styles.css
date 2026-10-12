@@ -186,9 +186,6 @@
   --focus-halo: 0 0 0 3px rgba(77, 141, 255, 0.22);
   --focus-glow: 0 0 0 3px rgba(77, 141, 255, 0.22), 0 0 18px rgba(77, 141, 255, 0.22);
 
-  /* ---- Layout constants ---- */
-  --till-grid-offset: 114px;
-
   /* Receipt tape. The app-wide defaults are the small sizes; .receipt-tape
      raises them for the counter, and the same classes appear elsewhere (the
      empty state in the product grid) where the small size is right. */
@@ -815,7 +812,24 @@ input[type=date]::-webkit-calendar-picker-indicator {
   grid-template-rows: auto minmax(0, 1fr);
   column-gap: var(--space-10);
   row-gap: var(--space-2);
-  height: calc(100vh - var(--till-grid-offset));
+}
+
+/* The Till is a counter, not a page: the view fills exactly what the window
+   gives it and nothing on it scrolls as a whole. The two things that do scroll
+   are the product list and the receipt's own items, each inside its box — so
+   the tape never slides up out of the cashier's sight, and a drag on the
+   receipt does not move the screen. Every other screen scrolls as before. */
+.view.active#view-till {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+#view-till .till-action-bar { flex: 0 0 auto; }
+#view-till .till-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
 }
 
 .till-action-bar {
@@ -3407,18 +3421,10 @@ html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--bl
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  font-size: var(--text-sm);
   color: var(--text-ink);
 }
-.day-part i {
-  font-style: normal;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-dim);
-}
-.day-part i::before { content: '·'; margin-right: var(--space-2); }
 .day-part.day-cash b { color: var(--mint); }
 .day-part.day-card b { color: var(--blue-soft); }
-.day-part.day-total {
-  padding-left: var(--space-7);
-  border-left: 1px solid var(--line);
-}
+.day-part.day-split b { color: var(--violet); }
+.day-part.day-other b { color: var(--rust-soft); }
