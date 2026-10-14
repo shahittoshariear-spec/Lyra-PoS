@@ -3428,3 +3428,197 @@ html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--bl
 .day-part.day-card b { color: var(--blue-soft); }
 .day-part.day-split b { color: var(--violet); }
 .day-part.day-other b { color: var(--rust-soft); }
+
+/* ===========================================================================
+   V2.4.2 — a little flare, and a pass over space and type
+   =========================================================================== */
+
+/* ---------------- Holding a product entry ---------------- */
+
+/* The line that says a held entry has been brought back. */
+.pm-hold-note {
+  margin: 0 0 var(--space-7) 0;
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--blue-bright);
+  border-radius: var(--radius-sm);
+  background: var(--blue-tint);
+  color: var(--text-ink);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+/* Something is waiting behind Add product: a small warm dot, so the button
+   never changes size or wording. */
+#addProductBtn { position: relative; }
+#addProductBtn.has-held::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--rust-soft);
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.6);
+  animation: heldPulse 2.6s ease-in-out infinite;
+}
+@keyframes heldPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.28); opacity: 0.72; }
+}
+
+/* ---------------- What's new ---------------- */
+
+.whats-new {
+  position: fixed;
+  right: var(--space-10);
+  bottom: var(--space-10);
+  z-index: 60;
+  width: min(364px, calc(100vw - 40px));
+  padding: var(--space-8) var(--space-9) var(--space-9);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: linear-gradient(165deg, rgba(var(--ink-rgb), 0.96), rgba(var(--ink-deep-rgb), 0.98));
+  box-shadow: var(--shadow-modal);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  opacity: 0;
+  transform: translateY(20px) scale(0.98);
+  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slower) var(--ease-spring-soft);
+}
+.whats-new.in { opacity: 1; transform: none; }
+
+/* A slow wash of the theme's own light behind the card. */
+.whats-new-glow {
+  position: absolute;
+  inset: -46% -30% auto -30%;
+  height: 200px;
+  pointer-events: none;
+  background: radial-gradient(60% 70% at 50% 50%, var(--blue-glow), transparent 70%);
+  opacity: 0.55;
+  animation: whatsNewDrift 9s ease-in-out infinite alternate;
+}
+@keyframes whatsNewDrift {
+  from { transform: translateX(-14px); }
+  to { transform: translateX(14px); }
+}
+
+.whats-new-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.whats-new-spark {
+  color: var(--blue-bright);
+  font-size: var(--text-md);
+  line-height: 1;
+  text-shadow: 0 0 14px var(--blue-glow);
+  animation: whatsNewSpark 7s linear infinite;
+}
+@keyframes whatsNewSpark { to { transform: rotate(360deg); } }
+.whats-new-title {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-ink);
+}
+.whats-new-close {
+  background: none;
+  border: none;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+.whats-new-close:hover { color: var(--text-ink); background: var(--glass-lift); }
+
+.whats-new-list {
+  position: relative;
+  list-style: none;
+  margin: 0 0 var(--space-8) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.whats-new-list li { position: relative; padding-left: var(--space-7); }
+.whats-new-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--blue-bright);
+  box-shadow: 0 0 8px var(--blue-glow);
+}
+.whats-new-item-title { display: block; font-size: var(--text-sm); font-weight: 600; color: var(--text-ink); }
+.whats-new-item-body { display: block; font-size: var(--text-2xs); line-height: var(--leading-normal); color: var(--text-muted); }
+.whats-new-go { position: relative; width: 100%; justify-content: center; }
+
+/* The lines arrive one after another, so the card is read rather than just
+   appearing. */
+.whats-new.in .whats-new-list li { animation: whatsNewItem 0.5s var(--ease-out-expo) both; }
+.whats-new.in .whats-new-list li:nth-child(2) { animation-delay: 70ms; }
+.whats-new.in .whats-new-list li:nth-child(3) { animation-delay: 140ms; }
+.whats-new.in .whats-new-list li:nth-child(4) { animation-delay: 210ms; }
+.whats-new.in .whats-new-list li:nth-child(5) { animation-delay: 280ms; }
+@keyframes whatsNewItem {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------------- A pass over space and type ---------------- */
+
+/* Each screen announces itself on a hairline, with a short accent under the
+   title, the way the tabs carry theirs. */
+.view-head {
+  position: relative;
+  padding-bottom: var(--space-7);
+  border-bottom: 1px solid var(--line);
+}
+.view-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 88px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--blue-bright), transparent);
+  box-shadow: 0 0 12px var(--blue-glow);
+}
+
+/* Panels breathe a little more, and their headings sit closer to the thing they
+   describe than to the panel edge above them. */
+.panel { padding: var(--space-9); }
+.panel h2 { font-size: var(--text-lg); letter-spacing: -0.01em; margin-bottom: var(--space-3); }
+.panel-note { margin-bottom: var(--space-7); }
+
+/* One height for every control, so a row of them reads as a single line. */
+.btn { min-height: 34px; }
+.btn-sm { min-height: 28px; }
+.search-input, .select-input { min-height: 36px; }
+.chip { min-height: 28px; padding-top: 8px; padding-bottom: 8px; }
+
+/* Tables: a touch more air, and header labels that stay quiet. */
+.data-table td { padding: var(--space-5) var(--space-6); }
+.data-table th { letter-spacing: 0.08em; }
+
+/* The two figures a shop reads out loud most often get a shade more room. */
+.product-card-price { font-size: var(--text-lg); letter-spacing: -0.01em; }
+.stat-value { letter-spacing: -0.01em; }
+
+/* The category rail and the period tabs keep their own height all the way
+   across, rather than growing with the longest label. */
+.till-toolbar .chip, .period-tabs .seg-btn { align-items: center; }

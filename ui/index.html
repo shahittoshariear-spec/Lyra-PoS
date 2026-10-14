@@ -631,6 +631,8 @@
   <div class="modal-overlay" id="productModalOverlay">
     <div class="modal">
       <h2 id="productModalTitle">Add product</h2>
+      <!-- Shown when Add product has brought a held entry back. -->
+      <p class="pm-hold-note" id="pmHoldNote" hidden></p>
       <label class="field"><span>Name</span><input type="text" id="pmName" /></label>
       <div class="field-row">
         <label class="field"><span>SKU / barcode</span><input type="text" id="pmSku" /></label>
@@ -647,6 +649,11 @@
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="pmDeleteBtn" style="display:none;">Delete</button>
+        <!-- Put the half-filled form aside for a customer, the way the till
+             holds a sale; Add product brings it back. Never shown while an
+             existing product is being edited: there is nothing to hold. -->
+        <button class="btn btn-ghost" id="pmHoldBtn" style="display:none;"
+                title="Put this entry aside and come back to it from Add product">Hold</button>
         <div class="modal-actions-right">
           <button class="btn btn-ghost" id="pmCancelBtn">Cancel</button>
           <button class="btn btn-primary" id="pmSaveBtn">Save</button>
@@ -828,6 +835,20 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- One card, once, the first time a new version is opened: what changed.
+       Dismissed for good with the ✕ or "Got it"; the version it was shown for
+       is kept in the shop's own settings. -->
+  <aside class="whats-new" id="whatsNew" hidden aria-live="polite">
+    <div class="whats-new-glow" aria-hidden="true"></div>
+    <div class="whats-new-head">
+      <span class="whats-new-spark" aria-hidden="true">✦</span>
+      <span class="whats-new-title" id="whatsNewTitle">What's new</span>
+      <button type="button" class="whats-new-close" id="whatsNewClose" aria-label="Close">✕</button>
+    </div>
+    <ul class="whats-new-list" id="whatsNewList"></ul>
+    <button type="button" class="btn btn-primary btn-sm whats-new-go" id="whatsNewGo">Got it</button>
+  </aside>
 
   <!-- Where a receipt is put so the system's own print dialog can reach it.
        Hidden on screen; the print stylesheet shows this and nothing else. -->

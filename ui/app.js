@@ -16,6 +16,16 @@
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
   const PROTECTED_VIEWS = ['dashboard', 'reports', 'settings'];
 
+  // Shown once per release, in the card at the bottom of the screen. Bump this
+  // with the version and write what changed underneath it.
+  const APP_VERSION = '2.4.2';
+  const WHATS_NEW = [
+    ['Hold a product entry', 'Adding stock when a customer comes? Hold puts the half-filled form aside; Add product brings every field back.'],
+    ['A Ledger that counts', 'Each day now reads how many were cash, how many card, and how many were paid both ways.'],
+    ['A Till that stays put', 'The till no longer scrolls as a whole — only the product list and the receipt\'s own items move.'],
+    ['Your colours everywhere', 'Every hover, tab, card and the receipt itself now take the colour of the theme — including your own three slots.']
+  ];
+
   function money(n) {
     const v = Number(n || 0);
     return DATA.settings.currency + v.toFixed(2);
@@ -1711,6 +1721,7 @@
     $('#productModalTitle').textContent = isEdit ? 'Edit product' : 'Add product';
     populateCategorySelect($('#pmCategory'));
     $('#pmDeleteBtn').style.display = isEdit ? 'inline-flex' : 'none';
+    $('#pmHoldBtn').style.display = isEdit ? 'none' : 'inline-flex';
 
     if (isEdit) {
       const p = DATA.products.find(pp => pp.id === productId);
@@ -1721,19 +1732,107 @@
       $('#pmCost').value = p.cost;
       $('#pmStock').value = p.stock;
       $('#pmSupplier').value = p.supplier || '';
+      $('#pmHoldNote').hidden = true;
     } else {
-      $('#pmName').value = '';
-      $('#pmSku').value = '';
-      $('#pmPrice').value = '';
-      $('#pmCost').value = '';
-      $('#pmStock').value = '';
-      $('#pmSupplier').value = '';
+      // A held entry comes straight back, the way a held sale does: the shop
+      // was half way through adding stock when a customer arrived, and nothing
+      // about that should have to be typed twice.
+      const held = heldProduct();
+      $('#pmName').value = held ? held.name : '';
+      $('#pmSku').value = held ? held.sku : '';
+      $('#pmCategory').value = held && held.category ? held.category : (DATA.categories[0] || 'General');
+      $('#pmPrice').value = held ? held.price : '';
+      $('#pmCost').value = held ? held.cost : '';
+      $('#pmStock').value = held ? held.stock : '';
+      $('#pmSupplier').value = held ? held.supplier : '';
+      showHeldNote(held);
     }
     // An existing product opens showing the percentage it is actually on; a new
     // one starts clean.
     refreshMarkupField();
     openModal('#productModalOverlay');
     setTimeout(() => (isEdit ? $('#pmName') : $('#pmSku')).focus(), 50);
+  }
+
+  // ---------------- Holding a half-finished product ----------------
+
+  // The shape the screens own, kept in the data file so a held entry survives a
+  // restart — a shop that closes for the day mid-entry should find it there in
+  // the morning.
+  function heldProduct() {
+    const held = DATA.heldProduct;
+    return held && typeof held === 'object' && typeof held.name === 'string' ? held : null;
+  }
+
+  function setHeldProduct(draft) {
+    DATA.heldProduct = draft;
+    refreshHeldProductHint();
+  }
+
+  function heldProductTime(held) {
+    const when = new Date(held.at || 0);
+    return isNaN(when.getTime()) ? '' : when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function showHeldNote(held) {
+    const note = $('#pmHoldNote');
+    if (!note) return;
+    if (!held) { note.hidden = true; return; }
+    const at = heldProductTime(held);
+    note.hidden = false;
+    note.textContent = 'Brought back from a held entry' + (at ? ' put aside at ' + at : '') +
+      ' — finish it and press Save, or press Hold again to put it back.';
+  }
+
+  // The button says there is something waiting without opening the screen to
+  // find out. A dot and a title, so nothing on the page changes size.
+  function refreshHeldProductHint() {
+    const btn = $('#addProductBtn');
+    if (!btn) return;
+    const held = heldProduct();
+    btn.classList.toggle('has-held', !!held);
+    btn.title = held
+      ? 'An entry is held — Add product brings it back'
+      : 'Add a product to stock';
+  }
+
+  function readProductForm() {
+    return {
+      name: $('#pmName').value,
+      sku: $('#pmSku').value,
+      category: $('#pmCategory').value || DATA.categories[0] || 'General',
+      price: $('#pmPrice').value,
+      cost: $('#pmCost').value,
+      stock: $('#pmStock').value,
+      supplier: $('#pmSupplier').value,
+      at: new Date().toISOString()
+    };
+  }
+
+  // ---------------- What's new ----------------
+
+  // One card, once per release. It is dismissed by reading it, and the version
+  // is written into the shop's settings so it never comes back.
+  function showWhatsNew() {
+    const card = $('#whatsNew');
+    if (!card || !DATA.settings) return;
+    if (DATA.settings.seenVersion === APP_VERSION) return;
+    const list = $('#whatsNewList');
+    $('#whatsNewTitle').textContent = "What's new in " + APP_VERSION;
+    list.innerHTML = WHATS_NEW.map(([title, body]) =>
+      '<li><span class="whats-new-item-title">' + escapeHtml(title) + '</span>' +
+      '<span class="whats-new-item-body">' + escapeHtml(body) + '</span></li>').join('');
+    card.hidden = false;
+    requestAnimationFrame(() => card.classList.add('in'));
+    const dismiss = async (e) => {
+      if (e) e.stopPropagation();
+      card.classList.remove('in');
+      setTimeout(() => { card.hidden = true; }, 320);
+      DATA.settings.seenVersion = APP_VERSION;
+      await persist();
+    };
+    $('#whatsNewClose').addEventListener('click', dismiss, { once: true });
+    $('#whatsNewGo').addEventListener('click', dismiss, { once: true });
   }
 
   // ---------------- Hand-edited stock (written down, never announced) ----------------
@@ -1769,6 +1868,20 @@
 
   function initProductModal() {
     $('#pmCancelBtn').addEventListener('click', () => closeModal('#productModalOverlay'));
+    // Hold: put the half-filled form aside for a customer at the till, without
+    // losing a keystroke of it. Everything typed comes back on the next Add
+    // product, and the entry is cleared once it is actually saved.
+    $('#pmHoldBtn').addEventListener('click', async () => {
+      const draft = readProductForm();
+      if (!draft.name.trim() && !draft.sku.trim() && !draft.price && !draft.stock) {
+        toast('Nothing to hold yet — type something first.');
+        return;
+      }
+      setHeldProduct(draft);
+      await persist();
+      closeModal('#productModalOverlay');
+      toast('Entry held. Add product brings it back.');
+    });
     $('#pmSaveBtn').addEventListener('click', async () => {
       const name = $('#pmName').value.trim();
       if (!name) { toast('Product needs a name.'); return; }
@@ -1792,6 +1905,9 @@
         logStockEdit(p, stockWas, stock);
       } else {
         DATA.products.push({ id: nextProductId(), name, sku, alias, category, price, cost, stock, supplier });
+        // The held entry has just become a real product, so there is nothing
+        // left to bring back.
+        setHeldProduct(null);
       }
       await persist();
       closeModal('#productModalOverlay');
@@ -4114,6 +4230,7 @@
     initRefundModal();
     initStockView();
     initProductModal();
+    refreshHeldProductHint();
     initLedger();
     initSettingsView();
     initImportModal();
@@ -4123,6 +4240,7 @@
     initReportButton();
     startWarmth();
     startReportRetries();
+    showWhatsNew();
     initShortcuts();
     startReportClock();
     startBackupClock();

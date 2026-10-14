@@ -195,6 +195,9 @@ pub struct Settings {
     /// "side" keeps the screens down the left; "top" arranges them as tabs
     /// across the top, browser-style.
     pub nav_layout: String,
+    /// The version whose "what's new" card the shop has already been shown, so
+    /// it appears once per release and never again.
+    pub seen_version: String,
     /// The shop's own three themes, picked in Setup → Themes.
     pub custom_themes: Vec<CustomTheme>,
 }
@@ -226,6 +229,7 @@ impl Default for Settings {
             font_size: default_font_size(),
             receipt_width: 0.0,
             nav_layout: "side".to_string(),
+            seen_version: String::new(),
             custom_themes: default_custom_themes(),
         }
     }
@@ -348,6 +352,10 @@ pub struct Data {
     /// Stock figures edited by hand, newest last. Pruned by the screens so a
     /// long-running till cannot grow it without bound.
     pub stock_log: Vec<StockEdit>,
+    /// A product being added when a customer arrived: the half-filled form,
+    /// put aside by Hold and brought back by Add product. The shape is the
+    /// screens' own, so it is kept as it was written.
+    pub held_product: serde_json::Value,
 }
 
 impl Default for Data {
@@ -364,6 +372,7 @@ impl Default for Data {
             last_backup_at: None,
             last_auto_report: String::new(),
             stock_log: Vec::new(),
+            held_product: serde_json::Value::Null,
         }
     }
 }
@@ -747,6 +756,8 @@ mod tests {
         assert_eq!(data.settings.font_size, "normal");
         assert_eq!(data.settings.receipt_width, 0.0);
         assert_eq!(data.settings.nav_layout, "side");
+        assert_eq!(data.settings.seen_version, "");
+        assert!(data.held_product.is_null());
         assert_eq!(data.settings.custom_themes.len(), 3);
         assert_eq!(data.settings.custom_themes[0].accent, "#2EC4B6");
         assert!(data.stock_log.is_empty());
@@ -776,6 +787,7 @@ mod tests {
                 "fontSize": "large",
                 "receiptWidth": 0.62,
                 "navLayout": "top",
+                "seenVersion": "2.4.1",
                 "customThemes": [
                     { "accent": "#22CCAA", "background": "#06120F" },
                     { "accent": "#E8A33D", "background": "#171008" },
@@ -789,6 +801,7 @@ mod tests {
             "lastBackupAt": 1759100000000,
             "lastAutoReport": "2026-09-28",
             "stockLog": [{ "at": "2026-09-28T14:32:00Z", "productId": "p1", "name": "Puppy Food 2kg", "from": 12, "to": 5 }],
+            "heldProduct": { "name": "Puppy Food 2kg", "price": "189.99", "stock": "12" },
             "reportQueue": [{ "dateKey": "2026-09-28", "attempts": 2, "report": { "totals": { "sales": 12.5 } } }]
         }"##;
         let data: Data = serde_json::from_str(raw).unwrap();
@@ -804,6 +817,8 @@ mod tests {
         assert_eq!(back.settings.font_size, "large");
         assert_eq!(back.settings.receipt_width, 0.62);
         assert_eq!(back.settings.nav_layout, "top");
+        assert_eq!(back.settings.seen_version, "2.4.1");
+        assert_eq!(back.held_product["name"], "Puppy Food 2kg");
         assert_eq!(back.settings.custom_themes[0].accent, "#22CCAA");
         assert_eq!(back.settings.shortcuts["tillCharge"].key, "F9");
         assert_eq!(back.settings.shortcuts["tillCharge"].mode, "press");
