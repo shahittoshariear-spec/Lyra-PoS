@@ -22,7 +22,7 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{Message, SmtpTransport, Transport};
 use serde::Deserialize;
 
-use crate::report::{self, DailyReport};
+use crate::report::{self, DailyReport, DayHistory};
 
 /// Where the app password is filed in Windows Credential Manager. The target
 /// name is fixed, because it is what has to be found again on the next launch.
@@ -54,6 +54,10 @@ pub struct MailRequest {
     pub subject: String,
     pub body_text: String,
     pub report: DailyReport,
+    /// The day's sales history, item by item, attached as its own PDF. Left out
+    /// — by an older till, or a report queued before this existed — the email
+    /// simply goes without it.
+    pub history: Option<DayHistory>,
 }
 
 /// Keeps the shop's app password, or forgets it when given nothing.
@@ -165,25 +169,39 @@ fn compose(request: &MailRequest, ready: &Ready) -> Result<Message, String> {
         _ => request.body_text.clone(),
     };
 
-    let pdf = report::render_pdf(&request.report);
     let pdf_type = ContentType::parse("application/pdf")
         .map_err(|_| "The report could not be attached.".to_string())?;
+    let history_type = ContentType::parse("application/pdf")
+        .map_err(|_| "The sales history could not be attached.".to_string())?;
+
+    let mut attachments = MultiPart::mixed()
+        .singlepart(SinglePart::plain(body))
+        .singlepart(
+            Attachment::new(attachment_name("day-report", label))
+                .body(report::render_pdf(&request.report), pdf_type),
+        );
+
+    // The day's sales history goes out as its own file beside the report, so the
+    // owner can read, keep or forward either one without the other.
+    if let Some(history) = &request.history {
+        attachments = attachments.singlepart(
+            Attachment::new(attachment_name("sales-history", label))
+                .body(report::render_history_pdf(history), history_type),
+        );
+    }
 
     Message::builder()
         .from(from)
         .to(to)
         .date_now()
         .subject(subject)
-        .multipart(
-            MultiPart::mixed()
-                .singlepart(SinglePart::plain(body))
-                .singlepart(Attachment::new(attachment_name(label)).body(pdf, pdf_type)),
-        )
+        .multipart(attachments)
         .map_err(|e| format!("The email could not be put together: {e}"))
 }
 
-/// The file name the attachment arrives under, taken from the day it covers.
-fn attachment_name(label: &str) -> String {
+/// The file name an attachment arrives under, taken from the day it covers and
+/// named for what it holds.
+fn attachment_name(kind: &str, label: &str) -> String {
     let mut slug = String::new();
     for ch in label.chars() {
         if ch.is_ascii_alphanumeric() {
@@ -194,8 +212,8 @@ fn attachment_name(label: &str) -> String {
     }
     let slug = slug.trim_end_matches('-');
     match slug {
-        "" => "Lyra-PoS-day-report.pdf".to_string(),
-        slug => format!("day-report-{slug}.pdf"),
+        "" => format!("Lyra-PoS-{kind}.pdf"),
+        slug => format!("{kind}-{slug}.pdf"),
     }
 }
 
@@ -495,14 +513,65 @@ mod tests {
     }
 
     #[test]
-    fn the_attachment_is_named_after_the_day_it_covers() {
+    fn the_attachments_are_named_after_the_day_they_cover() {
         assert_eq!(
-            attachment_name("Tuesday, 23 September 2026"),
+            attachment_name("day-report", "Tuesday, 23 September 2026"),
             "day-report-Tuesday-23-September-2026.pdf"
         );
         // Nothing usable to name it after still gives a file the owner can find.
-        assert_eq!(attachment_name("   "), "Lyra-PoS-day-report.pdf");
-        assert_eq!(attachment_name("2026-09-23"), "day-report-2026-09-23.pdf");
+        assert_eq!(
+            attachment_name("day-report", "   "),
+            "Lyra-PoS-day-report.pdf"
+        );
+        assert_eq!(
+            attachment_name("day-report", "2026-09-23"),
+            "day-report-2026-09-23.pdf"
+        );
+        assert_eq!(
+            attachment_name("sales-history", "Tuesday, 23 September 2026"),
+            "sales-history-Tuesday-23-September-2026.pdf"
+        );
+    }
+
+    #[test]
+    fn the_day_history_goes_out_as_its_own_file_beside_the_report() {
+        let request = MailRequest {
+            username: "shop@gmail.com".to_string(),
+            recipient: "owner@example.com".to_string(),
+            subject: "Day report".to_string(),
+            body_text: "Attached.".to_string(),
+            report: DailyReport {
+                date_label: "Tuesday, 23 September 2026".to_string(),
+                shop_name: "Lyra Trading Store".to_string(),
+                ..DailyReport::default()
+            },
+            ..MailRequest::default()
+        };
+        let ready = ready(&request).expect("a filled-in request should be ready");
+
+        // A report without a history goes out exactly as it always has: one
+        // file, under the day's own name.
+        let plain = compose(&request, &ready).expect("the plain email should build");
+        let raw = String::from_utf8_lossy(&plain.formatted()).into_owned();
+        assert_eq!(raw.matches("application/pdf").count(), 1);
+        assert!(raw.contains("day-report-Tuesday-23-September-2026.pdf"));
+
+        // With one, the history rides along as a second file of its own.
+        let with_history = MailRequest {
+            history: Some(DayHistory {
+                date_label: "Tuesday, 23 September 2026".to_string(),
+                shop_name: "Lyra Trading Store".to_string(),
+                currency: "R".to_string(),
+                ..DayHistory::default()
+            }),
+            ..request
+        };
+        let both = compose(&with_history, &ready).expect("the email with a history should build");
+        let raw = String::from_utf8_lossy(&both.formatted()).into_owned();
+        assert_eq!(raw.matches("application/pdf").count(), 2);
+        assert!(raw.contains("day-report-Tuesday-23-September-2026.pdf"));
+        assert!(raw.contains("sales-history-Tuesday-23-September-2026.pdf"));
+        assert!(raw.contains("Content-Disposition: attachment"));
     }
 
     #[test]

@@ -4,8 +4,8 @@
 # Tauri's generated schemas (only produced when the Tauri CLI is used)
 /gen
 
-# Installed app bundles
-/release
+# The built installers live in /release and are committed on purpose: the shop
+# installs from the file in this repo, not from a build machine.
 
 *.log
 .DS_Store

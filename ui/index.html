@@ -271,6 +271,12 @@
           </div>
         </div>
 
+        <div class="segmented overview-tabs" id="overviewTabs">
+          <button class="seg-btn active" data-tab="summary">Summary</button>
+          <button class="seg-btn" data-tab="history">History</button>
+        </div>
+
+        <div class="overview-tab" id="overviewTabSummary">
         <div class="stat-row">
           <div class="stat-card">
             <div class="stat-label" id="statSalesLabel">Sales today</div>
@@ -343,6 +349,36 @@
                   <tr><th id="historyDateHeader">Date</th><th class="num">Sales</th><th class="num">Cash</th><th class="num">Card</th><th class="num" id="historyOtherHeader" style="display:none;">Other</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Txns</th></tr>
                 </thead>
                 <tbody id="historyTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <!-- HISTORY SUBTAB: every line of every sale, item by item. -->
+        <div class="overview-tab" id="overviewTabHistory" style="display:none;">
+          <div class="panel">
+            <h2>Every sale, line by line</h2>
+            <p class="panel-note">Every line of every sale and refund as it was rung up — the item, the time, the price, and how it was paid. Select a line to open its sale.</p>
+            <div class="toolbar-row">
+              <input type="date" id="historyDateFilter" class="select-input" />
+              <input type="text" id="historySearch" class="search-input" placeholder="Find an item, or a sale number…" />
+              <button class="btn btn-ghost" id="historyClearFilter">All time</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="historyLogTable">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Sale</th>
+                    <th>Item</th>
+                    <th class="num">Qty</th>
+                    <th class="num">Price</th>
+                    <th class="num">Line</th>
+                    <th>Paid</th>
+                  </tr>
+                </thead>
+                <tbody id="historyLogBody"></tbody>
               </table>
             </div>
           </div>

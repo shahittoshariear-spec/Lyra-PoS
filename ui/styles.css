@@ -1446,6 +1446,10 @@ input[type=date]::-webkit-calendar-picker-indicator {
 .segmented { display: flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: var(--space-6); background: rgba(4, 8, 18, 0.55); }
 .period-tabs { margin-bottom: 0; background: rgba(255, 255, 255, 0.035); }
 .period-tabs .seg-btn { padding: var(--space-3) var(--space-7); }
+/* Overview's two subtabs sit under the view head, the way Setup's do, and keep
+   to their own width rather than stretching a two-word choice across the page. */
+.overview-tabs { max-width: 320px; background: rgba(255, 255, 255, 0.035); }
+.overview-tabs .seg-btn { padding: 9px var(--space-7); }
 .seg-btn {
   flex: 1; background: transparent; border: none; padding: 9px;
   font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-snug); cursor: pointer;
@@ -3428,6 +3432,7 @@ html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--bl
 .day-part.day-card b { color: var(--blue-soft); }
 .day-part.day-split b { color: var(--violet); }
 .day-part.day-other b { color: var(--rust-soft); }
+.day-part.day-refund b { color: var(--stamp-red); }
 
 /* ===========================================================================
    V2.4.2 — a little flare, and a pass over space and type

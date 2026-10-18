@@ -51,19 +51,26 @@ fn save_data(data: Data, lock_state: tauri::State<'_, DataLock>) -> Result<(), S
 }
 
 /// Full factory reset: back to a blank install, including the Admin Key.
+///
+/// A backup of the data file is taken first, and a reset that cannot take one
+/// does not go ahead: the shop's own records are never destroyed without a copy
+/// left behind.
 #[tauri::command]
 fn reset_all_data(lock_state: tauri::State<'_, DataLock>) -> Result<Data, String> {
     let _guard = lock(&lock_state)?;
+    data::write_data_backup()?;
     let fresh = Data::default();
     fresh.save().map_err(|e| e.to_string())?;
     Ok(fresh)
 }
 
 /// Clears sales, refunds and held sales and zeroes every product's stock, but
-/// keeps the catalog, settings, categories and Admin Key.
+/// keeps the catalog, settings, categories and Admin Key. A backup is taken
+/// first, as for a full reset.
 #[tauri::command]
 fn reset_sales_stock(lock_state: tauri::State<'_, DataLock>) -> Result<Data, String> {
     let _guard = lock(&lock_state)?;
+    data::write_data_backup()?;
     let mut current = Data::load();
     current.reset_sales_and_stock();
     current.save().map_err(|e| e.to_string())?;
@@ -152,6 +159,14 @@ fn write_data_backup() -> Result<data::BackupInfo, String> {
 #[tauri::command]
 fn backup_folder() -> String {
     data::backup_folder()
+}
+
+/// Keeps a copy of a day's sales beside the backups, written once the day's
+/// report has actually been emailed. Whatever happens to the data file after
+/// that, the day's record is still on disk.
+#[tauri::command]
+fn write_sales_journal(day_key: String, history: serde_json::Value) -> Result<String, String> {
+    data::write_sales_journal(&day_key, &history)
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +300,7 @@ fn main() {
             import_backup,
             write_data_backup,
             backup_folder,
+            write_sales_journal,
             import_products_file,
             list_printers,
             print_receipt_raw,

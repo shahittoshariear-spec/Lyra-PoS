@@ -25,6 +25,8 @@ pub struct DailyReport {
     pub generated_at: String,
     pub footer_note: String,
     pub totals: Totals,
+    /// What the cash drawer should hold, and when the day started and finished.
+    pub drawer: Drawer,
     #[serde(deserialize_with = "list")]
     pub top_sellers: Vec<TopSeller>,
     /// The last seven days, oldest first.
@@ -38,23 +40,69 @@ pub struct DailyReport {
     /// Sales left open at the till when the report was asked for.
     #[serde(deserialize_with = "list")]
     pub held_sales: Vec<HeldSale>,
-    /// Stock figures that were edited by hand during the day, exactly as the
-    /// screens recorded them. Drawn in red (see `stock_edits`).
+    /// Everything done by hand that the day's takings cannot account for —
+    /// stock figures typed over, prices set for one sale, held sales thrown
+    /// away, products added, changed or deleted. Drawn in red, exactly as the
+    /// screens recorded them (see `hand_changes`).
     #[serde(deserialize_with = "list")]
     pub stock_edits: Vec<StockEditRow>,
+    /// Products whose stock does not add up against the last report's figures.
+    #[serde(deserialize_with = "list")]
+    pub stock_check: Vec<StockCheckRow>,
+    /// When the last report's stock figures were taken; empty when there is no
+    /// earlier report to count against.
+    pub stock_check_since: String,
 }
 
-/// One hand edit of a product's stock, as the till wrote it down.
+/// What the day's cash comes to: the money in, the money back, and what should
+/// be in the drawer at the end of it.
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Drawer {
+    #[serde(deserialize_with = "number")]
+    pub cash_sales: f64,
+    #[serde(deserialize_with = "number")]
+    pub cash_refunds: f64,
+    #[serde(deserialize_with = "number")]
+    pub expected: f64,
+    /// "HH:MM" as the screens read them; empty on a day with no sales.
+    pub first_sale: String,
+    pub last_sale: String,
+}
+
+/// One product whose stock has moved by more than its sales account for, since
+/// the figures the last report was built with.
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StockCheckRow {
+    pub name: String,
+    /// How many went out of the door since the last report (refunds net off).
+    #[serde(deserialize_with = "whole")]
+    pub sold: i64,
+    /// What should be on the shelf: the last report's figure, less what sold.
+    #[serde(deserialize_with = "whole")]
+    pub expected: i64,
+    /// What is on the shelf now.
+    #[serde(deserialize_with = "whole")]
+    pub actual: i64,
+}
+
+/// One change made by hand, as the till wrote it down.
 #[derive(Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase", default)]
 pub struct StockEditRow {
-    /// The local time the edit was made, "HH:MM" as the screens read it.
+    /// The local time the change was made, "HH:MM" as the screens read it.
     pub time: String,
     pub name: String,
+    /// Stock figures, for the change every older till wrote: `detail` is empty
+    /// on those, and these two say what happened instead.
     #[serde(deserialize_with = "whole")]
     pub from: i64,
     #[serde(deserialize_with = "whole")]
     pub to: i64,
+    /// The change in the shop's own words — "shelf R199.50 -> R99.00, R100.50
+    /// short", "deleted, 12 in stock", "3 items, R450.00, held 12 min".
+    pub detail: String,
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
@@ -152,6 +200,70 @@ pub struct HeldSale {
     pub total: f64,
 }
 
+/// The day's sales history as the screens send it: every sale and refund of the
+/// day, line by line. It travels as its own PDF beside the day report and
+/// answers the question the totals cannot — what went out of the door, when,
+/// and for how much.
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DayHistory {
+    pub shop_name: String,
+    pub address: String,
+    pub phone: String,
+    pub currency: String,
+    pub date_label: String,
+    pub generated_at: String,
+    pub footer_note: String,
+    #[serde(deserialize_with = "count")]
+    pub sales_count: i64,
+    #[serde(deserialize_with = "count")]
+    pub refunds_count: i64,
+    #[serde(deserialize_with = "count")]
+    pub items_sold: i64,
+    #[serde(deserialize_with = "number")]
+    pub takings: f64,
+    /// How much money went back over the counter, as a positive figure.
+    #[serde(deserialize_with = "number")]
+    pub refunds_value: f64,
+    #[serde(deserialize_with = "list")]
+    pub sales: Vec<HistorySale>,
+}
+
+/// One sale or refund in the history, in the order it was rung up.
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+pub struct HistorySale {
+    /// The local time it happened, "HH:MM" as the screens read it.
+    pub time: String,
+    #[serde(deserialize_with = "whole")]
+    pub number: i64,
+    /// "sale" or "return", the wording the data file uses.
+    pub kind: String,
+    /// The sale a refund came from; 0 when it is not a refund.
+    #[serde(deserialize_with = "whole")]
+    pub refund_of_number: i64,
+    pub payment: String,
+    #[serde(deserialize_with = "number")]
+    pub total: f64,
+    #[serde(deserialize_with = "list")]
+    pub items: Vec<HistoryItem>,
+}
+
+/// One line of one sale: what was sold, how many, at what price, and what the
+/// line came to.
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+pub struct HistoryItem {
+    pub name: String,
+    #[serde(deserialize_with = "count")]
+    pub qty: i64,
+    #[serde(deserialize_with = "number")]
+    pub price: f64,
+    /// Negative on a refund's lines: money coming back.
+    #[serde(deserialize_with = "number")]
+    pub line_total: f64,
+}
+
 /// A whole number that survives whatever JSON arrives, the way `number`
 /// does for money.
 fn whole<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
@@ -233,23 +345,45 @@ const MAX_HELD: usize = 20;
 const MAX_DAYS: usize = 14;
 /// The most hand-edited stock lines one report draws; the rest are counted.
 const MAX_STOCK_EDITS: usize = 40;
+/// The most products one unaccounted-stock list draws; the rest are counted.
+const MAX_STOCK_CHECK: usize = 40;
+/// The most sales one day's history draws; the rest are counted. A shop with
+/// more sales than this in a day is past the point where a PDF is the way to
+/// read them, and the screens still hold every one.
+const MAX_HISTORY_SALES: usize = 500;
 /// The most lines one paragraph of prose may take.
 const MAX_PROSE_LINES: usize = 40;
+/// How far a sale's items are set in under the sale line they belong to.
+const INDENT: f64 = 14.0;
 
 /// Lays out a day report and returns the finished PDF.
 pub fn render_pdf(report: &DailyReport) -> Vec<u8> {
-    let mut sheet = Sheet::new(report);
+    let mut sheet = Sheet::new(&report.date_label, "Day report");
     sheet.header(report);
     sheet.takings(report);
+    sheet.drawer(report);
     sheet.trade(report);
     sheet.profit(report);
-    sheet.stock_edits(report);
+    sheet.hand_changes(report);
+    sheet.stock_check(report);
     sheet.top_sellers(report);
     sheet.recent_days(report);
     sheet.month_to_date(report);
     sheet.reordering(report);
     sheet.held_sales(report);
-    sheet.sign_off(report);
+    sheet.note(&report.footer_note);
+    sheet.finish()
+}
+
+/// Lays out a day's sales history and returns the finished PDF.
+///
+/// It is emailed as its own attachment beside the day report, so the two files
+/// can be kept, read or forwarded apart from each other.
+pub fn render_history_pdf(history: &DayHistory) -> Vec<u8> {
+    let mut sheet = Sheet::new(&history.date_label, "Sales history");
+    sheet.history_header(history);
+    sheet.history_lines(history);
+    sheet.note(&history.footer_note);
     sheet.finish()
 }
 
@@ -260,11 +394,15 @@ struct Sheet {
     /// Distance from the top of the current page to the next thing drawn.
     y: f64,
     date_label: String,
+    /// What the sheet calls itself — "Day report", "Sales history" — wherever
+    /// it names itself: the continuation head, the foot of every page, and the
+    /// title the reader's PDF program shows.
+    title: String,
 }
 
 impl Sheet {
-    fn new(report: &DailyReport) -> Self {
-        let date_label = match report.date_label.trim() {
+    fn new(date_label: &str, title: &str) -> Self {
+        let date_label = match date_label.trim() {
             "" => "today".to_string(),
             label => label.to_string(),
         };
@@ -273,6 +411,7 @@ impl Sheet {
             page: Page::default(),
             y: MARGIN,
             date_label,
+            title: title.to_string(),
         }
     }
 
@@ -300,7 +439,7 @@ impl Sheet {
                 TEENY,
                 Face::Regular,
                 0.5,
-                &format!("Day report — {} (continued)", self.date_label),
+                &format!("{} — {} (continued)", self.title, self.date_label),
             );
             self.y += 8.0;
             self.page.rule(MARGIN, RIGHT, self.y, 0.8, 0.4);
@@ -408,19 +547,37 @@ impl Sheet {
         }
     }
 
-    // ----- the report, in the order an owner reads it -----
+    /// Text in the ink a section asked for: red where it did, grey everywhere
+    /// else. Kept in one place so a coloured line is always a deliberate call.
+    fn written(
+        &mut self,
+        ink: Option<(f64, f64, f64)>,
+        x: f64,
+        y: f64,
+        size: f64,
+        face: Face,
+        grey: f64,
+        text: &str,
+    ) {
+        match ink {
+            Some(rgb) => self.page.text_colour(x, y, size, face, rgb, text),
+            None => self.page.text(x, y, size, face, grey, text),
+        }
+    }
 
-    fn header(&mut self, report: &DailyReport) {
+    /// The shop's own name, its contact details and the rule under them: the
+    /// top of every sheet this module writes.
+    fn letterhead(&mut self, shop_name: &str, address: &str, phone: &str) {
         self.y = MARGIN + 12.0;
 
-        let shop = match report.shop_name.trim() {
+        let shop = match shop_name.trim() {
             "" => "My Shop",
             name => name,
         };
         self.page.text(MARGIN, self.y, 19.0, Face::Bold, 0.05, shop);
         self.y += 15.0;
 
-        let contact: Vec<&str> = [report.address.trim(), report.phone.trim()]
+        let contact: Vec<&str> = [address.trim(), phone.trim()]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect();
@@ -438,6 +595,12 @@ impl Sheet {
         self.y += 5.0;
         self.page.rule(MARGIN, RIGHT, self.y, 0.25, 1.0);
         self.y += 27.0;
+    }
+
+    // ----- the report, in the order an owner reads it -----
+
+    fn header(&mut self, report: &DailyReport) {
+        self.letterhead(&report.shop_name, &report.address, &report.phone);
 
         self.page.text(
             MARGIN,
@@ -495,6 +658,30 @@ impl Sheet {
         }
     }
 
+    /// What the cash drawer should hold at the end of the day. The owner counts
+    /// the till against this rather than against a feeling.
+    fn drawer(&mut self, report: &DailyReport) {
+        let drawer = &report.drawer;
+        if drawer.cash_sales == 0.0 && drawer.cash_refunds == 0.0 && drawer.expected == 0.0 {
+            // An older payload, or a day with no cash in it at all: nothing to say.
+            return;
+        }
+        self.heading("Cash in the till");
+        self.row(
+            "Cash taken today",
+            &money(&report.currency, drawer.cash_sales),
+        );
+        self.row(
+            "Cash refunded",
+            &money(&report.currency, -drawer.cash_refunds.abs()),
+        );
+        self.row(
+            "Should be in the drawer",
+            &money(&report.currency, drawer.expected),
+        );
+        self.nothing("Count the drawer against this, less whatever float was in it at opening.");
+    }
+
     fn trade(&mut self, report: &DailyReport) {
         self.heading("Trade");
         let totals = &report.totals;
@@ -508,6 +695,18 @@ impl Sheet {
             "Average sale",
             &money(&report.currency, totals.average_sale),
         );
+        // The shape of the day: a report that was all over by nine in the
+        // morning reads differently from one that ran into the evening.
+        if !report.drawer.first_sale.trim().is_empty() {
+            self.row("First sale", report.drawer.first_sale.trim());
+            self.row(
+                "Last sale",
+                match report.drawer.last_sale.trim() {
+                    "" => "—",
+                    last => last,
+                },
+            );
+        }
     }
 
     fn profit(&mut self, report: &DailyReport) {
@@ -525,54 +724,123 @@ impl Sheet {
         self.row("Margin", &percent(totals.margin_pct));
     }
 
-    /// Stock figures edited by hand during the day, in red and bold. A stock
-    /// figure that moves without a sale behind it is the one change at a till
-    /// that can hide money, so this section is drawn to be noticed — and the
-    /// till records it without any screen saying so at the time.
-    fn stock_edits(&mut self, report: &DailyReport) {
-        self.heading("Stock edited by hand");
+    /// Everything done by hand that the day's takings cannot account for, in
+    /// red and bold: stock figures typed over, prices set for one sale, held
+    /// sales thrown away, products added, changed or deleted. These are the
+    /// changes at a till that can hide money, so the section is drawn to be
+    /// noticed — and the till records them without any screen saying so at the
+    /// time.
+    fn hand_changes(&mut self, report: &DailyReport) {
+        self.heading("Changes the takings cannot account for");
         if report.stock_edits.is_empty() {
-            self.nothing("No stock was edited by hand on this day.");
+            self.nothing("Nothing was changed by hand on this day.");
             return;
         }
         let shown = report.stock_edits.len().min(MAX_STOCK_EDITS);
         for edit in report.stock_edits.iter().take(shown) {
-            let delta = edit.to - edit.from;
-            // An ASCII arrow on purpose: the report's font is WinAnsi, and the
-            // real thing would come out as a question mark.
-            let right = pdf::truncate(
-                &format!(
-                    "{} -> {}  ({}{})",
-                    figure(edit.from),
-                    figure(edit.to),
-                    if delta > 0 { "+" } else { "" },
-                    figure(delta)
-                ),
-                FIGURE_COLUMN,
-                SMALL,
-                Face::Bold,
-            );
+            // Every newer change arrives with its own wording; a change from an
+            // older till is a stock figure, and says so in from -> to.
+            let detail = match edit.detail.trim() {
+                "" => {
+                    let delta = edit.to - edit.from;
+                    // An ASCII arrow on purpose: the report's font is WinAnsi, and
+                    // the real thing would come out as a question mark.
+                    format!(
+                        "{} -> {}  ({}{})",
+                        figure(edit.from),
+                        figure(edit.to),
+                        if delta > 0 { "+" } else { "" },
+                        figure(delta)
+                    )
+                }
+                detail => detail.to_string(),
+            };
+            let right = pdf::truncate(&detail, FIGURE_COLUMN, SMALL, Face::Bold);
             let right_width = pdf::text_width(&right, SMALL, Face::Bold);
             // The name takes whatever the change does not need, and wraps onto a
-            // second line rather than being cut: which product was edited is the
+            // second line rather than being cut: which product was changed is the
             // whole point of this section.
             let room = (CONTENT - right_width - 14.0).max(140.0);
-            let lines = wrap_bold(&format!("{}  {}", edit.time, edit.name), room, SMALL, 2);
+            let lines = wrap_face(
+                &format!("{}  {}", edit.time, edit.name),
+                room,
+                SMALL,
+                Face::Bold,
+                2,
+            );
             self.needs(LEAD + 4.0 + LEAD * (lines.len().saturating_sub(1)) as f64);
             self.page
                 .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &lines[0]);
             self.page
                 .text_colour(RIGHT - right_width, self.y, SMALL, Face::Bold, RED, &right);
             if lines.len() > 1 {
+                // The second line goes under the first, the way it reads: `y`
+                // counts down the page, so the wrap moves it forward rather
+                // than back over the row above.
+                self.y += LEAD;
                 self.page
-                    .text_colour(MARGIN, self.y - LEAD, SMALL, Face::Bold, RED, &lines[1]);
-                self.y -= LEAD;
+                    .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &lines[1]);
             }
             self.y += 4.0;
             self.page.rule(MARGIN, RIGHT, self.y, 0.78, 0.4);
             self.y += LEAD - 4.0;
         }
         self.cut_short(shown, report.stock_edits.len());
+    }
+
+    /// What has walked, compared with the stock the last report was built with.
+    /// A hand edit is written down as it happens; this catches everything else —
+    /// a spreadsheet imported, a product deleted and re-added, an old backup
+    /// restored, a data file edited by hand.
+    fn stock_check(&mut self, report: &DailyReport) {
+        if report.stock_check.is_empty() && report.stock_check_since.trim().is_empty() {
+            // Nothing to compare against yet, or nothing out of place.
+            return;
+        }
+        self.heading("Unaccounted stock");
+        if report.stock_check.is_empty() {
+            self.nothing("Every product's stock adds up against the last report.");
+            if !report.stock_check_since.trim().is_empty() {
+                self.nothing(&format!(
+                    "Counted against the figures of {}.",
+                    report.stock_check_since.trim()
+                ));
+            }
+            return;
+        }
+        for row in report.stock_check.iter().take(MAX_STOCK_CHECK) {
+            let delta = row.actual - row.expected;
+            let detail = format!(
+                "{} expected, {} found  ({}{})",
+                figure(row.expected),
+                figure(row.actual),
+                if delta > 0 { "+" } else { "" },
+                figure(delta)
+            );
+            let right = pdf::truncate(&detail, FIGURE_COLUMN, SMALL, Face::Bold);
+            let right_width = pdf::text_width(&right, SMALL, Face::Bold);
+            let room = (CONTENT - right_width - 14.0).max(140.0);
+            let lines = wrap_face(&row.name, room, SMALL, Face::Bold, 2);
+            self.needs(LEAD + 4.0 + LEAD * (lines.len().saturating_sub(1)) as f64);
+            self.page
+                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &lines[0]);
+            self.page
+                .text_colour(RIGHT - right_width, self.y, SMALL, Face::Bold, RED, &right);
+            if lines.len() > 1 {
+                self.y += LEAD;
+                self.page
+                    .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &lines[1]);
+            }
+            self.y += 4.0;
+            self.page.rule(MARGIN, RIGHT, self.y, 0.78, 0.4);
+            self.y += LEAD - 4.0;
+        }
+        self.cut_short(MAX_STOCK_CHECK, report.stock_check.len());
+        let note = match report.stock_check_since.trim() {
+            "" => "Counted against the stock the last report was built with.".to_string(),
+            since => format!("Counted against the figures of {since}."),
+        };
+        self.nothing(&note);
     }
 
     fn top_sellers(&mut self, report: &DailyReport) {
@@ -728,14 +996,196 @@ impl Sheet {
         self.nothing("Held sales count towards the day's takings once they are paid for.");
     }
 
-    fn sign_off(&mut self, report: &DailyReport) {
-        let note = report.footer_note.trim();
+    /// The shop's own words at the foot of the sheet, read by both documents.
+    fn note(&mut self, text: &str) {
+        let note = text.trim();
         if note.is_empty() {
             return;
         }
         self.needs(LEAD * 2.0);
         self.y += 10.0;
         self.paragraph(note, 0.4);
+    }
+
+    // ----- the sales history -----
+
+    fn history_header(&mut self, history: &DayHistory) {
+        self.letterhead(&history.shop_name, &history.address, &history.phone);
+
+        self.page.text(
+            MARGIN,
+            self.y,
+            TITLE,
+            Face::Bold,
+            0.05,
+            &format!("Sales history — {}", self.date_label),
+        );
+        self.y += 15.0;
+
+        // The day in one line, the way the report's Takings section reads it, so
+        // the two attachments can be checked against each other at a glance.
+        let sales = match history.sales_count {
+            1 => "1 sale".to_string(),
+            n => format!("{} sales", figure(n)),
+        };
+        let items = match history.items_sold {
+            1 => "1 item sold".to_string(),
+            n => format!("{} items sold", figure(n)),
+        };
+        let mut parts = vec![sales];
+        if history.refunds_count > 0 {
+            let refunds = match history.refunds_count {
+                1 => "1 refund".to_string(),
+                n => format!("{} refunds", figure(n)),
+            };
+            parts.push(format!(
+                "{refunds} ({})",
+                money(&history.currency, -history.refunds_value.abs())
+            ));
+        }
+        parts.push(items);
+        parts.push(format!(
+            "takings {}",
+            money(&history.currency, history.takings)
+        ));
+        self.page.text(
+            MARGIN,
+            self.y,
+            SMALL,
+            Face::Regular,
+            0.45,
+            &parts.join("  ·  "),
+        );
+        self.y += 12.0;
+
+        if !history.generated_at.trim().is_empty() {
+            self.page.text(
+                MARGIN,
+                self.y,
+                SMALL,
+                Face::Regular,
+                0.45,
+                &format!("Generated {}", history.generated_at.trim()),
+            );
+            self.y += 12.0;
+        }
+        self.y += 6.0;
+    }
+
+    /// Every sale of the day, oldest first, each with its lines under it. This
+    /// is the section an owner reads when the shelf and the takings do not
+    /// agree, so nothing here is summarised away.
+    fn history_lines(&mut self, history: &DayHistory) {
+        self.heading("Every sale, line by line");
+        if history.sales.is_empty() {
+            self.nothing("No sales were rung up on this day.");
+            return;
+        }
+        let shown = history.sales.len().min(MAX_HISTORY_SALES);
+        for sale in history.sales.iter().take(shown) {
+            self.history_sale(sale, &history.currency);
+        }
+        self.cut_short(shown, history.sales.len());
+    }
+
+    /// One sale as a block: when and what it was on its own line, its items
+    /// under it. A refund is drawn in red — money going back over the counter
+    /// is the entry an owner should be able to find without reading every line.
+    fn history_sale(&mut self, sale: &HistorySale, currency: &str) {
+        let is_return = sale.kind.trim().eq_ignore_ascii_case("return");
+        let ink = if is_return { Some(RED) } else { None };
+
+        // A sale keeps its lines together on one page wherever they fit there
+        // at all: which items went out together is the thing the sheet is for.
+        let want = (LEAD * (1 + sale.items.len()) as f64 + 10.0).min(self.bottom() - MARGIN);
+        self.needs(want);
+
+        let label = match (is_return, sale.refund_of_number) {
+            (true, 0) => format!("Refund #{}", figure(sale.number)),
+            (true, n) => format!("Refund #{} of #{}", figure(sale.number), figure(n)),
+            (false, _) => format!("Sale #{}", figure(sale.number)),
+        };
+        let left = [sale.time.trim(), label.as_str(), sale.payment.trim()]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("  ·  ");
+        let right = money(currency, sale.total);
+        let right_width = pdf::text_width(&right, BODY, Face::Bold);
+        let left = pdf::truncate(
+            &left,
+            (CONTENT - right_width - 14.0).max(120.0),
+            BODY,
+            Face::Bold,
+        );
+
+        self.y += 5.0;
+        self.written(ink, MARGIN, self.y, BODY, Face::Bold, 0.05, &left);
+        self.written(
+            ink,
+            RIGHT - right_width,
+            self.y,
+            BODY,
+            Face::Bold,
+            0.05,
+            &right,
+        );
+        self.y += 4.0;
+        self.page.rule(MARGIN, RIGHT, self.y, 0.85, 0.4);
+        self.y += LEAD - 4.0;
+
+        for item in &sale.items {
+            self.history_item(item, currency, ink);
+        }
+    }
+
+    /// One line of a sale: how many, of what, at what price each, and what the
+    /// line came to. A long name wraps onto a second line rather than being
+    /// cut: which item sold is the whole point of the sheet.
+    fn history_item(&mut self, item: &HistoryItem, currency: &str, ink: Option<(f64, f64, f64)>) {
+        let qty = figure(item.qty);
+        let name = item.name.trim();
+        let label = if item.qty != 1 && item.price != 0.0 {
+            format!("{} x {}  @ {}", qty, name, money(currency, item.price))
+        } else {
+            format!("{} x {}", qty, name)
+        };
+        let right = money(currency, item.line_total);
+        let right_width = pdf::text_width(&right, SMALL, Face::Regular);
+        let room = (CONTENT - INDENT - right_width - 14.0).max(140.0);
+        let lines = wrap_face(&label, room, SMALL, Face::Regular, 2);
+        self.needs(LEAD * lines.len() as f64);
+        self.written(
+            ink,
+            MARGIN + INDENT,
+            self.y,
+            SMALL,
+            Face::Regular,
+            0.05,
+            &lines[0],
+        );
+        self.written(
+            ink,
+            RIGHT - right_width,
+            self.y,
+            SMALL,
+            Face::Regular,
+            0.05,
+            &right,
+        );
+        if lines.len() > 1 {
+            self.y += LEAD;
+            self.written(
+                ink,
+                MARGIN + INDENT,
+                self.y,
+                SMALL,
+                Face::Regular,
+                0.05,
+                &lines[1],
+            );
+        }
+        self.y += LEAD;
     }
 
     /// Footers first — they carry the page count, which is only known once the
@@ -745,8 +1195,9 @@ impl Sheet {
         let pages = self.doc.page_count();
         for index in 0..pages {
             let left = format!(
-                "Lyra PoS {}  ·  Day report — {}",
+                "Lyra PoS {}  ·  {} — {}",
                 env!("CARGO_PKG_VERSION"),
+                self.title,
                 self.date_label
             );
             let right = format!("Page {} of {}", index + 1, pages);
@@ -767,7 +1218,7 @@ impl Sheet {
             }
         }
         self.doc
-            .finish(&format!("Day report - {}", self.date_label))
+            .finish(&format!("{} - {}", self.title, self.date_label))
     }
 }
 
@@ -873,10 +1324,10 @@ fn wrap(text: &str, width: f64, size: f64) -> Vec<String> {
     lines
 }
 
-/// The same wrapping, in the bold face this section is set in, and cut to the
-/// number of lines a row is allowed: a name that needs more than that is
-/// truncated for the last line, so nothing ever runs off the page.
-fn wrap_bold(text: &str, width: f64, size: f64, most: usize) -> Vec<String> {
+/// The same wrapping, in a given face, cut to the number of lines a row is
+/// allowed: text that needs more than that is truncated on the last line, so
+/// nothing ever runs off the page.
+fn wrap_face(text: &str, width: f64, size: f64, face: Face, most: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut line = String::new();
     for word in text.split_whitespace() {
@@ -885,7 +1336,7 @@ fn wrap_bold(text: &str, width: f64, size: f64, most: usize) -> Vec<String> {
         } else {
             format!("{line} {word}")
         };
-        if pdf::text_width(&candidate, size, Face::Bold) <= width {
+        if pdf::text_width(&candidate, size, face) <= width {
             line = candidate;
             continue;
         }
@@ -894,11 +1345,11 @@ fn wrap_bold(text: &str, width: f64, size: f64, most: usize) -> Vec<String> {
             if lines.len() == most {
                 let last = lines.pop().unwrap_or_default();
                 let joined = format!("{last} {word}");
-                lines.push(pdf::truncate(&joined, width, size, Face::Bold));
+                lines.push(pdf::truncate(&joined, width, size, face));
                 return lines;
             }
         }
-        line = pdf::truncate(word, width, size, Face::Bold);
+        line = pdf::truncate(word, width, size, face);
     }
     if !line.is_empty() {
         lines.push(line);
@@ -976,14 +1427,44 @@ mod tests {
                     name: "Sunflower oil 750 ml".to_string(),
                     from: 24,
                     to: 18,
+                    detail: String::new(),
+                },
+                StockEditRow {
+                    time: "14:36".to_string(),
+                    name: "Dog Food 10 kg (sale #1041)".to_string(),
+                    from: 0,
+                    to: 0,
+                    detail: "shelf R199.50 -> R99.00, R100.50 short".to_string(),
+                },
+                StockEditRow {
+                    time: "15:02".to_string(),
+                    name: "Held sale discarded".to_string(),
+                    from: 0,
+                    to: 0,
+                    detail: "3 items, R450.00, held 12 min".to_string(),
                 },
                 StockEditRow {
                     time: "09:05".to_string(),
                     name: "Cold drink 2 ℓ".to_string(),
                     from: 60,
                     to: 66,
+                    detail: String::new(),
                 },
             ],
+            drawer: Drawer {
+                cash_sales: 7_310.00,
+                cash_refunds: 420.00,
+                expected: 6_890.00,
+                first_sale: "07:58".to_string(),
+                last_sale: "18:10".to_string(),
+            },
+            stock_check: vec![StockCheckRow {
+                name: "Dog Food 10 kg".to_string(),
+                sold: 3,
+                expected: 9,
+                actual: 5,
+            }],
+            stock_check_since: "Monday, 22 September 2026, 18:42".to_string(),
             recent_days: vec![
                 day("Wed 17 Sep", 9_140.00, 2_540.00, 71),
                 day("Thu 18 Sep", 8_620.50, 2_310.00, 66),
@@ -1075,6 +1556,111 @@ mod tests {
         (on_disk, path)
     }
 
+    /// One sale in a history, with its total worked out from its lines.
+    fn history_sale(
+        time: &str,
+        number: i64,
+        payment: &str,
+        items: Vec<HistoryItem>,
+    ) -> HistorySale {
+        let total = items.iter().map(|item| item.line_total).sum();
+        HistorySale {
+            time: time.to_string(),
+            number,
+            kind: "sale".to_string(),
+            refund_of_number: 0,
+            payment: payment.to_string(),
+            total,
+            items,
+        }
+    }
+
+    fn item(name: &str, qty: i64, price: f64) -> HistoryItem {
+        HistoryItem {
+            name: name.to_string(),
+            qty,
+            price,
+            line_total: price * qty as f64,
+        }
+    }
+
+    /// A day of trade, item by item, with one refund in it.
+    fn busy_history() -> DayHistory {
+        let mut sales: Vec<HistorySale> = (0..40)
+            .map(|n| {
+                history_sale(
+                    &format!("{:02}:{:02}", 8 + n % 10, (n * 7) % 60),
+                    100 + n,
+                    if n % 3 == 0 { "Card" } else { "Cash" },
+                    vec![
+                        item("Puppy Food 2 kg", 1 + n % 3, 89.99),
+                        item("Dog Food 10 kg", 2, 199.50),
+                    ],
+                )
+            })
+            .collect();
+        sales.push(HistorySale {
+            time: "14:32".to_string(),
+            number: 140,
+            kind: "return".to_string(),
+            refund_of_number: 104,
+            payment: "Cash".to_string(),
+            total: -199.50,
+            items: vec![HistoryItem {
+                name: "Dog Food 10 kg".to_string(),
+                qty: 1,
+                price: 199.50,
+                line_total: -199.50,
+            }],
+        });
+        DayHistory {
+            shop_name: "Lyra Trading Store".to_string(),
+            address: "12 Long Street, Greytown, 3250".to_string(),
+            phone: "033 417 2189".to_string(),
+            currency: "R".to_string(),
+            date_label: "Tuesday, 23 September 2026".to_string(),
+            generated_at: "23 Sep 2026, 18:42".to_string(),
+            footer_note: "Takings are the shop's own record and not a tax invoice.".to_string(),
+            sales_count: 40,
+            refunds_count: 1,
+            items_sold: 121,
+            takings: 12_480.50,
+            refunds_value: 199.50,
+            sales,
+        }
+    }
+
+    fn write_history(history: &DayHistory, name: &str) -> (Vec<u8>, PathBuf) {
+        let bytes = render_history_pdf(history);
+        let path = sample(name);
+        std::fs::write(&path, &bytes).expect("the sample history could not be written");
+        let on_disk = std::fs::read(&path).expect("the sample history could not be read back");
+        (on_disk, path)
+    }
+
+    /// Where a piece of text sits on the page, read from the content stream: the
+    /// `Tm` line before its `Tj`. PDF's y counts up from the foot of the page,
+    /// so a smaller figure is further down.
+    fn text_y(bytes: &[u8], needle: &str) -> f64 {
+        let text = String::from_utf8_lossy(bytes);
+        let lines: Vec<&str> = text.lines().collect();
+        let index = lines
+            .iter()
+            .position(|line| line.contains("Tj") && line.contains(needle))
+            .unwrap_or_else(|| panic!("{needle:?} is not on the sheet"));
+        for line in lines[..index].iter().rev() {
+            if let Some(matrix) = line.strip_suffix(" Tm") {
+                return matrix
+                    .rsplit(' ')
+                    .next()
+                    .expect("a y coordinate")
+                    .parse()
+                    .expect("a Tm coordinate");
+            }
+        }
+        panic!("no text position before {needle:?}");
+    }
+
     #[test]
     fn a_hand_edited_stock_figure_is_called_out_in_red() {
         let mut report = quiet_day();
@@ -1083,12 +1669,13 @@ mod tests {
             name: "Puppy Food 2kg".to_string(),
             from: 12,
             to: 5,
+            detail: String::new(),
         }];
         let (bytes, path) = write(&report, "daily-report-stock-edit.pdf");
         assert!(bytes.starts_with(b"%PDF-"), "{path:?} is not a PDF");
         let text = String::from_utf8_lossy(&bytes);
         assert!(
-            text.contains("STOCK EDITED BY HAND"),
+            text.contains("CHANGES THE TAKINGS CANNOT ACCOUNT FOR"),
             "the section is missing: {path:?}"
         );
         assert!(
@@ -1110,6 +1697,114 @@ mod tests {
     }
 
     #[test]
+    fn the_drawer_and_the_hours_the_day_ran_are_written_out() {
+        let (bytes, path) = write(&busy_day(), "daily-report-sample.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("CASH IN THE TILL"),
+            "the drawer section is missing: {path:?}"
+        );
+        assert!(
+            text.contains("R6,890.00"),
+            "cash in less cash back is missing: {path:?}"
+        );
+        assert!(
+            text.contains("07:58"),
+            "the first sale is missing: {path:?}"
+        );
+        assert!(text.contains("18:10"), "the last sale is missing: {path:?}");
+    }
+
+    #[test]
+    fn an_unaccounted_stock_line_is_called_out_in_red() {
+        let mut report = quiet_day();
+        report.stock_check = vec![StockCheckRow {
+            name: "Dog Food 10 kg".to_string(),
+            sold: 3,
+            expected: 9,
+            actual: 5,
+        }];
+        report.stock_check_since = "Monday, 22 September 2026, 18:42".to_string();
+        let (bytes, path) = write(&report, "daily-report-unaccounted.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("UNACCOUNTED STOCK"),
+            "the section is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Dog Food 10 kg"),
+            "the product is missing: {path:?}"
+        );
+        assert!(
+            text.contains("9 expected, 5 found"),
+            "the figures are missing: {path:?}"
+        );
+        assert!(
+            text.contains("\\(-4\\)"),
+            "the difference is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Counted against the figures of Monday, 22 September 2026, 18:42."),
+            "what it was counted against is missing: {path:?}"
+        );
+        assert!(
+            text.contains("0.720 0.050 0.050 rg"),
+            "the line is not red: {path:?}"
+        );
+    }
+
+    #[test]
+    fn nothing_moving_between_reports_says_so() {
+        let mut report = quiet_day();
+        report.stock_check_since = "Monday, 22 September 2026, 18:42".to_string();
+        let (bytes, path) = write(&report, "daily-report-stock-checked.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("UNACCOUNTED STOCK"),
+            "the section heads the all-clear too: {path:?}"
+        );
+        assert!(
+            text.contains("Every product's stock adds up against the last report."),
+            "the all-clear is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Counted against the figures of Monday, 22 September 2026, 18:42."),
+            "what it was counted against is missing: {path:?}"
+        );
+
+        // And a report from an older till, with no check in it at all: it must
+        // render exactly as it always did.
+        let (bytes, path) = write(&quiet_day(), "daily-report-older-payload.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            !text.contains("UNACCOUNTED STOCK"),
+            "an older payload must not grow a section it never had: {path:?}"
+        );
+    }
+
+    #[test]
+    fn a_change_with_its_own_wording_reads_the_way_the_shop_wrote_it() {
+        let mut report = quiet_day();
+        report.stock_edits = vec![StockEditRow {
+            time: "14:36".to_string(),
+            name: "Dog Food 10 kg (sale #1041)".to_string(),
+            from: 0,
+            to: 0,
+            detail: "shelf R199.50 -> R99.00, R100.50 short".to_string(),
+        }];
+        let (bytes, path) = write(&report, "daily-report-price-change.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("Dog Food 10 kg \\(sale #1041\\)"),
+            "the product and its sale are missing: {path:?}"
+        );
+        assert!(
+            text.contains("shelf R199.50 -> R99.00, R100.50 short"),
+            "the change in the shop's own words is missing: {path:?}"
+        );
+    }
+
+    #[test]
     fn a_long_product_name_is_wrapped_rather_than_cut_out_of_the_stock_list() {
         let long = "Heavy-duty galvanised garden rake, 12 tine, with an ash handle and a \
                     replacement head";
@@ -1120,6 +1815,7 @@ mod tests {
                 name: long.to_string(),
                 from: 40 - i,
                 to: 12 - i,
+                detail: String::new(),
             })
             .collect();
         let (bytes, path) = write(&report, "daily-report-long-edit.pdf");
@@ -1149,6 +1845,7 @@ mod tests {
                 name: format!("Product number {i}"),
                 from: 50,
                 to: 50 - i,
+                detail: String::new(),
             })
             .collect();
         let (bytes, path) = write(&report, "daily-report-many-edits.pdf");
@@ -1267,5 +1964,162 @@ mod tests {
         for line in &lines {
             assert!(pdf::text_width(line, BODY, Face::Regular) <= CONTENT);
         }
+    }
+
+    #[test]
+    fn a_wrapped_stock_edit_reads_down_the_page_rather_than_over_the_row_above() {
+        // Long enough to need the second line, short enough not to need a third.
+        let name = "Heavy-duty galvanised garden rake, 12 tine, with an ash handle and a \
+                    replacement head for the workshop, with a spare shaft and ZZ-TAIL";
+        let mut report = quiet_day();
+        report.stock_edits = vec![StockEditRow {
+            time: "14:32".to_string(),
+            name: name.to_string(),
+            from: 50,
+            to: 12,
+            detail: String::new(),
+        }];
+        let (bytes, path) = write(&report, "daily-report-wrapped-edit.pdf");
+        let first = text_y(&bytes, "Heavy-duty galvanised garden");
+        let second = text_y(&bytes, "ZZ-TAIL");
+        assert!(
+            second < first,
+            "the second line of a wrapped name must sit below the first: {path:?}"
+        );
+        assert!(
+            (first - second - LEAD).abs() < 0.5,
+            "the second line sits one row under the first: {path:?}"
+        );
+    }
+
+    #[test]
+    fn a_busy_day_of_sales_writes_a_history_that_reads_across_pages() {
+        let (bytes, path) = write_history(&busy_history(), "sales-history-sample.pdf");
+        assert!(bytes.starts_with(b"%PDF-"), "{path:?} is not a PDF");
+        assert!(bytes.ends_with(b"%%EOF\n"));
+        let pages = xref_offsets_are_right(&bytes);
+        assert!(
+            pages >= 2,
+            "a busy day's history should not fit on one page"
+        );
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("EVERY SALE, LINE BY LINE"),
+            "the section is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Sale #100"),
+            "the first sale is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Sale #139"),
+            "the last sale is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Puppy Food 2 kg"),
+            "an item is missing: {path:?}"
+        );
+        assert!(
+            text.contains("\\(continued\\)"),
+            "a continuation page is not headed: {path:?}"
+        );
+    }
+
+    #[test]
+    fn a_refund_is_drawn_in_red_beside_the_sale_it_came_from() {
+        let (bytes, path) = write_history(&busy_history(), "sales-history-refund.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("Refund #140 of #104"),
+            "the refund is missing: {path:?}"
+        );
+        assert!(
+            text.contains("R-199.50"),
+            "the money going back is missing: {path:?}"
+        );
+        assert!(
+            text.contains("1 refund \\(R-199.50\\)"),
+            "the day's refund is not counted in the summary line: {path:?}"
+        );
+        // The same red the stock-edit lines use: money going back over the
+        // counter is the one thing worth finding without reading every line.
+        assert!(
+            text.contains("0.720 0.050 0.050 rg"),
+            "the refund is not red: {path:?}"
+        );
+    }
+
+    #[test]
+    fn a_quiet_day_still_writes_a_history() {
+        let quiet = DayHistory {
+            shop_name: "Lyra Trading Store".to_string(),
+            currency: "R".to_string(),
+            date_label: "Sunday, 21 September 2026".to_string(),
+            ..DayHistory::default()
+        };
+        let (bytes, path) = write_history(&quiet, "sales-history-quiet.pdf");
+        assert!(bytes.starts_with(b"%PDF-"), "{path:?} is not a PDF");
+        assert_eq!(
+            xref_offsets_are_right(&bytes),
+            1,
+            "a day with nothing on it is one page"
+        );
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("No sales were rung up on this day."),
+            "the empty note is missing: {path:?}"
+        );
+    }
+
+    #[test]
+    fn a_history_payload_with_holes_in_it_still_renders() {
+        let history: DayHistory = serde_json::from_str(
+            r#"{"takings": null, "salesCount": "12.7", "refundsValue": "nonsense",
+                "sales": [{"items": null, "total": "12.50"}, {}]}"#,
+        )
+        .expect("a payload with holes in it should deserialize");
+        assert_eq!(history.takings, 0.0);
+        assert_eq!(history.refunds_value, 0.0);
+        assert_eq!(history.sales_count, 13);
+        assert_eq!(history.sales.len(), 2);
+        assert!(history.sales[0].items.is_empty());
+        assert_eq!(history.sales[0].total, 12.50);
+        assert!(render_history_pdf(&history).starts_with(b"%PDF-"));
+    }
+
+    #[test]
+    fn a_long_item_name_wraps_onto_a_second_line_rather_than_being_cut() {
+        // Long enough to need the second line, short enough not to need a third
+        // — which is where a row is cut short.
+        let name = "Heavy-duty galvanised garden rake, 12 tine, with an ash handle and a \
+                    replacement head for the workshop, with a spare shaft and ZZ-TAIL";
+        let history = DayHistory {
+            shop_name: "Lyra Trading Store".to_string(),
+            currency: "R".to_string(),
+            date_label: "Tuesday, 23 September 2026".to_string(),
+            sales: vec![history_sale(
+                "09:15",
+                100,
+                "Cash",
+                vec![item(name, 2, 540.00)],
+            )],
+            ..DayHistory::default()
+        };
+        let (bytes, path) = write_history(&history, "sales-history-long-item.pdf");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("Heavy-duty galvanised garden rake, 12 tine"),
+            "the head of the name is missing: {path:?}"
+        );
+        assert!(
+            text.contains("ZZ-TAIL"),
+            "the tail of the name was cut off: {path:?}"
+        );
+        let first = text_y(&bytes, "Heavy-duty galvanised garden rake");
+        let second = text_y(&bytes, "ZZ-TAIL");
+        assert!(
+            second < first,
+            "the second line of a long item must sit below the first: {path:?}"
+        );
     }
 }

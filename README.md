@@ -127,6 +127,16 @@ so there is no browser to install and no Node.js to install.
   axis labels thin themselves out to the width of the longest one, so a week
   of day names or a month of dates never collides into an unreadable row, and
   the tab strip carries a highlight that slides between the periods.
+- **Sales history, item by item** — Overview has a second subtab beside the
+  figures: **History**, every line of every sale and refund as it was rung up,
+  newest first, each day banded with what it came to. It shows the time of the
+  sale, the item, how many, the price, what the line came to and how it was
+  paid, and a refund is drawn in red and named back to the sale it came from.
+  Filter it to one day, or type an item's name or a sale number — typing
+  "dog food" brings up every dog-food line in the shop's whole history — and
+  select a line to open its sale, ready to reprint or refund. Like the rest of
+  the Overview it sits behind the Admin Key, so it is not on the till's screen
+  in Client mode.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales
@@ -159,6 +169,34 @@ so there is no browser to install and no Node.js to install.
   your own from an accent and a night, five fonts, four text sizes, and where
   the screens sit — down the side, or **across the top** as browser-style tabs.
   Everything applies the moment it is picked.
+- **Money can't move quietly** — every hand change to the shop that a sale
+  cannot account for is written down as it happens, with nothing on screen
+  saying so and the till behaving exactly as before. The record surfaces in one
+  place only: the day report, **in bold red**, under *Changes the takings cannot
+  account for* — a stock figure typed over, a price set for one sale at the till
+  (with the shelf price, the price charged and the difference), a price or cost
+  changed in Stock, a product added or deleted (with the stock that went with
+  it), a spreadsheet imported, and a held sale thrown away after being rung up.
+  That section is where the R400 of dog food was caught, and it now catches the
+  other half of the trick too.
+- **The drawer, counted** — the report says what the day's cash comes to and
+  what should be in the drawer at the end of it (cash taken, less cash
+  refunded), so the till can be counted against a figure rather than a feeling.
+  It also carries the first and last sale times, so a day that reads oddly has
+  its hours on the same page.
+- **Unaccounted stock** — the report keeps a picture of every product's stock
+  at the moment it is built. The next day's report counts against that picture:
+  the sales and refunds since explain most of the movement, and anything left
+  over is listed in red as unaccounted for, with the expected and the found
+  figure side by side. This catches the changes no log can see — a spreadsheet
+  imported over the shelf, a product deleted and added back, an old backup
+  restored, or the data file edited by hand.
+- **Nothing is wiped without a copy** — both Danger Zone resets take a backup of
+  the shop's data into the backups folder *first*, and a reset that cannot take
+  one does not go ahead. And every time a day report is actually emailed, a copy
+  of that day's sales — item by item, exactly what was sent — is dropped in the
+  backups folder as `sales-journal-<date>.json`. Even a full reset done with the
+  Admin Key cannot make a day's trading disappear.
 - **Stock edits are recorded, quietly** — a stock figure typed over by hand in
   the product form is written down as it happens: the time, the product, what it
   was and what it became. Nothing on screen mentions it, no message appears and
@@ -220,9 +258,13 @@ by accident:
   sales, categories, settings, and the Admin Key itself. Immediately after,
   the app will ask you to set a new Admin Key, exactly like a first run.
 
-Neither of these touches backup files you've already exported, so exporting
-a backup first (Setup → Backup → Export backup…) is a good habit before
-using either.
+Both resets take a copy of the data file into the backups folder (the `backups`
+folder beside it) *before* anything is cleared, and a reset that cannot write
+that copy stops rather than going ahead — and both also leave the existing
+exported backups and the day journals alone. So a reset in Setup is never the
+end of the shop's records, even when it is done with the Admin Key: the last
+twelve automatic backups, every day journal, whatever you have exported, and
+the red list of hand changes all still say what happened.
 
 ## Running it
 
@@ -356,6 +398,19 @@ the day it belongs to and tried again while the app stays open, so a shop that
 closes up early still gets its figures out in the morning. The button is still
 there for sending one by hand at any time.
 
+Every report email carries **two** PDFs: the day report as before, and the
+day's sales history under the same name and day — `sales-history-….pdf` beside
+`day-report-….pdf` — which is the History subtab's own content, item by item,
+for the day the report covers. Both are built from the same records at the
+moment of sending, so the two can be checked against each other. A report
+queued before this existed goes out with the one attachment it was built with.
+
+The moment a report has gone, a copy of that day's sales is also written into
+the backups folder beside the data file as `sales-journal-<date>.json` — the
+day's record, item by item, kept outside the data file on purpose. The newest
+twelve data backups and the newest four hundred days' journals are kept; older
+ones are cleared out on their own.
+
 Nothing else about the app has changed: it still runs with no internet
 connection at all, and only tries to reach the mail server when a report is
 actually being sent. If there is no internet, it says so rather than waiting.
@@ -451,7 +506,7 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 | `src/printing.rs` | Listing printers, and sending a receipt to one |
 | `src/import.rs` | Reading a product list, and guessing which column is which |
 | `src/page_print.rs` | Printing the window's own page, with no dialog |
-| `src/report.rs` | Laying the day's report out as a PDF |
+| `src/report.rs` | Laying the day's report and the sales history out as PDFs |
 | `src/pdf.rs` | The small PDF writer the report is drawn with |
 | `src/mail.rs` | Emailing the report through the shop's own Gmail account |
 | `src/bridge.js` | The one place the screens talk to the machine |
@@ -493,7 +548,8 @@ over as it stands. Two ways to get it back, if you want one of them:
 
 A shop can hold thousands of products and years of sales, so the Till draws only
 the first 120 matching products (typing narrows them), and the Stock and Ledger
-tables draw a page of 500 rows at a time with a **Show more** button. Searching,
+tables draw a page of 500 rows at a time with a **Show more** button, as does
+the Overview's History (800 lines a page, one sold item each). Searching,
 picking a category, or **Select all** still covers every matching record, not
 just the rows on screen.
 

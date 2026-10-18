@@ -37,9 +37,24 @@
     // version still unlocks this one.
     hashAdminKey: (key) => call('hash_admin_key', { key: String(key == null ? '' : key) }),
 
-    resetAllData: () => call('reset_all_data'),
+    // The resets take a copy of the data file into the backups folder before
+    // they clear anything, so they can answer with an error instead of wiping
+    // the shop's records when that copy cannot be written.
+    async resetAllData() {
+      try {
+        return { ok: true, data: await call('reset_all_data') };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
 
-    resetSalesStock: () => call('reset_sales_stock'),
+    async resetSalesStock() {
+      try {
+        return { ok: true, data: await call('reset_sales_stock') };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
 
     // Resolves {ok:false} when the dialog was dismissed without choosing,
     // {ok:false, error} when the file could not be used, and {ok:true, …} when
@@ -163,6 +178,17 @@
       try {
         await call('send_daily_report', { request });
         return { ok: true };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
+
+    // A copy of a day's sales, written beside the backups once that day's
+    // report has actually been emailed.
+    async writeSalesJournal(dayKey, history) {
+      try {
+        const filePath = await call('write_sales_journal', { dayKey, history });
+        return { ok: true, filePath };
       } catch (err) {
         return { ok: false, error: String(err) };
       }

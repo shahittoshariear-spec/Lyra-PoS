@@ -31,6 +31,14 @@ const BACKUP_PREFIX: &str = "lyra-backup-";
 /// alone, the folder would grow without bound on a till used every day.
 const BACKUPS_KEPT: usize = 12;
 
+/// A copy of each day's sales, written beside the backups when the day's report
+/// is emailed: `sales-journal-<date>.json`. Small, one file per day, and it
+/// outlives anything done to the data file afterwards.
+const JOURNAL_PREFIX: &str = "sales-journal-";
+/// How many days' journals are kept; a shop that sends a report every day for a
+/// year keeps the year.
+const JOURNALS_KEPT: usize = 400;
+
 /// Earlier names this app shipped under, newest first. Renaming the app moves
 /// its data folder, which would otherwise hide an existing shop's data — so on
 /// first run, if we have no data file of our own, the first valid one of these
@@ -143,6 +151,42 @@ pub struct StockEdit {
     pub name: String,
     pub from: i64,
     pub to: i64,
+}
+
+/// Something done by hand that a sale cannot account for: a price set for one
+/// sale, a held sale thrown away, a product added, changed or deleted. Written
+/// down as it happens, with nothing on screen saying so; the day report draws
+/// these beside the hand-edited stock lines, in red (see report.rs).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ChangeEntry {
+    /// RFC 3339 in UTC, as the screens write every other timestamp.
+    pub at: String,
+    /// The screens' own word for the kind of change — "price", "cost",
+    /// "added", "deleted", "discarded", "import" — kept as written.
+    pub kind: String,
+    pub name: String,
+    pub detail: String,
+}
+
+/// Every product's stock as the last day report left it, so the next report
+/// can say what has moved since — including anything that moved without a
+/// record anywhere, which no log can catch.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StockSnapshot {
+    /// RFC 3339 in UTC, the moment the report was built. Empty until the first
+    /// report has gone out.
+    pub at: String,
+    pub items: Vec<SnapshotItem>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SnapshotItem {
+    pub id: String,
+    pub name: String,
+    pub stock: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -352,6 +396,13 @@ pub struct Data {
     /// Stock figures edited by hand, newest last. Pruned by the screens so a
     /// long-running till cannot grow it without bound.
     pub stock_log: Vec<StockEdit>,
+    /// Everything else done by hand that a sale cannot account for: prices set
+    /// for one sale, held sales thrown away, products added, changed, deleted.
+    /// Pruned by the screens, as the stock log is.
+    pub change_log: Vec<ChangeEntry>,
+    /// The stock figures the last day report was built with, for the next one to
+    /// count against.
+    pub stock_snapshot: StockSnapshot,
     /// A product being added when a customer arrived: the half-filled form,
     /// put aside by Hold and brought back by Add product. The shape is the
     /// screens' own, so it is kept as it was written.
@@ -372,6 +423,8 @@ impl Default for Data {
             last_backup_at: None,
             last_auto_report: String::new(),
             stock_log: Vec::new(),
+            change_log: Vec::new(),
+            stock_snapshot: StockSnapshot::default(),
             held_product: serde_json::Value::Null,
         }
     }
@@ -468,10 +521,16 @@ impl Data {
 
     /// Clears sales, refunds and held sales, and zeroes every product's stock,
     /// keeping the catalog, settings, categories and Admin Key.
+    ///
+    /// The hand-edit logs are kept: the day report reads the day it is for out
+    /// of them, so last month's edits can never turn up in today's report. The
+    /// snapshot goes, because zeroing every shelf is a deliberate act rather
+    /// than stock that has walked.
     pub fn reset_sales_and_stock(&mut self) {
         self.sales.clear();
         self.held_sales.clear();
         self.next_sale_number = default_next_sale_number();
+        self.stock_snapshot = StockSnapshot::default();
         for p in &mut self.products {
             p.stock = 0;
         }
@@ -653,6 +712,101 @@ fn backup_files(folder: &Path) -> Vec<PathBuf> {
             path.file_name()
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| name.starts_with(BACKUP_PREFIX) && name.ends_with(".json"))
+        })
+        .collect()
+}
+
+/// Writes a copy of a day's sales into the backups folder, one file per day.
+///
+/// Called when the day's report has actually been emailed. The file holds
+/// exactly what was emailed — the day's sales, item by item — so whatever
+/// happens to the data file afterwards, even a reset done with the Admin Key,
+/// the day's record is still on disk.
+pub fn write_sales_journal(day_key: &str, history: &serde_json::Value) -> Result<String, String> {
+    let data_file = Data::file_path().ok_or_else(|| {
+        "The app could not find its data folder, so the day's sales were not copied. Restart the \
+         app and try again."
+            .to_string()
+    })?;
+    write_journal_in(&backup_folder_for(&data_file), day_key, history)
+}
+
+/// As [`write_sales_journal`], into a folder of the caller's choosing.
+fn write_journal_in(
+    folder: &Path,
+    day_key: &str,
+    history: &serde_json::Value,
+) -> Result<String, String> {
+    // The day key comes from the screens, but it is about to become a file
+    // name: anything that is not a digit or a dash never reaches the disk.
+    let day: String = day_key
+        .chars()
+        .filter(|ch| ch.is_ascii_digit() || *ch == '-')
+        .collect();
+    let day = match day.trim_matches('-') {
+        "" => "undated".to_string(),
+        day => day.to_string(),
+    };
+
+    let folder_text = folder.to_string_lossy().into_owned();
+    fs::create_dir_all(folder).map_err(|e| {
+        format!(
+            "The backups folder could not be made at {folder_text}. Check the disk has space, \
+             then try again: {e}"
+        )
+    })?;
+
+    let json = serde_json::to_string_pretty(history)
+        .map_err(|e| format!("The day's sales could not be written out: {e}"))?;
+    let name = format!("{JOURNAL_PREFIX}{day}.json");
+    let dest = folder.join(&name);
+    let part = folder.join(format!("{name}.part"));
+    fs::write(&part, json).map_err(|e| {
+        let _ = fs::remove_file(&part);
+        format!(
+            "The day's sales could not be copied. Check the disk has space, then try again: {e}"
+        )
+    })?;
+    if dest.exists() {
+        // A rename over an existing file fails on Windows; a second copy for the
+        // same day replaces the first, which is the one sent most recently.
+        let _ = fs::remove_file(&dest);
+    }
+    fs::rename(&part, &dest).map_err(|e| {
+        let _ = fs::remove_file(&part);
+        format!(
+            "The day's sales could not be put in place. Check the disk has space, then try again: \
+             {e}"
+        )
+    })?;
+
+    prune_journals(folder);
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Deletes the oldest journals beyond the newest `JOURNALS_KEPT`. A journal that
+/// cannot be deleted is left in place rather than failing the copy just taken.
+fn prune_journals(folder: &Path) {
+    let mut journals = journal_files(folder);
+    journals.sort();
+    let excess = journals.len().saturating_sub(JOURNALS_KEPT);
+    for oldest in &journals[..excess] {
+        let _ = fs::remove_file(oldest);
+    }
+}
+
+/// The sales journals in `folder`, however many there are.
+fn journal_files(folder: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(JOURNAL_PREFIX) && name.ends_with(".json"))
         })
         .collect()
 }
@@ -1053,5 +1207,99 @@ mod tests {
             "Setup is still given a real folder to show"
         );
         assert!(!info.taken_at.is_empty());
+    }
+
+    #[test]
+    fn the_quiet_log_and_the_stock_snapshot_survive_a_save() {
+        let scratch = Scratch::new();
+        let file = scratch.file();
+        let mut shop = a_shop();
+        shop.change_log.push(ChangeEntry {
+            at: "2026-09-23T14:32:00Z".into(),
+            kind: "price".into(),
+            name: "Puppy Food 2kg (sale #1044)".into(),
+            detail: "shelf R129.99 -> R99.00, R30.99 short".into(),
+        });
+        shop.stock_snapshot = StockSnapshot {
+            at: "2026-09-23T18:42:00Z".into(),
+            items: vec![SnapshotItem {
+                id: "p1".into(),
+                name: "Puppy Food".into(),
+                stock: 12,
+            }],
+        };
+        shop.save_to(&file).unwrap();
+
+        let back = Data::load_from(&file);
+        assert_eq!(back.change_log, shop.change_log);
+        assert_eq!(back.stock_snapshot, shop.stock_snapshot);
+    }
+
+    #[test]
+    fn a_day_of_sales_is_kept_beside_the_backups() {
+        let scratch = Scratch::new();
+        let folder = scratch.dir.join(BACKUP_DIR_NAME);
+        let day = serde_json::json!({
+            "dateLabel": "Tuesday, 23 September 2026",
+            "sales": [{"number": 100, "items": [{"name": "Puppy Food", "qty": 2}]}],
+        });
+
+        let path = write_journal_in(&folder, "2026-09-23", &day).expect("the journal writes");
+
+        assert!(path.ends_with("sales-journal-2026-09-23.json"), "{path}");
+        let back: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back, day, "the journal is what was emailed, to the letter");
+    }
+
+    #[test]
+    fn a_journal_named_by_something_unusable_still_lands_somewhere_findable() {
+        let scratch = Scratch::new();
+        let folder = scratch.dir.join(BACKUP_DIR_NAME);
+
+        // A day key is written by the screens, but it becomes a file name here:
+        // nothing may climb out of the folder it is written into.
+        let path = write_journal_in(&folder, "../../etc/passwd", &serde_json::json!({}))
+            .expect("the journal writes");
+        assert_eq!(
+            Path::new(&path).parent(),
+            Some(folder.as_path()),
+            "nothing may climb out of the folder: {path}"
+        );
+        assert!(path.ends_with("sales-journal-undated.json"), "{path}");
+
+        let empty = write_journal_in(&folder, "", &serde_json::json!({}))
+            .expect("an undated journal writes too");
+        assert!(empty.ends_with("sales-journal-undated.json"), "{empty}");
+    }
+
+    #[test]
+    fn only_the_newest_journals_are_kept() {
+        let scratch = Scratch::new();
+        let folder = scratch.dir.join(BACKUP_DIR_NAME);
+        let day = serde_json::json!({"sales": []});
+
+        let extra = 5;
+        let mut last_key = String::new();
+        for i in 0..(JOURNALS_KEPT + extra) {
+            let key = format!("2026-{:02}-{:02}", 1 + i / 28, 1 + i % 28);
+            write_journal_in(&folder, &key, &day).unwrap();
+            last_key = key;
+        }
+
+        let mut kept = journal_files(&folder);
+        kept.sort();
+        assert_eq!(kept.len(), JOURNALS_KEPT, "the folder is bounded");
+        let names: Vec<String> = kept
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !names[0].contains("2026-01-01"),
+            "the oldest went first: {}",
+            names[0]
+        );
+        let newest = format!("{JOURNAL_PREFIX}{last_key}.json");
+        assert!(names.contains(&newest), "the newest is kept: {names:?}");
     }
 }

@@ -18,12 +18,13 @@
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '2.4.2';
+  const APP_VERSION = '2.5.0';
   const WHATS_NEW = [
-    ['Hold a product entry', 'Adding stock when a customer comes? Hold puts the half-filled form aside; Add product brings every field back.'],
-    ['A Ledger that counts', 'Each day now reads how many were cash, how many card, and how many were paid both ways.'],
-    ['A Till that stays put', 'The till no longer scrolls as a whole — only the product list and the receipt\'s own items move.'],
-    ['Your colours everywhere', 'Every hover, tab, card and the receipt itself now take the colour of the theme — including your own three slots.']
+    ['History, item by item', 'Overview has a History tab: every sale and refund, line by line, with the time it was rung up and how it was paid. Filter it to a day, or type an item to follow it through the whole history.'],
+    ["The day by email, twice over", "Every report email now carries a second PDF — the day's sales, item by item — and a copy of that day's sales is kept in the backups folder as a journal."],
+    ['More in the red list', 'Prices set for one sale, held sales thrown away, products added, changed or deleted, and imports now join the hand-edited stock in the day report, in red.'],
+    ['The drawer, and unaccounted stock', 'The report says what should be in the till at the end of the day, and lists any product whose stock moved without a sale since the last report.'],
+    ['Resets keep a copy', 'The Danger Zone takes a backup before it clears anything, so nothing can be wiped clean by accident.']
   ];
 
   function money(n) {
@@ -940,6 +941,15 @@
         closeModal('#heldModalOverlay');
       });
       row.querySelector('[data-act=discard]').addEventListener('click', async () => {
+        // Rung up, held, paid in cash, and then thrown away: without this line
+        // the sale simply never happened. Written down as a discard, with what
+        // was on it and how long it sat there.
+        const heldFor = Math.max(0, Math.round((Date.now() - new Date(h.createdAt).getTime()) / 60000));
+        logChange(
+          'discarded',
+          'Held sale discarded',
+          itemCount + ' item' + (itemCount === 1 ? '' : 's') + ', ' + money(total) + ', held ' + heldFor + ' min'
+        );
         DATA.heldSales = DATA.heldSales.filter(x => x.id !== h.id);
         await persist();
         renderHeldList();
@@ -1159,6 +1169,22 @@
       sale.items.forEach(li => {
         const p = DATA.products.find(pp => pp.id === li.productId);
         if (p) p.stock = Math.max(0, p.stock - li.qty);
+      });
+
+      // A price set for this one sale and not the shelf's own leaves no other
+      // mark anywhere: the till charges less, the report shows less, and only
+      // the customer saw what they paid. It is written down here, against the
+      // sale it happened on.
+      sale.items.forEach(li => {
+        const p = DATA.products.find(pp => pp.id === li.productId);
+        if (!p || Math.abs((p.price || 0) - li.price) < 0.005) return;
+        const short = ((p.price || 0) - li.price) * li.qty;
+        logChange(
+          'price',
+          li.name + ' (sale #' + sale.number + ')',
+          'shelf ' + money(p.price) + ' -> ' + money(li.price) + ', ' +
+            money(Math.abs(short)) + (short >= 0 ? ' short' : ' over')
+        );
       });
 
       DATA.sales.push(sale);
@@ -1528,6 +1554,9 @@
   // category, or "Select all" still covers every matching product.
   const MAX_STOCK_ROWS = 500;
   const MAX_LEDGER_ROWS = 500;
+  // The history draws a page of sold lines at a time. Bigger than the other
+  // tables' page on purpose: a day's trade is read as a run, not a row at a time.
+  const MAX_HISTORY_LINES = 800;
 
   // How many rows are currently revealed, and which filter that page size
   // belongs to. Changing the search or the category starts a fresh first page;
@@ -1705,6 +1734,7 @@
     );
     if (!ok) return 0;
     const doomed = new Set(list);
+    DATA.products.filter(p => doomed.has(p.id)).forEach(logProductDeletion);
     DATA.products = DATA.products.filter(p => !doomed.has(p.id));
     await persist();
     toast(`${n} product${plural} deleted.`);
@@ -1866,6 +1896,40 @@
     return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  // ---------------- Everything else done by hand (also never announced) ----------------
+
+  // A price set for one sale, a held sale thrown away, a product added, changed
+  // or deleted: each is a way money can leave the shop without a sale behind it,
+  // and each is written down as it happens with no screen saying a word. The
+  // stock log above and this one are read together by the day report, printed in
+  // red. See src/report.rs.
+
+  const CHANGE_LOG_MAX = 600;
+
+  function logChange(kind, name, detail) {
+    if (!Array.isArray(DATA.changeLog)) DATA.changeLog = [];
+    DATA.changeLog.push({
+      at: new Date().toISOString(),
+      kind: kind,
+      name: name,
+      detail: detail
+    });
+    if (DATA.changeLog.length > CHANGE_LOG_MAX) {
+      DATA.changeLog.splice(0, DATA.changeLog.length - CHANGE_LOG_MAX);
+    }
+  }
+
+  // A product leaving the shop takes its stock with it. Written down before it
+  // goes, so a deletion can be read back the next morning.
+  function logProductDeletion(product) {
+    if (!product) return;
+    const stock = product.stock || 0;
+    const value = stock * (product.cost || 0);
+    const detail = 'deleted, ' + groupedInt(stock) + ' in stock' +
+      (value > 0.005 ? ' (' + moneyGrouped(value) + ' at cost)' : '');
+    logChange('deleted', product.name, detail);
+  }
+
   function initProductModal() {
     $('#pmCancelBtn').addEventListener('click', () => closeModal('#productModalOverlay'));
     // Hold: put the half-filled form aside for a customer at the till, without
@@ -1901,10 +1965,24 @@
       if (editingProductId) {
         const p = DATA.products.find(pp => pp.id === editingProductId);
         const stockWas = p.stock;
+        const priceWas = p.price;
+        const costWas = p.cost;
         Object.assign(p, { name, sku, alias, category, price, cost, stock, supplier });
         logStockEdit(p, stockWas, stock);
+        // A shelf price quietly lowered and put back between customers is the
+        // other half of the same trick, so both money fields are written down
+        // beside the stock figure.
+        if (Math.abs(priceWas - price) > 0.005) {
+          logChange('price', p.name, 'price ' + money(priceWas) + ' -> ' + money(price));
+        }
+        if (Math.abs(costWas - cost) > 0.005) {
+          logChange('cost', p.name, 'cost ' + money(costWas) + ' -> ' + money(cost));
+        }
       } else {
         DATA.products.push({ id: nextProductId(), name, sku, alias, category, price, cost, stock, supplier });
+        // A new product arrives with its own opening stock, which is a stock
+        // figure nobody typed into an edit box — written down like any other.
+        if (stock) logChange('added', name, 'new product, ' + groupedInt(stock) + ' in stock');
         // The held entry has just become a real product, so there is nothing
         // left to bring back.
         setHeldProduct(null);
@@ -1916,6 +1994,7 @@
     });
     $('#pmDeleteBtn').addEventListener('click', async () => {
       if (!editingProductId) return;
+      logProductDeletion(DATA.products.find(p => p.id === editingProductId));
       DATA.products = DATA.products.filter(p => p.id !== editingProductId);
       await persist();
       closeModal('#productModalOverlay');
@@ -2044,11 +2123,41 @@
     const threshold = DATA.settings.lowStockThreshold || 0;
     const low = lowStockProducts();
 
-    // Stock figures somebody typed over today, oldest first. Printed in red at
-    // the foot of the emailed report.
-    const stockEdits = (Array.isArray(DATA.stockLog) ? DATA.stockLog : [])
-      .filter(e => (e.at || '').slice(0, 10) === todayKey)
-      .map(e => ({ time: stockEditTime(e.at), name: e.name, from: e.from, to: e.to }));
+    // Everything done by hand today, in the order it happened: stock figures
+    // typed over, prices set for one sale, held sales thrown away, products
+    // added, changed or deleted. They are two logs on the till and one list to
+    // the owner, so they are merged here and printed in red on the report.
+    const handChanges = [
+      (Array.isArray(DATA.stockLog) ? DATA.stockLog : [])
+        .filter(e => (e.at || '').slice(0, 10) === todayKey)
+        .map(e => ({ at: e.at, name: e.name, from: e.from, to: e.to, detail: '' })),
+      (Array.isArray(DATA.changeLog) ? DATA.changeLog : [])
+        .filter(e => (e.at || '').slice(0, 10) === todayKey)
+        .map(e => ({ at: e.at, name: e.name, from: 0, to: 0, detail: e.detail || '' }))
+    ].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    const stockEdits = handChanges.map(e => ({
+      time: stockEditTime(e.at),
+      name: e.name,
+      from: e.from,
+      to: e.to,
+      detail: e.detail
+    }));
+
+    // The cash side of the day: what came in over the counter, what went back,
+    // and what the drawer should hold at the end of it. `t.cash` is already net
+    // of refunds, so the two halves are worked out from the records.
+    const cashSales = records
+      .filter(s => s.type !== 'return')
+      .reduce((sum, s) => sum + saleCashPart(s), 0);
+    const cashRefunds = records
+      .filter(s => s.type === 'return')
+      .reduce((sum, s) => sum + Math.abs(saleCashPart(s)), 0);
+    const stamps = records
+      .map(s => new Date(s.date).getTime())
+      .filter(ms => !isNaN(ms));
+    const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const check = stockCheckAgainstLastReport();
 
     return {
       shopName: DATA.settings.shopName || '',
@@ -2093,7 +2202,115 @@
         label: new Date(h.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         items: h.cart.reduce((s, i) => s + i.qty, 0),
         total: h.cart.reduce((s, i) => s + i.price * i.qty, 0)
-      }))
+      })),
+      drawer: {
+        cashSales,
+        cashRefunds,
+        expected: cashSales - cashRefunds,
+        firstSale: stamps.length ? clock(Math.min(...stamps)) : '',
+        lastSale: stamps.length ? clock(Math.max(...stamps)) : ''
+      },
+      stockCheck: check.rows,
+      stockCheckSince: check.since
+    };
+  }
+
+  // ---------------- The stock the last report left behind ----------------
+
+  // The day report carries a picture of every product's stock at the moment it
+  // is built. The next day's report counts against that picture: the sales and
+  // refunds since explain most of the movement, and whatever is left over did
+  // not happen at the till. This is the one check that catches a change no log
+  // ever saw — a spreadsheet import, a product deleted and added back, an old
+  // backup restored over the data file.
+
+  function takeStockSnapshot() {
+    DATA.stockSnapshot = {
+      at: new Date().toISOString(),
+      items: DATA.products.map(p => ({ id: p.id, name: p.name, stock: p.stock || 0 }))
+    };
+  }
+
+  function stockCheckAgainstLastReport() {
+    const snap = DATA.stockSnapshot;
+    if (!snap || !Array.isArray(snap.items) || !snap.items.length) return { rows: [], since: '' };
+    const at = Date.parse(snap.at);
+
+    // What each product has moved by since the report was built: sales take
+    // stock off the shelf, refunds put it back.
+    const moved = new Map();
+    DATA.sales.forEach(sale => {
+      if (!(Date.parse(sale.date) > at)) return;
+      const sign = sale.type === 'return' ? -1 : 1;
+      (sale.items || []).forEach(li => {
+        moved.set(li.productId, (moved.get(li.productId) || 0) + sign * li.qty);
+      });
+    });
+
+    const rows = [];
+    snap.items.forEach(item => {
+      const product = DATA.products.find(p => p.id === item.id);
+      // A product deleted since is not unaccounted stock — it is a deletion,
+      // and already written down in red as one.
+      if (!product) return;
+      const sold = moved.get(item.id) || 0;
+      const expected = (item.stock || 0) - sold;
+      const actual = product.stock || 0;
+      if (expected === actual) return;
+      rows.push({ name: product.name, sold, expected, actual });
+    });
+
+    return {
+      rows,
+      since: isNaN(at) ? '' : new Date(at).toLocaleString()
+    };
+  }
+
+  // The day's sales, line by line, for the PDF that goes beside the day report.
+  // Built from the same records the report's figures are worked out from, so the
+  // two attachments can never disagree about the day.
+  function buildDayHistory() {
+    const todayKey = dayKeyAgo(0);
+    const t = computePeriodTotals(todayKey, 'day');
+    const records = DATA.sales
+      .filter(s => s.date.slice(0, 10) === todayKey)
+      // Oldest first: a history reads the way the day happened.
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return {
+      shopName: DATA.settings.shopName || '',
+      address: DATA.settings.address || '',
+      phone: DATA.settings.phone || '',
+      currency: DATA.settings.currency || '',
+      dateLabel: periodHeaderLabel(todayKey, 'day'),
+      generatedAt: new Date().toLocaleString(),
+      footerNote: DATA.settings.receiptFooter || '',
+      salesCount: t.transactions,
+      refundsCount: t.refunds,
+      itemsSold: t.itemsSold,
+      takings: t.total,
+      refundsValue: records
+        .filter(s => s.type === 'return')
+        .reduce((sum, s) => sum + Math.abs(s.total || 0), 0),
+      sales: records.map(sale => {
+        const isReturn = sale.type === 'return';
+        return {
+          time: new Date(sale.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          number: sale.number,
+          kind: isReturn ? 'return' : 'sale',
+          refundOfNumber: isReturn ? (sale.refundOfNumber || 0) : 0,
+          payment: sale.paymentMethod || '',
+          total: sale.total || 0,
+          // A refund's own lines carry the money going back as a negative, so
+          // the history reads the same way the totals do.
+          items: (sale.items || []).map(li => ({
+            name: li.name || '',
+            qty: li.qty,
+            price: li.price || 0,
+            lineTotal: (li.lineTotal != null ? li.lineTotal : (li.price || 0) * li.qty) * (isReturn ? -1 : 1)
+          }))
+        };
+      })
     };
   }
 
@@ -2117,7 +2334,9 @@
       'Sales          ' + t.transactions + '     Items sold ' + t.itemsSold,
       'Profit         ' + money(t.profit) + '  (' + t.marginPct.toFixed(1) + '% margin)',
       '',
-      'The full report is attached as a PDF.',
+      entry.history
+        ? "The full report and the day's sales history are attached as PDFs."
+        : 'The full report is attached as a PDF.',
       ...(week.length ? ['', 'Cash and card, day by day'] : []),
       ...week,
       '',
@@ -2135,12 +2354,21 @@
     const cfg = reportSettings();
     if (!cfg.recipient) return { ok: false, error: 'no report address is set — add one in Setup, Day report by email' };
     if (!cfg.username) return { ok: false, error: 'no Gmail address is set to send from — add one in Setup' };
-    return window.pos.sendDailyReport({
+    const res = await window.pos.sendDailyReport({
       ...cfg,
       subject: 'Day report — ' + entry.dateLabel + ' — ' + (DATA.settings.shopName || 'Lyra PoS'),
       bodyText: reportEmailBody(entry),
-      report: entry.report
+      report: entry.report,
+      history: entry.history
     });
+    // The day's own copy, dropped beside the backups the moment the report has
+    // actually gone: whatever happens to the data file after this, what was sold
+    // that day is still on disk. A copy that cannot be written is not a failed
+    // report — the report went — so nothing is held up by it.
+    if (res && res.ok && entry.history) {
+      await window.pos.writeSalesJournal(entry.dateKey, entry.history);
+    }
+    return res;
   }
 
   // The button carries the state, so a cashier can always see whether the day's
@@ -2199,6 +2427,10 @@
     entry.dateLabel = periodHeaderLabel(todayKey, 'day');
     entry.generatedAt = new Date().toISOString();
     entry.report = buildDayReport();
+    entry.history = buildDayHistory();
+    // The figures just written into the report become the stock the next report
+    // counts against, so the check runs against the last report, not this one.
+    takeStockSnapshot();
     await persist();
 
     btn.dataset.busy = '1';
@@ -3046,8 +3278,65 @@
   // ---------------- Dashboard ----------------
 
   let dashboardPeriod = 'day';
+  // Overview's subtab: the period's figures, or the full sales history under them.
+  let overviewTab = 'summary';
+  // How far down the history list has been read, and the filter that page belongs
+  // to. Changing the filter starts the list again from its newest line.
+  let historyLogLimit = MAX_HISTORY_LINES;
+  let historyLogRenderKey = null;
   // Low-stock rows ticked in the Overview, waiting on "Delete selected".
   let selectedLowStockIds = new Set();
+
+  function initOverviewTabs() {
+    $$('#overviewTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('#overviewTabs .seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        overviewTab = btn.dataset.tab;
+        showOverviewTab();
+      });
+    });
+
+    $('#historyDateFilter').addEventListener('change', renderHistoryLog);
+    $('#historySearch').addEventListener('input', debounce(renderHistoryLog, 120));
+    $('#historyClearFilter').addEventListener('click', () => {
+      $('#historyDateFilter').value = '';
+      $('#historySearch').value = '';
+      renderHistoryLog();
+    });
+
+    // One listener for the whole table, the way the Ledger does it: years of
+    // history do not mean a listener per line. A line opens the sale it came from
+    // — receipt, reprint and refund, the same as the Ledger's own rows.
+    $('#historyLogBody').addEventListener('click', (e) => {
+      if (e.target.closest('[data-more="history"]')) {
+        historyLogLimit += MAX_HISTORY_LINES;
+        renderHistoryLog();
+        return;
+      }
+      const tr = e.target.closest('tr[data-id]');
+      if (!tr) return;
+      const sale = findSaleById(tr.dataset.id);
+      if (!sale) return;
+      currentSaleForReceipt = sale;
+      currentReceiptIsHistorical = true;
+      showReceiptModal(sale);
+    });
+  }
+
+  // Both subtabs live inside the one protected view, so whoever may read the
+  // figures may read the log they were worked out from.
+  function showOverviewTab() {
+    const history = overviewTab === 'history';
+    $('#overviewTabSummary').style.display = history ? 'none' : '';
+    $('#overviewTabHistory').style.display = history ? '' : 'none';
+    // Day / Week / Month / Year say nothing about a run of single sales, so the
+    // period tabs step aside while the history is up rather than sitting over a
+    // list they do not change.
+    $('#periodTabs').style.display = history ? 'none' : '';
+    if (history) renderHistoryLog();
+    else renderDashboard();
+  }
 
   function initPeriodTabs() {
     $$('#periodTabs .seg-btn').forEach(btn => {
@@ -3134,6 +3423,10 @@
   }
 
   function renderDashboard() {
+    // The History subtab is not a period at all: it is drawn on its own, and the
+    // figures and charts behind it do not need laying out while it is up.
+    if (overviewTab === 'history') { renderHistoryLog(); return; }
+
     const period = dashboardPeriod;
     const todayKey = new Date().toISOString().slice(0, 10);
     const currentKey = periodKeyFromDayKey(todayKey, period);
@@ -3236,6 +3529,128 @@
     });
     body.innerHTML = '';
     body.appendChild(fragment);
+  }
+
+  // ---------------- The full sales history (Overview → History) ----------------
+
+  // The band over a day's lines: what the day came to, so the log reads a day at
+  // a time as well as a sale at a time. The chips are the Ledger's own, so the
+  // two screens look like what they are — the same shop's records.
+  function historyDayBand(dayKey, day) {
+    const chip = (cls, label, value, title) => {
+      const classes = ('day-part ' + cls).trim();
+      return '<span class="' + classes + '" title="' + escapeHtml(title) + '">' +
+        label + ' <b>' + value + '</b>' +
+      '</span>';
+    };
+    const parts = [
+      chip('day-cash', 'Sales', groupedInt(day.sales),
+        groupedInt(day.sales) + (day.sales === 1 ? ' sale' : ' sales')),
+      chip('day-refund', 'Refunds', groupedInt(day.refunds),
+        groupedInt(day.refunds) + (day.refunds === 1 ? ' refund' : ' refunds')),
+      chip('', 'Items', groupedInt(day.items), groupedInt(day.items) + ' items sold'),
+      chip('', 'Takings', moneyGrouped(day.takings), 'What the day came to, refunds off')
+    ];
+    return '<tr class="ledger-day"><td colspan="7">' +
+      '<div class="ledger-day-inner">' +
+        '<span class="ledger-day-name">' + escapeHtml(periodLabel(dayKey, 'day')) + '</span>' +
+        '<span class="ledger-day-split">' + parts.join('') + '</span>' +
+      '</div>' +
+    '</td></tr>';
+  }
+
+  // The full sales history, one line of one sale at a time: what was sold, at
+  // what time, for how much and how it was paid. The Ledger answers "what
+  // happened on this sale"; this answers "when did this item go out of the door"
+  // — the question an owner asks when the stock does not add up.
+  function renderHistoryLog() {
+    const body = $('#historyLogBody');
+    if (!body) return;
+    $('#dashDateLabel').textContent = 'Every sale, item by item.';
+
+    const dateVal = $('#historyDateFilter').value;
+    const query = ($('#historySearch').value || '').trim().toLowerCase().replace(/^#/, '');
+
+    // Newest first, like the Ledger: the day being looked into is usually the
+    // one just finished, not the one from three years ago.
+    const sales = [...DATA.sales].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const renderKey = dateVal + '|' + query;
+    if (renderKey !== historyLogRenderKey) {
+      historyLogRenderKey = renderKey;
+      historyLogLimit = MAX_HISTORY_LINES;
+    }
+
+    const lines = [];
+    const dayTotals = new Map();
+    sales.forEach(sale => {
+      if (dateVal && sale.date.slice(0, 10) !== dateVal) return;
+      // The sale's number on its own brings up the whole sale; any other word
+      // brings up just the lines it matches, so one item can be followed through
+      // a day. A refund's own lines are found the same way.
+      const byNumber = query !== '' && String(sale.number).includes(query);
+      const items = (sale.items || []).filter(li => !query || byNumber || (li.name || '').toLowerCase().includes(query));
+      if (!items.length) return;
+
+      const dayKey = sale.date.slice(0, 10);
+      let day = dayTotals.get(dayKey);
+      if (!day) {
+        day = { sales: 0, refunds: 0, items: 0, takings: 0 };
+        dayTotals.set(dayKey, day);
+      }
+      if (sale.type === 'return') day.refunds += 1;
+      else day.sales += 1;
+      day.takings += sale.total || 0;
+      items.forEach(li => {
+        day.items += li.qty;
+        lines.push({ sale, li });
+      });
+    });
+
+    const columns = 7;
+    if (!lines.length) {
+      body.innerHTML = '<tr><td colspan="' + columns + '" style="text-align:center;color:var(--text-muted);padding:26px;">' +
+        (query || dateVal ? 'Nothing in the history matches that.' : 'No sales recorded yet.') + '</td></tr>';
+      return;
+    }
+
+    const shown = lines.slice(0, historyLogLimit);
+    let rowsHtml = '';
+    let bandedDay = null;
+    shown.forEach(({ sale, li }) => {
+      const dayKey = sale.date.slice(0, 10);
+      if (dayKey !== bandedDay) {
+        bandedDay = dayKey;
+        rowsHtml += historyDayBand(dayKey, dayTotals.get(dayKey));
+      }
+      const isReturn = sale.type === 'return';
+      const original = isReturn ? findSaleById(sale.refundOf) : null;
+      const originalNumber = isReturn ? (sale.refundOfNumber || (original && original.number)) : null;
+      const saleLabel = isReturn
+        ? 'Refund #' + sale.number + (originalNumber ? ' <span class="row-sub">of #' + originalNumber + '</span>' : '')
+        : '#' + sale.number;
+      const lineTotal = (li.lineTotal != null ? li.lineTotal : (li.price || 0) * li.qty) * (isReturn ? -1 : 1);
+      const time = new Date(sale.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      rowsHtml +=
+        '<tr data-id="' + sale.id + '">' +
+          '<td>' + escapeHtml(time) + '</td>' +
+          '<td>' + saleLabel + '</td>' +
+          '<td>' + escapeHtml(li.name || '') + '</td>' +
+          '<td class="num">' + (isReturn ? '-' : '') + groupedInt(Math.abs(li.qty)) + '</td>' +
+          '<td class="num">' + money(li.price) + '</td>' +
+          '<td class="num" style="' + (isReturn ? 'color:var(--stamp-red);' : '') + '">' + money(lineTotal) + '</td>' +
+          '<td>' + paymentBadge(sale.paymentMethod) + '</td>' +
+        '</tr>';
+    });
+    if (lines.length > shown.length) {
+      const next = Math.min(MAX_HISTORY_LINES, lines.length - shown.length);
+      rowsHtml += '<tr class="table-more"><td colspan="' + columns + '">' +
+        'Showing the newest ' + groupedInt(shown.length) + ' of ' + groupedInt(lines.length) + ' lines. ' +
+        '<button type="button" class="table-more-btn" data-more="history">Show ' + next + ' more</button>' +
+        '<span class="table-more-hint">or filter by a day, an item or a sale number.</span>' +
+      '</td></tr>';
+    }
+    body.innerHTML = rowsHtml;
   }
 
   // ---------------- Reports (items sold breakdown) ----------------
@@ -3889,7 +4304,17 @@
       const cfg = reportSettings();
       if (!cfg.recipient || !cfg.username) { toast('Fill in the report address first.'); return; }
       const todayKey = dayKeyAgo(0);
-      const entry = { dateKey: todayKey, dateLabel: periodHeaderLabel(todayKey, 'day'), report: buildDayReport() };
+      const entry = {
+        dateKey: todayKey,
+        dateLabel: periodHeaderLabel(todayKey, 'day'),
+        report: buildDayReport(),
+        history: buildDayHistory()
+      };
+      // A test sends the day's real figures, so the stock it just wrote down
+      // becomes what the next report counts against, exactly as a real send
+      // would leave it.
+      takeStockSnapshot();
+      await persist();
       btn.disabled = true;
       const res = await sendReport(entry);
       btn.disabled = false;
@@ -4042,7 +4467,8 @@
       const ok = await confirmDialog(
         'Reset sales & stock?',
         "This clears the Ledger, Overview history, and held sales, and sets every product's stock to 0. " +
-        "Products, prices, categories, and settings are kept. This can't be undone.",
+        "Products, prices, categories, and settings are kept. A backup of the shop's data is taken to the " +
+        "backups folder first.",
         'Reset sales & stock'
       );
       if (!ok) return;
@@ -4057,7 +4483,7 @@
       const ok = await confirmDialog(
         'Reset ALL data?',
         "This wipes products, sales, categories, settings, and the Admin Key itself back to a blank install. " +
-        "This can't be undone.",
+        "A backup of the shop's data is taken to the backups folder first.",
         'Reset all data'
       );
       if (!ok) return;
@@ -4070,19 +4496,29 @@
   }
 
   async function performResetSalesStock() {
-    const fresh = await window.pos.resetSalesStock();
-    DATA = fresh;
+    const res = await window.pos.resetSalesStock();
+    if (!res.ok) {
+      // A reset that cannot save a copy of the data does not go ahead, so the
+      // shop's records are never wiped with nothing left behind.
+      toast('Could not reset: ' + (res.error || 'the backup could not be taken'));
+      return;
+    }
+    DATA = res.data;
     cart = [];
     renderCart();
     renderCatalog();
     refreshHeldButton();
     renderSettings();
-    toast('Sales & stock have been reset.');
+    toast('Sales & stock have been reset. A backup was taken first.');
   }
 
   async function performResetAll() {
-    const fresh = await window.pos.resetAllData();
-    DATA = fresh;
+    const res = await window.pos.resetAllData();
+    if (!res.ok) {
+      toast('Could not reset: ' + (res.error || 'the backup could not be taken'));
+      return;
+    }
+    DATA = res.data;
     cart = [];
     unlocked = false;
     applyLockUI();
@@ -4190,6 +4626,12 @@
         }
       });
 
+      // A whole spreadsheet of stock and prices lands at once. One line says so;
+      // the unaccounted-stock check then counts the shelves it moved.
+      if (added || updated) {
+        logChange('import', 'Product list imported', added + ' added, ' + updated + ' updated');
+      }
+
       await persist();
       closeModal('#importModalOverlay');
       importParsed = null;
@@ -4206,6 +4648,7 @@
     if (!DATA.heldSales) DATA.heldSales = [];
     if (!Array.isArray(DATA.reportQueue)) DATA.reportQueue = [];
     if (!Array.isArray(DATA.stockLog)) DATA.stockLog = [];
+    if (!Array.isArray(DATA.changeLog)) DATA.changeLog = [];
     if (!DATA.settings.adminKeyHash) DATA.settings.adminKeyHash = '';
     // A file written before this batch has no slots in it, and a shop should
     // never be shown an empty row of squares to fill in.
@@ -4235,6 +4678,7 @@
     initSettingsView();
     initImportModal();
     initPeriodTabs();
+    initOverviewTabs();
     initLowStockPanel();
     initReportsView();
     initReportButton();
