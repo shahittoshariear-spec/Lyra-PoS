@@ -1929,6 +1929,53 @@ mod tests {
     }
 
     #[test]
+    fn the_payload_the_screens_send_lands_in_the_right_fields() {
+        // The exact shape `buildDayReport` writes, camelCase and all. A field
+        // name that drifts apart between the screens and this file would drop a
+        // whole section of the report silently rather than failing, so the two
+        // are pinned together here.
+        let report: DailyReport = serde_json::from_str(
+            r#"{
+                "dateLabel": "Tuesday, 23 September 2026",
+                "drawer": {
+                    "cashSales": 7310.0,
+                    "cashRefunds": 420.0,
+                    "expected": 6890.0,
+                    "firstSale": "07:58",
+                    "lastSale": "18:10"
+                },
+                "stockEdits": [
+                    {"time": "14:32", "name": "Puppy Food 2kg", "from": 12, "to": 5, "detail": ""},
+                    {"time": "14:36", "name": "Dog Food 10kg (sale #1041)", "from": 0, "to": 0,
+                     "detail": "shelf R199.50 -> R99.00, R100.50 short"},
+                    {"time": "15:02", "name": "Held sale discarded", "from": 0, "to": 0,
+                     "detail": "3 items, R450.00, held 12 min"}
+                ],
+                "stockCheck": [{"name": "Dog Food 10kg", "sold": 3, "expected": 9, "actual": 5}],
+                "stockCheckSince": "Monday, 22 September 2026, 18:42"
+            }"#,
+        )
+        .expect("the screens' own shape should deserialize");
+
+        assert_eq!(report.drawer.cash_sales, 7310.0);
+        assert_eq!(report.drawer.expected, 6890.0);
+        assert_eq!(report.drawer.first_sale, "07:58");
+        assert_eq!(report.stock_edits.len(), 3);
+        assert_eq!(report.stock_edits[0].from, 12);
+        assert_eq!(
+            report.stock_edits[1].detail,
+            "shelf R199.50 -> R99.00, R100.50 short"
+        );
+        assert_eq!(report.stock_edits[2].name, "Held sale discarded");
+        assert_eq!(report.stock_check.len(), 1);
+        assert_eq!(report.stock_check[0].sold, 3);
+        assert_eq!(report.stock_check[0].expected, 9);
+        assert_eq!(report.stock_check[0].actual, 5);
+        assert_eq!(report.stock_check_since, "Monday, 22 September 2026, 18:42");
+        assert!(render_pdf(&report).starts_with(b"%PDF-"));
+    }
+
+    #[test]
     fn money_is_written_the_way_the_screens_write_it() {
         assert_eq!(money("R", 1_234.5), "R1,234.50");
         assert_eq!(money("R", 0.0), "R0.00");
