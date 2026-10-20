@@ -87,23 +87,26 @@ so there is no browser to install and no Node.js to install.
   screen listing the shop's people under their titles. Every sale is recorded
   under the person who rang it up, and every refund, void and hand change under
   the person who did it and the person who allowed it, with the date and time.
-  Nothing is kept between runs: closing the app, or leaving Stock, the Ledger,
-  the records or Setup, brings the sign-in screen back.
+  The session lasts until that person signs out or closes the app, so nobody is
+  asked for the same password again on every screen.
 - **Three titles, three jobs** — a **Cashier** has the till: ring up, scan,
   hold/resume, take payment, print. An **Owner** adds Stock, refunds, voids,
   price changes and the sales records. A **Manager** has everything: every
   screen, the reports, Setup, the staff list and the resets. Titles are set per
   person under Setup → Staff & access, and there is always at least one manager.
-- **Password prompts at the point of risk** — opening the Ledger or Overview
-  asks for an owner or manager password *every time*; refunds, voids and price
-  changes ask at the moment they happen, whoever is signed in.
+- **Authorisation only where it matters** — an owner or manager who is signed
+  in opens the Ledger, Overview, Stock or Setup straight away; their title is
+  the permission. A cashier who asks for one of those sections is let in by an
+  owner or manager typing a password, and the till stays signed in as the
+  cashier so the records keep the right name. Refunds, voids and single-sale
+  price changes do the same: nothing is asked of an owner or manager already
+  signed in, and a cashier needs one of them to authorise it.
 - **Voids** — a sale that should never have counted can be voided from its
-  receipt with an owner or manager password. It stays in the Ledger marked
-  **VOID**, stops counting towards every figure, its stock goes back on the
-  shelf, and the day report lists it in red.
+  receipt. It stays in the Ledger marked **VOID**, stops counting towards every
+  figure, its stock goes back on the shelf, and the day report lists it in red.
 - **Refunds** — open any past sale from the Ledger and refund the whole sale or
-  just some items, choosing how many of each go back; an owner or manager
-  authorises it with their password. Stock returns to the shelf automatically,
+  just some items, choosing how many of each go back; a cashier needs an owner
+  or manager to authorise it. Stock returns to the shelf automatically,
   and the refund is stored as its own record naming who handed the money back
   and who allowed it, so the Ledger, the day's totals and every report net it
   off. Part of a sale can be refunded now and the rest later, until nothing is
@@ -147,8 +150,9 @@ so there is no browser to install and no Node.js to install.
   drawn in red and named back to the sale it came from. Filter it to one day, or
   type an item's name or a sale number — typing "dog food" brings up every
   dog-food line in the shop's whole history — and select a line to open its
-  sale, ready to reprint or refund. Opening Overview asks for an owner or
-  manager password, so the records are never on a cashier's screen.
+  sale, ready to reprint or refund. An owner or manager opens Overview directly;
+  a cashier is let in for that visit by one of them, so the records are never
+  simply on a cashier's screen.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales
@@ -176,11 +180,21 @@ so there is no browser to install and no Node.js to install.
 - **Setup** — shop name/address/phone (shown on receipts), currency symbol,
   tax rate, low-stock threshold, categories, the staff list and their passwords,
   backup export/import, bulk product import, when the day report sends itself,
-  automatic backups, the Shortcuts screen, and the **Themes** tab: Midnight,
-  Purple Galaxy, Green Cosmos, **Moonlight** and **Rust**, three slots to make
-  your own from an accent and a night, five fonts, four text sizes, and where
-  the screens sit — down the side, or **across the top** as browser-style tabs.
-  Everything applies the moment it is picked.
+  automatic backups, the Shortcuts screen, the sale chime, and the **Themes**
+  tab: Midnight, Purple Galaxy, Green Cosmos, **Moonlight** and **Rust**, three
+  slots to make your own from an accent and a night, nine fonts, four text
+  sizes, and where the screens sit — down the side, or **across the top** as
+  browser-style tabs. Everything applies the moment it is picked.
+- **A chime when a sale lands** — the till plays a soft water-drop sound as the
+  receipt appears, so the counter knows the sale went through even with the
+  receipt turned away. **Setup → Till sound** turns it off for good, and the
+  choice is kept with the rest of the shop's settings. The receipt also gives a
+  short ring on screen, so the moment still reads with the sound off.
+- **Movement that stays out of the way** — screens settle quickly instead of
+  fading, controls answer a press, the product grid arrives in a short wave and
+  the tab highlight glides. Every effect is transform or opacity only, and the
+  app follows the computer's reduced-motion setting: turn that on and screens
+  change instantly with no animation at all.
 - **Money can't move quietly** — every hand change to the shop that a sale
   cannot account for is written down as it happens, with nothing on screen
   saying so and the till behaving exactly as before. The record surfaces in one
@@ -224,9 +238,8 @@ so there is no browser to install and no Node.js to install.
 - **Reset data** — in Setup's Danger Zone, reset just sales & stock (clears
   the Ledger, Overview history, and held sales, and zeroes every product's
   stock, but keeps products/prices/categories/settings and the staff list) or
-  reset everything back to a blank install. Both require a manager password
-  again to confirm, even though Setup is already manager-only — see "Resetting
-  data" below.
+  reset everything back to a blank install. Both ask for confirmation and take
+  a backup first — see "Resetting data" below.
 
 There are no discounts in this build — just straightforward pricing plus tax.
 Everything else runs locally: there's no login over a network, no cloud sync,
@@ -257,9 +270,8 @@ The `.xlsx`, `.xls`, `.xlsb`, `.ods` and `.csv` formats are all read.
 
 ## Resetting data
 
-Setup → Danger Zone has two options, both permanent and both requiring the
-manager's password to be entered again as a confirmation step — even though
-Setup is already manager-only, so a stray click can't wipe anything by
+Setup → Danger Zone has two options, both permanent and both asking for
+confirmation before anything is cleared, so a stray click can't wipe anything by
 accident:
 
 - **Reset sales & stock** — clears the Ledger, every Overview history entry,
@@ -276,9 +288,9 @@ Both resets take a copy of the data file into the backups folder (the `backups`
 folder beside it) *before* anything is cleared, and a reset that cannot write
 that copy stops rather than going ahead — and both also leave the existing
 exported backups and the day journals alone. So a reset in Setup is never the
-end of the shop's records, even when it is done with the manager's password: the
-last twelve automatic backups, every day journal, whatever you have exported,
-and the red list of hand changes all still say what happened.
+end of the shop's records: the last twelve automatic backups, every day journal,
+whatever you have exported, and the red list of hand changes all still say what
+happened.
 
 ## Running it
 
@@ -311,7 +323,7 @@ This creates an installer in `target/release/bundle/`:
 
 Build it on the same type of computer it will run on (build the Windows
 installer on Windows, etc.) unless you set up cross-building separately. The
-app's icon (`icons/icon.ico` / `.icns` / `.png`) is already wired up in
+app's icon (`icons/icon.ico` and `icons/icon.png`) is already wired up in
 `tauri.conf.json`, so the installer and the installed app carry it
 automatically — nothing extra to configure.
 
@@ -452,31 +464,30 @@ Setup → Categories before or as you go).
 
 The shop's people are set up under **Setup → Staff & access**, each with their
 own name, title and password. Nothing is inherited from whoever used the till
-last: the app opens on the sign-in screen, and leaving a restricted section
-locks it again.
+last: the app opens on the sign-in screen, and the session ends when that person
+signs out or closes the app.
 
 | | Cashier | Owner | Manager |
 |---|---|---|---|
 | Till — ring up, scan, hold, take payment, print | yes | yes | yes |
 | Stock — look up, add, edit, delete | — | yes | yes |
-| Ledger — look up a sale, reprint | password each time | password each time | password each time |
-| Overview and its History tab | password each time | password each time | password each time |
-| Refund a sale, whole or partial | authorised password | own password | own password |
-| Void a sale | authorised password | own password | own password |
-| A price for one sale (the ✎) | authorised password | own password | own password |
+| Ledger — look up a sale, reprint | authorised | yes | yes |
+| Overview and its History tab | authorised | yes | yes |
+| Refund a sale, whole or partial | authorised | yes | yes |
+| Void a sale | authorised | yes | yes |
+| A price for one sale (the ✎) | authorised | yes | yes |
 | Reports | — | — | yes |
 | Setup, staff, resets, backups | — | — | yes |
 
-"Authorised password" means an owner's or manager's password entered at that
-moment; the sale, refund or void then records both the person who did it and
-the person who allowed it. A cashier who taps a locked section gets the same
-password prompt, and the session becomes the owner's or manager's while that
-section is open — so a cashier never sees the records themselves.
+"Authorised" means an owner or manager types their password at that moment; the
+sale, refund or void then records both the person who did it and the person who
+allowed it. A cashier who asks for a locked section is let in for that visit,
+and the session stays the cashier's — so it is always clear who was on the till.
+Signing in as an owner or manager carries every permission they have until they
+sign out; no screen asks them again.
 
-Leaving Stock, the Ledger, Overview, Reports or Setup returns the till to the
-sign-in screen, and the Ledger and Overview ask again on every visit. The lists
-that decide this are `ROLE_VIEWS`, `PASSWORD_EVERY_TIME` and `RESTRICTED_VIEWS`
-near the top of `ui/app.js`.
+The lists that decide this are `ROLE_VIEWS` and `canView` near the top of
+`ui/app.js`.
 
 An install from before sign-ins is not locked out: its one Admin Key becomes
 the first **Manager** account's password, and the account can be renamed (and

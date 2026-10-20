@@ -266,6 +266,9 @@ pub struct Settings {
     pub seen_version: String,
     /// The shop's own three themes, picked in Setup → Themes.
     pub custom_themes: Vec<CustomTheme>,
+    /// A soft chime when a sale completes. On unless the shop turns it off in
+    /// Setup; the choice is kept in the data file, so it survives restarts.
+    pub sale_sound: bool,
 }
 
 impl Default for Settings {
@@ -297,6 +300,7 @@ impl Default for Settings {
             nav_layout: "side".to_string(),
             seen_version: String::new(),
             custom_themes: default_custom_themes(),
+            sale_sound: true,
         }
     }
 }
@@ -999,6 +1003,7 @@ mod tests {
                 "receiptWidth": 0.62,
                 "navLayout": "top",
                 "seenVersion": "2.4.1",
+                "saleSound": false,
                 "customThemes": [
                     { "accent": "#22CCAA", "background": "#06120F" },
                     { "accent": "#E8A33D", "background": "#171008" },
@@ -1029,6 +1034,10 @@ mod tests {
         assert_eq!(back.settings.receipt_width, 0.62);
         assert_eq!(back.settings.nav_layout, "top");
         assert_eq!(back.settings.seen_version, "2.4.1");
+        assert!(
+            !back.settings.sale_sound,
+            "a shop that turned the chime off keeps it off"
+        );
         assert_eq!(back.held_product["name"], "Puppy Food 2kg");
         assert_eq!(back.settings.custom_themes[0].accent, "#22CCAA");
         assert_eq!(back.settings.shortcuts["tillCharge"].key, "F9");

@@ -2359,25 +2359,45 @@ body::after {
 :root {
   --font-choice-segoe: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-choice-calibri: 'Calibri', 'Segoe UI', system-ui, sans-serif;
+  --font-choice-candara: 'Candara', 'Segoe UI', system-ui, sans-serif;
   --font-choice-georgia: 'Georgia', 'Cambria', 'Times New Roman', serif;
+  --font-choice-cambria: 'Cambria', 'Georgia', serif;
   --font-choice-trebuchet: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  --font-choice-verdana: 'Verdana', 'Segoe UI', system-ui, sans-serif;
   --font-choice-mono: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  --font-choice-consolas: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
 }
 html[data-font="calibri"] {
   --font-display: 'Calibri Light', 'Calibri', 'Segoe UI', system-ui, sans-serif;
   --font-body: var(--font-choice-calibri);
 }
+html[data-font="candara"] {
+  --font-display: 'Candara', 'Corbel', 'Segoe UI', system-ui, sans-serif;
+  --font-body: var(--font-choice-candara);
+}
 html[data-font="georgia"] {
   --font-display: 'Georgia', 'Cambria', serif;
   --font-body: var(--font-choice-georgia);
+}
+html[data-font="cambria"] {
+  --font-display: 'Cambria', 'Georgia', serif;
+  --font-body: var(--font-choice-cambria);
 }
 html[data-font="trebuchet"] {
   --font-display: var(--font-choice-trebuchet);
   --font-body: var(--font-choice-trebuchet);
 }
+html[data-font="verdana"] {
+  --font-display: 'Verdana', 'Tahoma', 'Segoe UI', sans-serif;
+  --font-body: var(--font-choice-verdana);
+}
 html[data-font="mono"] {
   --font-display: var(--font-choice-mono);
   --font-body: var(--font-choice-mono);
+}
+html[data-font="consolas"] {
+  --font-display: var(--font-choice-consolas);
+  --font-body: var(--font-choice-consolas);
 }
 
 /* ---------------- Text sizes ----------------
@@ -3692,3 +3712,95 @@ html[data-theme^="custom-"] .product-card-price { text-shadow: 0 0 14px var(--bl
 /* The category rail and the period tabs keep their own height all the way
    across, rather than growing with the longest label. */
 .till-toolbar .chip, .period-tabs .seg-btn { align-items: center; }
+
+/* ---------------- A pass over motion ----------------
+   Transform and opacity only, short enough to read as response rather than
+   decoration. The prefers-reduced-motion block at the top of this file still
+   wins: with motion turned down, none of it runs. */
+
+/* Screens settle a little sooner. A till changes screen dozens of times an
+   hour, and a long fade starts to feel like waiting. */
+.view.active.dir-forward,
+.view.active.dir-back,
+.view.active.dir-none { animation-duration: 0.3s; }
+
+/* Every control sinks into the glass on press, so the finger gets an answer
+   even when the work behind it takes a moment. */
+.btn:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+
+/* The nav icon leans towards the screen it is about to open. The active one
+   keeps its own scale whether or not the pointer is on it. */
+.nav-icon {
+  transition: transform var(--dur-base) var(--ease-spring-soft),
+              background-color var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out),
+              opacity var(--dur-base) var(--ease-out);
+}
+.nav-btn:hover .nav-icon { transform: translateX(2px); }
+.nav-btn.active .nav-icon,
+.nav-btn.active:hover .nav-icon { transform: scale(1.04); }
+
+/* A panel's edge picks up a little more light as the pointer crosses it. No
+   blur and no layout, so a screenful of tables still scrolls flat out. */
+.panel { transition: border-color var(--dur-base) var(--ease-out); }
+.panel:hover { border-color: var(--line-strong); }
+
+/* The first row of product tiles arrives in a short wave. Delays stop after
+   the first few, so a long grid is usable immediately. */
+.product-card:nth-child(2) { animation-delay: 18ms; }
+.product-card:nth-child(3) { animation-delay: 36ms; }
+.product-card:nth-child(4) { animation-delay: 54ms; }
+.product-card:nth-child(5) { animation-delay: 72ms; }
+.product-card:nth-child(6) { animation-delay: 90ms; }
+
+/* A modal's parts rise into place in reading order. Only the straight children
+   named here are animated — the receipt's own feed-out is left alone. */
+.modal-overlay.active .modal > h2,
+.modal-overlay.active .modal > .panel-note,
+.modal-overlay.active .modal > .field,
+.modal-overlay.active .modal > .field-row,
+.modal-overlay.active .modal > .modal-actions {
+  animation: modalPartIn 0.32s var(--ease-out-expo) both;
+}
+.modal-overlay.active .modal > :nth-child(2) { animation-delay: 25ms; }
+.modal-overlay.active .modal > :nth-child(3) { animation-delay: 50ms; }
+.modal-overlay.active .modal > :nth-child(4) { animation-delay: 75ms; }
+.modal-overlay.active .modal > :nth-child(5) { animation-delay: 100ms; }
+.modal-overlay.active .modal > :nth-child(6) { animation-delay: 125ms; }
+@keyframes modalPartIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The period glider follows the finger a shade quicker. */
+.seg-glider {
+  transition: transform 0.26s var(--ease-spring-soft), width 0.26s var(--ease-spring-soft);
+}
+
+/* The receipt gives one soft ring as a fresh sale lands. One shot, no loop, so
+   a till left open on a receipt stays still. When the receipt is also feeding
+   out, both animations run together rather than the ring replacing the feed. */
+.receipt-preview.just-sold { animation: saleLanded 0.8s var(--ease-out-expo); }
+.receipt-preview.printing.just-sold {
+  animation: receiptFeed 0.6s var(--ease-out-expo), saleLanded 0.8s var(--ease-out-expo);
+}
+.receipt-preview.printing.printing-refund.just-sold {
+  animation: receiptFeedRefund 0.6s var(--ease-out-expo), saleLanded 0.8s var(--ease-out-expo);
+}
+@keyframes saleLanded {
+  0% {
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(95, 224, 176, 0.5);
+  }
+  32% {
+    box-shadow: inset 0 0 46px rgba(95, 224, 176, 0.16), 0 0 0 9px rgba(95, 224, 176, 0.16),
+                0 0 42px rgba(95, 224, 176, 0.3);
+  }
+  100% {
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(95, 224, 176, 0);
+  }
+}
+
+/* The font and theme cards lift a little further under the pointer, since that
+   panel is where the shop is choosing how the whole app should feel. */
+.theme-cards .theme-card:hover,
+.font-cards .font-card:hover { transform: translateY(-2px); }

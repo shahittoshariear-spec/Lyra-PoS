@@ -15,16 +15,14 @@
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '2.6.1';
+  const APP_VERSION = '2.7.0';
   const WHATS_NEW = [
-    ['Everyone has their own password', "Cashiers sign in with their own name and password, and every sale, refund, void and stock change is recorded under the person who did it. The till opens on the sign-in screen and locks again when a restricted section is left."],
-    ['Three titles, three jobs', 'A cashier has the till. An owner adds Stock, refunds, voids, price changes and the sales records. A manager has everything, including Setup, reports, the staff list and the resets.'],
-    ['The records ask every time', 'The Ledger and Overview ask for an owner or manager password each time they are opened, and refunds, voids and price changes ask at the moment they happen.'],
-    ['Voids, kept honestly', 'A sale can be voided with an owner or manager password. It stays in the Ledger marked VOID, stops counting towards every figure, and its stock goes back on the shelf.'],
-    ['Who did what, on every record', 'The Ledger, the History tab and the emailed history carry the cashier and the authoriser. The day report’s red list names the person behind every hand change.'],
-    ['Staff & access in Setup', 'Add, rename, re-title, re-password and remove staff under Setup. There is always at least one manager, and an older Admin Key becomes the first manager\'s password.'],
-    ['Unaccounted stock', 'The report says what the till should hold, and lists any product whose stock moved without a sale since the last report was built.'],
-    ['Resets keep a copy', 'The Danger Zone takes a backup before it clears anything, so nothing can be wiped clean by accident.']
+    ['Sign in once, not all day', "A signed-in owner or manager opens every screen and action they are entitled to without being asked for a password again. Only a cashier borrowing a privilege has to have one of them authorise it."],
+    ['Authorisation only where it matters', 'A refund, a void or a price change still carries the name of the person who allowed it, so a cashier cannot change the day\'s takings quietly.'],
+    ['A chime when a sale lands', 'The till plays a soft water-drop sound as the receipt appears. Setup has a switch to turn it off for good.'],
+    ['A new mark', 'The app wears its new icon, from the sign-in screen to the installed shortcut.'],
+    ['Nine fonts to choose from', 'Setup now offers Segoe UI, Calibri, Candara, Trebuchet, Verdana, Georgia, Cambria and two monospaced faces, each previewed before it is picked.'],
+    ['Smoother to use', 'Quicker screen changes, springier controls, a short wave of product tiles and a soft ring on the receipt when a sale completes. Everything still settles instantly with reduced motion turned on.']
   ];
 
   function money(n) {
@@ -290,9 +288,9 @@
   // ---------------- People, passwords and what they may do ----------------
 
   // Everyone who uses the till signs in with their own password, and the session
-  // decides what is on the screen. Nothing is remembered between runs: closing
-  // the app, signing out, or leaving a restricted section brings the sign-in
-  // screen back.
+  // carries what that person may do. Nothing is remembered between runs: closing
+  // the app or signing out brings the sign-in screen back, and a session left
+  // open keeps its permissions until then.
 
   const ROLE_TITLES = { manager: 'Manager', owner: 'Owner', cashier: 'Cashier' };
 
@@ -306,11 +304,10 @@
   };
 
   // Views that ask for a password every single time they are opened, whoever is
-  // already signed in: the shop's sales records.
-  const PASSWORD_EVERY_TIME = ['ledger', 'dashboard'];
+  // already signed in: none. A session carries its permissions until it ends.
 
-  // Views that lock the till again when the person leaves them.
-  const RESTRICTED_VIEWS = ['stock', 'ledger', 'dashboard', 'reports', 'settings'];
+  // Views that lock the till again when the person leaves them: none — leaving
+  // a screen is not a reason to make the shop sign in again.
 
   function staffList() { return Array.isArray(DATA.staff) ? DATA.staff : []; }
 
@@ -436,46 +433,26 @@
     showLogin(message || '');
   }
 
-  // Everything that opens a screen goes through here, so no role can slip past
-  // its permissions — and the sales records ask for a password on every visit,
-  // then lock the till again when they are left.
+  // Everything that opens a screen goes through here. An owner or manager who is
+  // signed in already has every permission, so nothing asks them for a password
+  // again. A cashier asking for a locked section needs one of them to let them
+  // in for that visit — the till stays signed in as the cashier, so every record
+  // keeps the right name on it.
   async function requestView(view) {
     if (!session) { showLogin('Sign in first.'); return false; }
-    if (!canView(session.role, view)) {
-      const person = await askPassword({
-        title: 'Authorised access needed',
-        note: 'This section is for the owner or manager. Enter one of their passwords to open it.',
-        roles: ['owner', 'manager'],
-        confirmLabel: 'Open it'
-      });
-      if (!person) return false;
-      session = { id: person.id, name: staffName(person), role: person.role };
-      applySessionUI();
+    if (canView(session.role, view)) {
       switchView(view);
       return true;
     }
-
-    if (PASSWORD_EVERY_TIME.includes(view)) {
-      const person = await askPassword({
-        title: 'Sales records',
-        note: 'Enter an owner or manager password to open the shop\'s sales records.',
-        roles: ['owner', 'manager'],
-        confirmLabel: 'Open the records'
-      });
-      if (!person) return false;
-      // Whoever opened the records is the one signed in while they are up, so a
-      // cashier never reads them over an owner's shoulder.
-      session = { id: person.id, name: staffName(person), role: person.role };
-      applySessionUI();
-    }
-
-    const leavingRestricted = RESTRICTED_VIEWS.includes(currentViewName()) && !RESTRICTED_VIEWS.includes(view);
+    const person = await askPassword({
+      title: 'Authorised access needed',
+      note: 'This section is for the owner or manager. Enter one of their passwords to open it.',
+      roles: ['owner', 'manager'],
+      confirmLabel: 'Open it'
+    });
+    if (!person) return false;
     switchView(view);
-    if (leavingRestricted) {
-      // Out of Stock, the Ledger, the records or Setup: the till locks behind
-      // whoever was in there.
-      signOut('The till locked when a restricted section was left. Sign in to carry on.');
-    }
+    toast('Opened for ' + session.name + ' — authorised by ' + staffName(person) + '.');
     return true;
   }
 
@@ -540,14 +517,16 @@
     });
   }
 
-  // The Danger Zone asks again, even though Setup is already manager-only.
-  async function managerConfirmation(title, note) {
-    return askPassword({
-      title: title || 'Confirm',
-      note: note || 'Enter the manager password to go ahead.',
-      roles: ['manager'],
-      confirmLabel: 'Continue'
-    });
+  // The password a privileged action needs. An owner or manager already signed
+  // in is authorised by their title, so nothing is asked; a cashier needs one of
+  // them to hand over a password, and that person is recorded as the authoriser.
+  // `person` is null when the signed-in user needed no authorising.
+  async function authorise(title, note, confirmLabel) {
+    if (session && (session.role === 'owner' || session.role === 'manager')) {
+      return { ok: true, person: null };
+    }
+    const person = await askPassword({ title, note, roles: ['owner', 'manager'], confirmLabel });
+    return person ? { ok: true, person } : { ok: false };
   }
 
   function initAuth() {
@@ -907,14 +886,13 @@
   async function openPriceEdit(productId) {
     const item = cart.find(i => i.productId === productId);
     if (!item) return;
-    const person = await askPassword({
-      title: 'Price change',
-      note: 'A price for this sale alone needs an owner or manager. Enter their password to continue.',
-      roles: ['owner', 'manager'],
-      confirmLabel: 'Allow price change'
-    });
-    if (!person) return;
-    priceEditAuthoriser = { id: person.id, name: staffName(person) };
+    const auth = await authorise(
+      'Price change',
+      'A price for this sale alone needs an owner or manager. Enter their password to continue.',
+      'Allow price change'
+    );
+    if (!auth.ok) return;
+    priceEditAuthoriser = auth.person ? { id: auth.person.id, name: staffName(auth.person) } : null;
     priceEditPid = productId;
     const product = DATA.products.find(p => p.id === productId);
     $('#priceEditName').textContent = item.name;
@@ -1408,6 +1386,8 @@
       currentSaleForReceipt = sale;
       currentReceiptIsHistorical = false;
       showReceiptModal(sale);
+      playSaleChime();
+      flashSaleComplete();
     } finally {
       completingSale = false;
     }
@@ -1453,14 +1433,13 @@
   async function openRefundModal(sale) {
     const lines = refundableLines(sale);
     if (!lines.length) { toast('There is nothing left to refund on this sale.'); return; }
-    const person = await askPassword({
-      title: 'Refund needs authorisation',
-      note: 'Enter an owner or manager password to refund sale #' + sale.number + '.',
-      roles: ['owner', 'manager'],
-      confirmLabel: 'Authorise refund'
-    });
-    if (!person) return;
-    refundAuthoriser = { id: person.id, name: staffName(person) };
+    const auth = await authorise(
+      'Refund needs authorisation',
+      'Enter an owner or manager password to refund sale #' + sale.number + '.',
+      'Authorise refund'
+    );
+    if (!auth.ok) return;
+    refundAuthoriser = auth.person ? { id: auth.person.id, name: staffName(auth.person) } : null;
     refundTarget = sale;
     // Start with everything selected — the common case is a full refund.
     refundQty = new Map(lines.map(l => [l.item.productId, l.remaining]));
@@ -1484,13 +1463,13 @@
 
   async function voidSale(sale) {
     if (!canVoidSale(sale)) { toast('This sale cannot be voided.'); return; }
-    const person = await askPassword({
-      title: 'Void sale #' + sale.number,
-      note: 'A void stops the sale counting towards anything and puts its stock back. Enter an owner or manager password.',
-      roles: ['owner', 'manager'],
-      confirmLabel: 'Authorise void'
-    });
-    if (!person) return;
+    const auth = await authorise(
+      'Void sale #' + sale.number,
+      'A void stops the sale counting towards anything and puts its stock back. Enter an owner or manager password.',
+      'Authorise void'
+    );
+    if (!auth.ok) return;
+    const person = auth.person || session;
     const ok = await confirmDialog(
       'Void sale #' + sale.number + '?',
       'The sale stays in the Ledger marked VOID, stops counting towards every figure, and its stock goes back on the shelf. ' + money(sale.total) + '.',
@@ -1509,7 +1488,8 @@
       'void',
       'Sale #' + sale.number + ' voided',
       money(sale.total),
-      [session ? session.name : '', 'auth. ' + staffName(person)].filter(Boolean).join(', ')
+      [session ? session.name : '', auth.person && session && auth.person.id !== session.id ? 'auth. ' + staffName(auth.person) : '']
+        .filter(Boolean).join(', ')
     );
     await persist();
     closeModal('#receiptModalOverlay');
@@ -1667,6 +1647,38 @@
     $('#refundConfirmBtn').addEventListener('click', submitRefund);
   }
 
+  // ---------------- The sale chime ----------------
+
+  // One small water-drop chime when a sale is done, loaded the first time it is
+  // needed and replayed from the start each time. Setup can turn it off for
+  // good; the setting lives in the shop's data file.
+  let saleChime = null;
+
+  function playSaleChime() {
+    if (!DATA || !DATA.settings || DATA.settings.saleSound === false) return;
+    try {
+      if (!saleChime) {
+        saleChime = new Audio('sale-complete.mp3');
+        saleChime.preload = 'auto';
+      }
+      saleChime.currentTime = 0;
+      const playing = saleChime.play();
+      if (playing && playing.catch) playing.catch(() => {});
+    } catch (err) {
+      // A machine with no sound device is not a reason for a sale to fail.
+    }
+  }
+
+  // The receipt gives one soft ring as it lands, so the sale reads as finished
+  // even with the sound off.
+  function flashSaleComplete() {
+    const preview = $('#receiptPreview');
+    if (!preview) return;
+    preview.classList.remove('just-sold');
+    void preview.offsetWidth;
+    preview.classList.add('just-sold');
+  }
+
   // ---------------- Receipt ----------------
 
   function receiptText(sale) {
@@ -1798,7 +1810,7 @@
     preview.textContent = receiptText(sale);
     // The receipt feeds out of the printer each time it opens: a short reveal
     // from the top, replayed even when the modal was already on screen.
-    preview.classList.remove('printing', 'printing-refund');
+    preview.classList.remove('printing', 'printing-refund', 'just-sold');
     void preview.offsetWidth;
     preview.classList.add('printing');
     if (isReturn) preview.classList.add('printing-refund');
@@ -4240,9 +4252,13 @@
   const FONT_CHOICES = [
     { id: 'segoe', name: 'Segoe UI', note: 'The app font' },
     { id: 'calibri', name: 'Calibri', note: 'Softer and rounder' },
-    { id: 'georgia', name: 'Georgia', note: 'A warm serif' },
+    { id: 'candara', name: 'Candara', note: 'Soft and humanist' },
     { id: 'trebuchet', name: 'Trebuchet MS', note: 'Friendly and wide' },
-    { id: 'mono', name: 'Cascadia Mono', note: 'Everything typewriter' }
+    { id: 'verdana', name: 'Verdana', note: 'Wide and very legible' },
+    { id: 'georgia', name: 'Georgia', note: 'A warm serif' },
+    { id: 'cambria', name: 'Cambria', note: 'A book serif' },
+    { id: 'mono', name: 'Cascadia Mono', note: 'Everything typewriter' },
+    { id: 'consolas', name: 'Consolas', note: 'A coder’s typewriter' }
   ];
   const SIZE_CHOICES = ['compact', 'normal', 'large', 'huge'];
 
@@ -4471,6 +4487,7 @@
     $('#setReportAutoTime').value = /^\d{1,2}:\d{2}$/.test(s.reportAutoTime || '') ? s.reportAutoTime : '17:30';
     $('#setBackupAuto').checked = s.backupAuto !== false;
     $('#setBackupEvery').value = s.backupEvery || 'week';
+    $('#setSaleSound').checked = s.saleSound !== false;
     renderShortcutList();
     renderAppearanceControls();
     refreshBackupStatus();
@@ -4811,6 +4828,14 @@
       toast(DATA.settings.backupAuto ? 'Automatic backups saved.' : 'Automatic backups turned off.');
     });
 
+    $('#saveSoundBtn').addEventListener('click', async () => {
+      DATA.settings.saleSound = $('#setSaleSound').checked;
+      await persist();
+      // Turning it on plays it once, so the shop hears what it chose.
+      if (DATA.settings.saleSound) playSaleChime();
+      toast(DATA.settings.saleSound ? 'Sale chime on.' : 'Sale chime off.');
+    });
+
     $('#backupNowBtn').addEventListener('click', async () => {
       const btn = $('#backupNowBtn');
       btn.disabled = true;
@@ -4934,13 +4959,8 @@
         'Reset sales & stock'
       );
       if (!ok) return;
-      // Setup is manager-only already; the reset asks for the manager's password
-      // again so a stray click can never wipe the shop.
-      const person = await managerConfirmation(
-        'Confirm reset',
-        'Enter the manager password to reset sales & stock.'
-      );
-      if (!person) return;
+      // Setup is manager-only, and a manager who is signed in has nothing more to
+      // prove; the confirmation above is the guard against a stray click.
       await performResetSalesStock();
     });
 
@@ -4952,11 +4972,6 @@
         'Reset all data'
       );
       if (!ok) return;
-      const person = await managerConfirmation(
-        'Confirm full reset',
-        'Enter the manager password to reset everything back to a blank install.'
-      );
-      if (!person) return;
       await performResetAll();
     });
   }
