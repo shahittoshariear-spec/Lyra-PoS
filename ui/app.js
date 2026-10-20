@@ -15,7 +15,7 @@
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '2.6.0';
+  const APP_VERSION = '2.6.1';
   const WHATS_NEW = [
     ['Everyone has their own password', "Cashiers sign in with their own name and password, and every sale, refund, void and stock change is recorded under the person who did it. The till opens on the sign-in screen and locks again when a restricted section is left."],
     ['Three titles, three jobs', 'A cashier has the till. An owner adds Stock, refunds, voids, price changes and the sales records. A manager has everything, including Setup, reports, the staff list and the resets.'],
@@ -397,7 +397,7 @@
     const person = staffList().find(p => p.id === loginSelection);
     if (!person) { $('#loginError').textContent = 'That person is no longer on the list.'; return; }
     const hash = await hashPassword($('#loginPassword').value);
-    if (hash !== person.password_hash) {
+    if (hash !== person.passwordHash) {
       $('#loginError').textContent = 'That password is not right.';
       $('#loginPassword').value = '';
       $('#loginPassword').focus();
@@ -517,7 +517,7 @@
         const typed = input.value;
         if (!typed) { $('#authError').textContent = 'Enter a password.'; return; }
         const hash = await hashPassword(typed);
-        const person = staffList().find(p => roles.includes(p.role) && p.password_hash === hash);
+        const person = staffList().find(p => roles.includes(p.role) && p.passwordHash === hash);
         if (!person) {
           $('#authError').textContent = 'That password does not belong to ' +
             (roles.length === 1 ? 'the ' + roleTitle(roles[0]).toLowerCase() : 'an owner or manager') + '.';
