@@ -15,14 +15,11 @@
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '2.7.0';
+  const APP_VERSION = '2.7.1';
   const WHATS_NEW = [
-    ['Sign in once, not all day', "A signed-in owner or manager opens every screen and action they are entitled to without being asked for a password again. Only a cashier borrowing a privilege has to have one of them authorise it."],
-    ['Authorisation only where it matters', 'A refund, a void or a price change still carries the name of the person who allowed it, so a cashier cannot change the day\'s takings quietly.'],
-    ['A chime when a sale lands', 'The till plays a soft water-drop sound as the receipt appears. Setup has a switch to turn it off for good.'],
-    ['A new mark', 'The app wears its new icon, from the sign-in screen to the installed shortcut.'],
-    ['Nine fonts to choose from', 'Setup now offers Segoe UI, Calibri, Candara, Trebuchet, Verdana, Georgia, Cambria and two monospaced faces, each previewed before it is picked.'],
-    ['Smoother to use', 'Quicker screen changes, springier controls, a short wave of product tiles and a soft ring on the receipt when a sale completes. Everything still settles instantly with reduced motion turned on.']
+    ['Overview, Reports and Setup are the owner\'s', "A manager keeps the till, Stock, the Ledger, refunds, voids and price changes, but the shop's figures and settings now need the owner signed in. A manager cannot open them with a password."],
+    ['One owner, always kept', "The last owner cannot be removed or re-titled. A shop from an earlier version whose only account was a manager has that account made the owner once, so nobody is locked out of Setup."],
+    ['The new mark, everywhere', 'The installed app and its shortcut carry the new Lyra icon.']
   ];
 
   function money(n) {
@@ -294,14 +291,18 @@
 
   const ROLE_TITLES = { manager: 'Manager', owner: 'Owner', cashier: 'Cashier' };
 
-  // What each title may open. The till is the only thing a cashier gets; the
-  // records are what the owner signs in for; the shop's setup belongs to the
-  // manager.
+  // What each title may open. A cashier has the till. A manager adds Stock and
+  // the Ledger. Overview, Reports and Setup belong to the owner alone — a
+  // manager cannot borrow them, with or without a password.
   const ROLE_VIEWS = {
     cashier: ['till'],
-    owner: ['till', 'stock', 'ledger', 'dashboard'],
-    manager: ['till', 'stock', 'ledger', 'dashboard', 'reports', 'settings']
+    manager: ['till', 'stock', 'ledger'],
+    owner: ['till', 'stock', 'ledger', 'dashboard', 'reports', 'settings']
   };
+
+  // The three only an owner may open at all.
+  const OWNER_ONLY_VIEWS = ['dashboard', 'reports', 'settings'];
+  const VIEW_TITLES = { dashboard: 'Overview', reports: 'Reports', settings: 'Setup' };
 
   // Views that ask for a password every single time they are opened, whoever is
   // already signed in: none. A session carries its permissions until it ends.
@@ -400,7 +401,7 @@
       $('#loginPassword').focus();
       return;
     }
-    session = { id: person.id, name: staffName(person) || 'Manager', role: person.role };
+    session = { id: person.id, name: staffName(person) || roleTitle(person.role), role: person.role };
     $('#loginOverlay').classList.remove('active');
     applySessionUI();
     switchView('till');
@@ -416,15 +417,15 @@
     if (!password || password.length < 4) { $('#loginError').textContent = 'The password should be at least 4 characters.'; return; }
     if (password !== again) { $('#loginError').textContent = "Those passwords don't match."; return; }
     const hash = await hashPassword(password);
-    DATA.staff = [{ id: 'u' + Date.now(), name, surname, role: 'manager', passwordHash: hash }];
+    DATA.staff = [{ id: 'u' + Date.now(), name, surname, role: 'owner', passwordHash: hash }];
     await persist();
-    session = { id: DATA.staff[0].id, name: staffName(DATA.staff[0]), role: 'manager' };
+    session = { id: DATA.staff[0].id, name: staffName(DATA.staff[0]), role: 'owner' };
     $('#loginOverlay').classList.remove('active');
     applySessionUI();
     // Straight to Setup: the shop's own details and the rest of the staff live
     // there, and this account has everything needed to fill them in.
     switchView('settings');
-    toast('Manager account made. Add the rest of the staff under Staff & access.');
+    toast('Owner account made. Add the rest of the staff under Staff & access.');
   }
 
   function signOut(message) {
@@ -435,14 +436,19 @@
 
   // Everything that opens a screen goes through here. An owner or manager who is
   // signed in already has every permission, so nothing asks them for a password
-  // again. A cashier asking for a locked section needs one of them to let them
-  // in for that visit — the till stays signed in as the cashier, so every record
-  // keeps the right name on it.
+  // again. A cashier asking for Stock or the Ledger needs one of them to let
+  // them in for that visit — the till stays signed in as the cashier, so every
+  // record keeps the right name on it. Overview, Reports and Setup are not
+  // lent out: the owner has to be the one signed in.
   async function requestView(view) {
     if (!session) { showLogin('Sign in first.'); return false; }
     if (canView(session.role, view)) {
       switchView(view);
       return true;
+    }
+    if (OWNER_ONLY_VIEWS.includes(view)) {
+      toast(VIEW_TITLES[view] + ' is for the owner. Sign in as the owner to open it.');
+      return false;
     }
     const person = await askPassword({
       title: 'Authorised access needed',
@@ -879,7 +885,8 @@
 
   // The pen on a line: a price for this sale alone, leaving the product's own
   // price — and every future sale — untouched. It is the one change on the till
-  // that leaves no other mark, so it waits for an owner or manager every time.
+  // that leaves no other mark, so an owner or manager has to allow it; one of
+  // them already signed in needs nothing more.
   let priceEditPid = null;
   let priceEditAuthoriser = null;
 
@@ -1420,8 +1427,8 @@
   }
 
   // Offered on any past sale with something left to hand back. Money going back
-  // over the counter needs an owner or manager at the till, every time — even if
-  // one of them is already the one signed in.
+  // over the counter needs an owner or manager to allow it; one of them already
+  // signed in is already the authoriser.
   function canRefundSale(sale) {
     return !!sale && sale.type !== 'return' && !sale.voidedAt && refundableLines(sale).length > 0;
   }
@@ -4588,8 +4595,8 @@
 
   let staffPasswordTarget = null;
 
-  function countManagers() {
-    return staffList().filter(p => p.role === 'manager').length;
+  function countOwners() {
+    return staffList().filter(p => p.role === 'owner').length;
   }
 
   function renderStaffList() {
@@ -4603,7 +4610,7 @@
               '<span class="staff-role">' + escapeHtml(roleTitle(person.role)) +
               (session && session.id === person.id ? ' · you' : '') + '</span></span>' +
             '<select class="select-input" data-role="' + escapeHtml(person.id) + '" title="What this person may do">' +
-              ['cashier', 'owner', 'manager'].map(role =>
+              ['cashier', 'manager', 'owner'].map(role =>
                 '<option value="' + role + '"' + (person.role === role ? ' selected' : '') + '>' + roleTitle(role) + '</option>'
               ).join('') +
             '</select>' +
@@ -4638,8 +4645,8 @@
   async function changeStaffRole(id, role) {
     const person = staffList().find(p => p.id === id);
     if (!person || person.role === role) return;
-    if (person.role === 'manager' && countManagers() <= 1) {
-      toast('There must always be one manager.');
+    if (person.role === 'owner' && countOwners() <= 1) {
+      toast('There must always be one owner.');
       renderStaffList();
       return;
     }
@@ -4658,8 +4665,8 @@
   async function removeStaffMember(id) {
     const person = staffList().find(p => p.id === id);
     if (!person) return;
-    if (person.role === 'manager' && countManagers() <= 1) {
-      toast('There must always be one manager.');
+    if (person.role === 'owner' && countOwners() <= 1) {
+      toast('There must always be one owner.');
       return;
     }
     const ok = await confirmDialog(
@@ -4959,7 +4966,7 @@
         'Reset sales & stock'
       );
       if (!ok) return;
-      // Setup is manager-only, and a manager who is signed in has nothing more to
+      // Setup is owner-only, and the owner who is signed in has nothing more to
       // prove; the confirmation above is the guard against a stray click.
       await performResetSalesStock();
     });

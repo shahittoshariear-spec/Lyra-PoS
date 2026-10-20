@@ -90,17 +90,19 @@ so there is no browser to install and no Node.js to install.
   The session lasts until that person signs out or closes the app, so nobody is
   asked for the same password again on every screen.
 - **Three titles, three jobs** — a **Cashier** has the till: ring up, scan,
-  hold/resume, take payment, print. An **Owner** adds Stock, refunds, voids,
-  price changes and the sales records. A **Manager** has everything: every
-  screen, the reports, Setup, the staff list and the resets. Titles are set per
-  person under Setup → Staff & access, and there is always at least one manager.
+  hold/resume, take payment, print. A **Manager** adds Stock, the Ledger,
+  refunds, voids and price changes. An **Owner** has everything, including
+  Overview and its History tab, Reports, Setup, the staff list and the resets.
+  Titles are set per person under Setup → Staff & access, and there is always
+  at least one owner.
 - **Authorisation only where it matters** — an owner or manager who is signed
-  in opens the Ledger, Overview, Stock or Setup straight away; their title is
-  the permission. A cashier who asks for one of those sections is let in by an
-  owner or manager typing a password, and the till stays signed in as the
-  cashier so the records keep the right name. Refunds, voids and single-sale
-  price changes do the same: nothing is asked of an owner or manager already
-  signed in, and a cashier needs one of them to authorise it.
+  in opens Stock and the Ledger straight away; their title is the permission. A
+  cashier who asks for one of those sections is let in by an owner or manager
+  typing a password, and the till stays signed in as the cashier so the records
+  keep the right name. Refunds, voids and single-sale price changes do the same:
+  nothing is asked of an owner or manager already signed in, and a cashier needs
+  one of them to authorise it. Overview, Reports and Setup are not lent out at
+  all — only the owner can open them.
 - **Voids** — a sale that should never have counted can be voided from its
   receipt. It stays in the Ledger marked **VOID**, stops counting towards every
   figure, its stock goes back on the shelf, and the day report lists it in red.
@@ -150,9 +152,8 @@ so there is no browser to install and no Node.js to install.
   drawn in red and named back to the sale it came from. Filter it to one day, or
   type an item's name or a sale number — typing "dog food" brings up every
   dog-food line in the shop's whole history — and select a line to open its
-  sale, ready to reprint or refund. An owner or manager opens Overview directly;
-  a cashier is let in for that visit by one of them, so the records are never
-  simply on a cashier's screen.
+  sale, ready to reprint or refund. Overview belongs to the owner, so the
+  records are never simply on a cashier's or manager's screen.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales
@@ -221,8 +222,8 @@ so there is no browser to install and no Node.js to install.
   the shop's data into the backups folder *first*, and a reset that cannot take
   one does not go ahead. And every time a day report is actually emailed, a copy
   of that day's sales — item by item, exactly what was sent — is dropped in the
-  backups folder as `sales-journal-<date>.json`. Even a full reset done with the
-  manager's password cannot make a day's trading disappear.
+  backups folder as `sales-journal-<date>.json`. Even a full reset done by the
+  owner cannot make a day's trading disappear.
 - **Stock edits are recorded, quietly** — a stock figure typed over by hand in
   the product form is written down as it happens: the time, the product, what it
   was and what it became. Nothing on screen mentions it, no message appears and
@@ -337,7 +338,7 @@ to a new computer — copy the exported file somewhere safe (a USB drive or
 cloud folder). **Import backup…** restores from that file. Passwords are stored
 as a one-way SHA-256 hash in that same file — nobody, including you, can look
 one up from the file itself, so a forgotten password has no built-in recovery
-short of another manager setting a new one under Setup → Staff & access, or
+short of another owner setting a new one under Setup → Staff & access, or
 restoring an older backup.
 
 Beside that file the app keeps its own automatic backups in a `backups`
@@ -364,7 +365,7 @@ Two details worth knowing if you go looking at that file:
   still be repaired by hand.
 
 Password hashes are computed by the same SHA-256 the app has always used, so a
-key set in *End PoS* or *Immaculate POS* becomes the first manager's password in
+key set in *End PoS* or *Immaculate POS* becomes the first owner's password in
 *Lyra PoS* unchanged.
 
 ## Printing receipts
@@ -467,12 +468,12 @@ own name, title and password. Nothing is inherited from whoever used the till
 last: the app opens on the sign-in screen, and the session ends when that person
 signs out or closes the app.
 
-| | Cashier | Owner | Manager |
+| | Cashier | Manager | Owner |
 |---|---|---|---|
 | Till — ring up, scan, hold, take payment, print | yes | yes | yes |
-| Stock — look up, add, edit, delete | — | yes | yes |
+| Stock — look up, add, edit, delete | authorised | yes | yes |
 | Ledger — look up a sale, reprint | authorised | yes | yes |
-| Overview and its History tab | authorised | yes | yes |
+| Overview and its History tab | — | — | yes |
 | Refund a sale, whole or partial | authorised | yes | yes |
 | Void a sale | authorised | yes | yes |
 | A price for one sale (the ✎) | authorised | yes | yes |
@@ -484,15 +485,18 @@ sale, refund or void then records both the person who did it and the person who
 allowed it. A cashier who asks for a locked section is let in for that visit,
 and the session stays the cashier's — so it is always clear who was on the till.
 Signing in as an owner or manager carries every permission they have until they
-sign out; no screen asks them again.
+sign out; no screen asks them again. A manager who asks for Overview, Reports
+or Setup is told it belongs to the owner — the password prompt cannot lend it.
 
 The lists that decide this are `ROLE_VIEWS` and `canView` near the top of
 `ui/app.js`.
 
 An install from before sign-ins is not locked out: its one Admin Key becomes
-the first **Manager** account's password, and the account can be renamed (and
-everyone else added) under Setup → Staff & access. Deleting the last manager is
-refused, so there is always someone who can get into Setup.
+the first **Owner** account's password, and the account can be renamed (and
+everyone else added) under Setup → Staff & access. A shop from an earlier
+version whose only account was a manager has that account made the owner once.
+Deleting or re-titling the last owner is refused, so there is always someone who
+can get into Setup.
 
 ## Scanning barcodes
 

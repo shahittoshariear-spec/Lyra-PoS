@@ -149,8 +149,9 @@ pub struct Staff {
     pub id: String,
     pub name: String,
     pub surname: String,
-    /// "manager", "owner" or "cashier". Kept as written; the screens decide
-    /// what each one may do.
+    /// "owner", "manager" or "cashier". Kept as written; the screens decide
+    /// what each one may do. The owner is the only title that can open
+    /// Overview, Reports and Setup.
     pub role: String,
     pub password_hash: String,
 }
@@ -422,7 +423,7 @@ pub struct Data {
     pub settings: Settings,
     /// Everyone who can sign in at the till, and what they may do. Empty until
     /// the first account is made, or until an older install's Admin Key is
-    /// carried across as the first manager (see `normalised`).
+    /// carried across as the first owner (see `normalised`).
     pub staff: Vec<Staff>,
     pub categories: Vec<String>,
     pub products: Vec<Product>,
@@ -538,17 +539,31 @@ impl Data {
             self.next_product_id = default_next_product_id();
         }
         // An install from before staff sign-ins keeps working: the one Admin
-        // Key becomes the first manager's password, so nobody is locked out of
+        // Key becomes the first owner's password, so nobody is locked out of
         // their own shop by the upgrade. Setup → Staff renames the account and
         // adds everyone else.
         if self.staff.is_empty() && !self.settings.admin_key_hash.is_empty() {
             self.staff.push(Staff {
                 id: "u1".to_string(),
-                name: "Manager".to_string(),
+                name: "Owner".to_string(),
                 surname: String::new(),
-                role: "manager".to_string(),
+                role: "owner".to_string(),
                 password_hash: self.settings.admin_key_hash.clone(),
             });
+        }
+        // Overview, Reports and Setup belong to the owner alone. A shop whose
+        // staff list has no owner — one saved before that rule, or a hand-edited
+        // file — would otherwise be locked out of its own Setup, so its first
+        // manager is promoted once. With no manager either, the first person on
+        // the list takes the title, which still leaves an account that can put
+        // things right.
+        if !self.staff.is_empty() && !self.staff.iter().any(|p| p.role == "owner") {
+            let pick = self
+                .staff
+                .iter()
+                .position(|p| p.role == "manager")
+                .unwrap_or(0);
+            self.staff[pick].role = "owner".to_string();
         }
         self
     }
@@ -1303,7 +1318,7 @@ mod tests {
     }
 
     #[test]
-    fn an_old_admin_key_becomes_the_first_manager() {
+    fn an_old_admin_key_becomes_the_first_owner() {
         let scratch = Scratch::new();
         let file = scratch.file();
         let mut old = a_shop();
@@ -1313,9 +1328,9 @@ mod tests {
         // Saving wrote no staff; loading is where the upgrade happens.
         let back = Data::load_from(&file);
         assert_eq!(back.staff.len(), 1);
-        assert_eq!(back.staff[0].role, "manager");
+        assert_eq!(back.staff[0].role, "owner");
         assert_eq!(back.staff[0].password_hash, "abc123");
-        assert_eq!(back.staff[0].name, "Manager");
+        assert_eq!(back.staff[0].name, "Owner");
 
         // A shop that already has staff is left alone.
         let mut with_staff = back;
@@ -1324,6 +1339,50 @@ mod tests {
         let again = Data::load_from(&file);
         assert_eq!(again.staff.len(), 1);
         assert_eq!(again.staff[0].name, "Arif");
+    }
+
+    #[test]
+    fn a_staff_list_without_an_owner_promotes_the_first_manager() {
+        let scratch = Scratch::new();
+        let file = scratch.file();
+        let mut shop = a_shop();
+        shop.staff = vec![
+            Staff {
+                id: "u1".into(),
+                name: "Peter".into(),
+                surname: String::new(),
+                role: "manager".into(),
+                password_hash: "hash-p".into(),
+            },
+            Staff {
+                id: "u2".into(),
+                name: "Arif".into(),
+                surname: String::new(),
+                role: "manager".into(),
+                password_hash: "hash-a".into(),
+            },
+            Staff {
+                id: "u3".into(),
+                name: "Sam".into(),
+                surname: String::new(),
+                role: "cashier".into(),
+                password_hash: "hash-s".into(),
+            },
+        ];
+        shop.save_to(&file).unwrap();
+
+        // Without this, the shop would lose its way into Setup for good.
+        let back = Data::load_from(&file);
+        assert_eq!(back.staff[0].role, "owner");
+        assert_eq!(back.staff[1].role, "manager");
+        assert_eq!(back.staff[2].role, "cashier");
+
+        // It happens once: the promotion is kept, and nobody else moves.
+        back.save_to(&file).unwrap();
+        let again = Data::load_from(&file);
+        assert_eq!(again.staff[0].role, "owner");
+        assert_eq!(again.staff[1].role, "manager");
+        assert_eq!(again.staff[2].role, "cashier");
     }
 
     #[test]

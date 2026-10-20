@@ -574,7 +574,7 @@
 
           <div class="panel panel-full">
             <h2>Staff &amp; access</h2>
-            <p class="panel-note">Everyone signs in with their own password, and every sale, refund, void and stock change is recorded under the person who did it. <b>Managers</b> can do everything, including Setup, reports and resets. <b>Owners</b> can use the till, Stock, refunds, voids, price changes and the sales records. <b>Cashiers</b> can use the till.</p>
+            <p class="panel-note">Everyone signs in with their own password, and every sale, refund, void and stock change is recorded under the person who did it. <b>Owners</b> can do everything, including Overview, Reports and Setup. <b>Managers</b> can use the till, Stock, the Ledger, refunds, voids and price changes. <b>Cashiers</b> can use the till.</p>
             <div class="staff-list" id="staffList"></div>
             <div class="field-row">
               <label class="field"><span>First name</span><input type="text" id="staffName" autocomplete="off" /></label>
@@ -584,14 +584,14 @@
               <label class="field"><span>Title</span>
                 <select id="staffRole">
                   <option value="cashier">Cashier</option>
-                  <option value="owner">Owner</option>
                   <option value="manager">Manager</option>
+                  <option value="owner">Owner</option>
                 </select>
               </label>
               <label class="field"><span>Password</span><input type="password" id="staffPassword" autocomplete="off" /></label>
             </div>
             <button class="btn btn-primary" id="staffAddBtn">Add person</button>
-            <p class="panel-note">There must always be at least one manager. Removing someone never touches the sales and records they already made.</p>
+            <p class="panel-note">There must always be at least one owner. Removing someone never touches the sales and records they already made.</p>
           </div>
 
         <div class="panel panel-full">
