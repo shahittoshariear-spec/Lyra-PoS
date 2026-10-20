@@ -140,6 +140,21 @@ impl Default for CustomTheme {
     }
 }
 
+/// A person allowed to use the till. The password is a one-way SHA-256 hash,
+/// the scheme the Admin Key has always used — the plain text is never stored
+/// and never leaves the screen it was typed on.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Staff {
+    pub id: String,
+    pub name: String,
+    pub surname: String,
+    /// "manager", "owner" or "cashier". Kept as written; the screens decide
+    /// what each one may do.
+    pub role: String,
+    pub password_hash: String,
+}
+
 /// A stock figure that was edited by hand at the till, recorded without any
 /// screen saying so. The day report draws these in red (see report.rs).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -151,6 +166,9 @@ pub struct StockEdit {
     pub name: String,
     pub from: i64,
     pub to: i64,
+    /// Who made the change, as they signed in.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub by: String,
 }
 
 /// Something done by hand that a sale cannot account for: a price set for one
@@ -163,10 +181,14 @@ pub struct ChangeEntry {
     /// RFC 3339 in UTC, as the screens write every other timestamp.
     pub at: String,
     /// The screens' own word for the kind of change — "price", "cost",
-    /// "added", "deleted", "discarded", "import" — kept as written.
+    /// "added", "deleted", "discarded", "import", "void" — kept as written.
     pub kind: String,
     pub name: String,
     pub detail: String,
+    /// Who made the change, as they signed in. A change that needed an
+    /// authoriser carries both: "Sarah, auth. Arif".
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub by: String,
 }
 
 /// Every product's stock as the last day report left it, so the next report
@@ -363,6 +385,23 @@ pub struct Sale {
     pub cash_paid: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card_paid: Option<f64>,
+    /// Who rang it up. Empty on records written before staff sign-ins existed,
+    /// or by a till that has not been set up with names yet.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub cashier_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub cashier: String,
+    /// Who authorised the price changes on this sale, when there were any.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub authorised_by: String,
+    /// Set when the sale has been voided: it stays in the Ledger as the record
+    /// of what happened, but no longer counts towards any figure.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub voided_at: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub voided_by: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub voided_by_id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -377,6 +416,10 @@ pub struct HeldSale {
 #[serde(rename_all = "camelCase", default)]
 pub struct Data {
     pub settings: Settings,
+    /// Everyone who can sign in at the till, and what they may do. Empty until
+    /// the first account is made, or until an older install's Admin Key is
+    /// carried across as the first manager (see `normalised`).
+    pub staff: Vec<Staff>,
     pub categories: Vec<String>,
     pub products: Vec<Product>,
     pub sales: Vec<Sale>,
@@ -413,6 +456,7 @@ impl Default for Data {
     fn default() -> Self {
         Self {
             settings: Settings::default(),
+            staff: Vec::new(),
             categories: default_categories(),
             products: Vec::new(),
             sales: Vec::new(),
@@ -488,6 +532,19 @@ impl Data {
         }
         if self.next_product_id == 0 {
             self.next_product_id = default_next_product_id();
+        }
+        // An install from before staff sign-ins keeps working: the one Admin
+        // Key becomes the first manager's password, so nobody is locked out of
+        // their own shop by the upgrade. Setup → Staff renames the account and
+        // adds everyone else.
+        if self.staff.is_empty() && !self.settings.admin_key_hash.is_empty() {
+            self.staff.push(Staff {
+                id: "u1".to_string(),
+                name: "Manager".to_string(),
+                surname: String::new(),
+                role: "manager".to_string(),
+                password_hash: self.settings.admin_key_hash.clone(),
+            });
         }
         self
     }
@@ -1219,6 +1276,7 @@ mod tests {
             kind: "price".into(),
             name: "Puppy Food 2kg (sale #1044)".into(),
             detail: "shelf R129.99 -> R99.00, R30.99 short".into(),
+            by: "Sarah Dlamini, auth. Arif Patel".into(),
         });
         shop.stock_snapshot = StockSnapshot {
             at: "2026-09-23T18:42:00Z".into(),
@@ -1233,6 +1291,89 @@ mod tests {
         let back = Data::load_from(&file);
         assert_eq!(back.change_log, shop.change_log);
         assert_eq!(back.stock_snapshot, shop.stock_snapshot);
+    }
+
+    #[test]
+    fn an_old_admin_key_becomes_the_first_manager() {
+        let scratch = Scratch::new();
+        let file = scratch.file();
+        let mut old = a_shop();
+        old.settings.admin_key_hash = "abc123".into();
+        old.save_to(&file).unwrap();
+
+        // Saving wrote no staff; loading is where the upgrade happens.
+        let back = Data::load_from(&file);
+        assert_eq!(back.staff.len(), 1);
+        assert_eq!(back.staff[0].role, "manager");
+        assert_eq!(back.staff[0].password_hash, "abc123");
+        assert_eq!(back.staff[0].name, "Manager");
+
+        // A shop that already has staff is left alone.
+        let mut with_staff = back;
+        with_staff.staff[0].name = "Arif".into();
+        with_staff.save_to(&file).unwrap();
+        let again = Data::load_from(&file);
+        assert_eq!(again.staff.len(), 1);
+        assert_eq!(again.staff[0].name, "Arif");
+    }
+
+    #[test]
+    fn everyone_who_can_sign_in_survives_a_save() {
+        let scratch = Scratch::new();
+        let file = scratch.file();
+        let mut shop = a_shop();
+        shop.staff = vec![
+            Staff {
+                id: "u1".into(),
+                name: "Arif".into(),
+                surname: "Patel".into(),
+                role: "manager".into(),
+                password_hash: "hash-a".into(),
+            },
+            Staff {
+                id: "u2".into(),
+                name: "Peter".into(),
+                surname: "Naidoo".into(),
+                role: "owner".into(),
+                password_hash: "hash-p".into(),
+            },
+            Staff {
+                id: "u3".into(),
+                name: "Sarah".into(),
+                surname: "Dlamini".into(),
+                role: "cashier".into(),
+                password_hash: "hash-s".into(),
+            },
+        ];
+        shop.save_to(&file).unwrap();
+
+        assert_eq!(Data::load_from(&file), shop);
+    }
+
+    #[test]
+    fn a_sale_remembers_who_sold_it_and_who_voided_it() {
+        let scratch = Scratch::new();
+        let file = scratch.file();
+        let mut shop = a_shop();
+        shop.sales.push(Sale {
+            id: "s1".into(),
+            number: 1001,
+            cashier_id: "u3".into(),
+            cashier: "Sarah Dlamini".into(),
+            authorised_by: "Arif Patel".into(),
+            voided_at: "2026-09-23T15:02:00Z".into(),
+            voided_by: "Arif Patel".into(),
+            voided_by_id: "u1".into(),
+            ..Default::default()
+        });
+        shop.save_to(&file).unwrap();
+
+        let back = Data::load_from(&file);
+        assert_eq!(back.sales[0].cashier, "Sarah Dlamini");
+        assert_eq!(back.sales[0].cashier_id, "u3");
+        assert_eq!(back.sales[0].authorised_by, "Arif Patel");
+        assert_eq!(back.sales[0].voided_by, "Arif Patel");
+        assert!(!back.sales[0].voided_at.is_empty());
     }
 
     #[test]

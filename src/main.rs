@@ -77,13 +77,14 @@ fn reset_sales_stock(lock_state: tauri::State<'_, DataLock>) -> Result<Data, Str
     Ok(current)
 }
 
-/// Hashes an Admin Key the way the app has always stored it, so a key set in the
-/// original still unlocks this one. Hex, lower case, 64 characters — SHA-256.
+/// Hashes a password the way the app has always stored the Admin Key, so a key
+/// set in the original still signs its owner in here. Hex, lower case, 64
+/// characters — SHA-256.
 #[tauri::command]
-fn hash_admin_key(key: String) -> String {
+fn hash_password(password: String) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
-    hasher.update(key.as_bytes());
+    hasher.update(password.as_bytes());
     let digest = hasher.finalize();
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -294,7 +295,7 @@ fn main() {
             save_data,
             reset_all_data,
             reset_sales_stock,
-            hash_admin_key,
+            hash_password,
             report_problem,
             export_backup,
             import_backup,
@@ -311,4 +312,21 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lyra PoS");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_password_is_hashed_the_way_the_data_file_expects() {
+        // The stored hash is SHA-256 in lower-case hex; an Admin Key set in an
+        // earlier build must still sign its owner in, so the exact digest is
+        // pinned here rather than only trusted.
+        assert_eq!(
+            hash_password("abc".to_string()),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(hash_password(String::new()).len(), 64);
+    }
 }

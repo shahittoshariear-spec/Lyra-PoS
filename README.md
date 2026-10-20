@@ -83,19 +83,31 @@ so there is no browser to install and no Node.js to install.
   products should move to, so nothing is ever left pointing at a category that
   no longer exists. The last remaining category can't be deleted, and a
   duplicate name is refused.
-- **Client mode & Admin Key** — the app always opens in Client mode: whoever's
-  at the till can ring up sales, scan, hold/resume, take payment, work the
-  Stock list (including adding, editing and deleting products), and use the
-  Ledger — looking sales up, reprinting receipts, and issuing full or partial
-  refunds. Overview, Reports and Setup are locked outright. Entering the Admin
-  Key unlocks everything for that session; tap "Lock" any time to drop back to
-  Client mode. Set the key the first time you open the app.
-- **Refunds** — open any past sale from the Ledger and refund
-  the whole sale or just some items, choosing how many of each go back. Stock
-  returns to the shelf automatically, and the refund is stored as its own
-  record, so the Ledger, the day's totals and every report net it off. Part of
-  a sale can be refunded now and the rest later, until nothing is left on it,
-  and the refund receipt is shown ready to print.
+- **Everyone signs in with their own password** — the till opens on a sign-in
+  screen listing the shop's people under their titles. Every sale is recorded
+  under the person who rang it up, and every refund, void and hand change under
+  the person who did it and the person who allowed it, with the date and time.
+  Nothing is kept between runs: closing the app, or leaving Stock, the Ledger,
+  the records or Setup, brings the sign-in screen back.
+- **Three titles, three jobs** — a **Cashier** has the till: ring up, scan,
+  hold/resume, take payment, print. An **Owner** adds Stock, refunds, voids,
+  price changes and the sales records. A **Manager** has everything: every
+  screen, the reports, Setup, the staff list and the resets. Titles are set per
+  person under Setup → Staff & access, and there is always at least one manager.
+- **Password prompts at the point of risk** — opening the Ledger or Overview
+  asks for an owner or manager password *every time*; refunds, voids and price
+  changes ask at the moment they happen, whoever is signed in.
+- **Voids** — a sale that should never have counted can be voided from its
+  receipt with an owner or manager password. It stays in the Ledger marked
+  **VOID**, stops counting towards every figure, its stock goes back on the
+  shelf, and the day report lists it in red.
+- **Refunds** — open any past sale from the Ledger and refund the whole sale or
+  just some items, choosing how many of each go back; an owner or manager
+  authorises it with their password. Stock returns to the shelf automatically,
+  and the refund is stored as its own record naming who handed the money back
+  and who allowed it, so the Ledger, the day's totals and every report net it
+  off. Part of a sale can be refunded now and the rest later, until nothing is
+  left on it, and the refund receipt is shown ready to print.
 - **Stock** — add, edit, and delete products (name, SKU/barcode, category,
   price, cost, quantity on hand). Opening Stock puts the caret straight into the
   filter box, so a product can be typed or scanned without clicking first.
@@ -130,13 +142,13 @@ so there is no browser to install and no Node.js to install.
 - **Sales history, item by item** — Overview has a second subtab beside the
   figures: **History**, every line of every sale and refund as it was rung up,
   newest first, each day banded with what it came to. It shows the time of the
-  sale, the item, how many, the price, what the line came to and how it was
-  paid, and a refund is drawn in red and named back to the sale it came from.
-  Filter it to one day, or type an item's name or a sale number — typing
-  "dog food" brings up every dog-food line in the shop's whole history — and
-  select a line to open its sale, ready to reprint or refund. Like the rest of
-  the Overview it sits behind the Admin Key, so it is not on the till's screen
-  in Client mode.
+  sale, the item, how many, the price, what the line came to, how it was paid
+  and who rang it up (with the authoriser under it on a refund), and a refund is
+  drawn in red and named back to the sale it came from. Filter it to one day, or
+  type an item's name or a sale number — typing "dog food" brings up every
+  dog-food line in the shop's whole history — and select a line to open its
+  sale, ready to reprint or refund. Opening Overview asks for an owner or
+  manager password, so the records are never on a cashier's screen.
 - **Clearing out stock** — the Overview's low-stock list deletes as well as
   reports: **Delete** on a line removes that product, or tick several and use
   **Delete selected**. Both ask before anything goes, and neither touches sales
@@ -162,8 +174,8 @@ so there is no browser to install and no Node.js to install.
   period, it means the products sold in that period have no Cost set —
   Stock flags any product with a R0.00 cost so it's easy to spot and fix.
 - **Setup** — shop name/address/phone (shown on receipts), currency symbol,
-  tax rate, low-stock threshold, categories, Admin Key management, backup
-  export/import, bulk product import, when the day report sends itself,
+  tax rate, low-stock threshold, categories, the staff list and their passwords,
+  backup export/import, bulk product import, when the day report sends itself,
   automatic backups, the Shortcuts screen, and the **Themes** tab: Midnight,
   Purple Galaxy, Green Cosmos, **Moonlight** and **Rust**, three slots to make
   your own from an accent and a night, five fonts, four text sizes, and where
@@ -196,7 +208,7 @@ so there is no browser to install and no Node.js to install.
   one does not go ahead. And every time a day report is actually emailed, a copy
   of that day's sales — item by item, exactly what was sent — is dropped in the
   backups folder as `sales-journal-<date>.json`. Even a full reset done with the
-  Admin Key cannot make a day's trading disappear.
+  manager's password cannot make a day's trading disappear.
 - **Stock edits are recorded, quietly** — a stock figure typed over by hand in
   the product form is written down as it happens: the time, the product, what it
   was and what it became. Nothing on screen mentions it, no message appears and
@@ -211,9 +223,10 @@ so there is no browser to install and no Node.js to install.
   product list" below.
 - **Reset data** — in Setup's Danger Zone, reset just sales & stock (clears
   the Ledger, Overview history, and held sales, and zeroes every product's
-  stock, but keeps products/prices/categories/settings) or reset everything
-  back to a blank install. Both require the Admin Key again to confirm, even
-  if you're already unlocked — see "Resetting data" below.
+  stock, but keeps products/prices/categories/settings and the staff list) or
+  reset everything back to a blank install. Both require a manager password
+  again to confirm, even though Setup is already manager-only — see "Resetting
+  data" below.
 
 There are no discounts in this build — just straightforward pricing plus tax.
 Everything else runs locally: there's no login over a network, no cloud sync,
@@ -245,9 +258,9 @@ The `.xlsx`, `.xls`, `.xlsb`, `.ods` and `.csv` formats are all read.
 ## Resetting data
 
 Setup → Danger Zone has two options, both permanent and both requiring the
-Admin Key to be entered again as a confirmation step — even in the same
-session where you're already unlocked, so a stray click can't wipe anything
-by accident:
+manager's password to be entered again as a confirmation step — even though
+Setup is already manager-only, so a stray click can't wipe anything by
+accident:
 
 - **Reset sales & stock** — clears the Ledger, every Overview history entry,
   and any held sales, and sets every product's stock count to 0. Product
@@ -255,16 +268,17 @@ by accident:
   is meant for "we're doing a fresh physical stock count" or "wipe our test
   data before going live" without having to re-enter the whole catalog.
 - **Reset all data** — wipes everything back to a blank install: products,
-  sales, categories, settings, and the Admin Key itself. Immediately after,
-  the app will ask you to set a new Admin Key, exactly like a first run.
+  sales, categories, settings, the staff list and their passwords. Immediately
+  after, the app will ask you to set up the first account, exactly like a first
+  run.
 
 Both resets take a copy of the data file into the backups folder (the `backups`
 folder beside it) *before* anything is cleared, and a reset that cannot write
 that copy stops rather than going ahead — and both also leave the existing
 exported backups and the day journals alone. So a reset in Setup is never the
-end of the shop's records, even when it is done with the Admin Key: the last
-twelve automatic backups, every day journal, whatever you have exported, and
-the red list of hand changes all still say what happened.
+end of the shop's records, even when it is done with the manager's password: the
+last twelve automatic backups, every day journal, whatever you have exported,
+and the red list of hand changes all still say what happened.
 
 ## Running it
 
@@ -308,11 +322,11 @@ computer's standard app-data folder (on Windows,
 `%APPDATA%\Lyra PoS\lyra-pos-data.json`). Use **Setup → Backup →
 Export backup…** regularly, especially before reinstalling Windows or moving
 to a new computer — copy the exported file somewhere safe (a USB drive or
-cloud folder). **Import backup…** restores from that file. The Admin Key is
-stored as a one-way hash in that same file — nobody, including you, can look
-it up from the file itself, so if it's forgotten there's no built-in
-recovery short of restoring an older backup, using Setup → Danger Zone →
-Reset all data, or editing the data file by hand.
+cloud folder). **Import backup…** restores from that file. Passwords are stored
+as a one-way SHA-256 hash in that same file — nobody, including you, can look
+one up from the file itself, so a forgotten password has no built-in recovery
+short of another manager setting a new one under Setup → Staff & access, or
+restoring an older backup.
 
 Beside that file the app keeps its own automatic backups in a `backups`
 folder — the newest twelve copies, by default one a week (see **Setup →
@@ -337,8 +351,9 @@ Two details worth knowing if you go looking at that file:
   the app refusing to open. Nothing is silently deleted, so a damaged file can
   still be repaired by hand.
 
-The Admin Key hash is computed by the same SHA-256 the app has always used, so a
-key set in *End PoS* or *Immaculate POS* unlocks *Lyra PoS* unchanged.
+Password hashes are computed by the same SHA-256 the app has always used, so a
+key set in *End PoS* or *Immaculate POS* becomes the first manager's password in
+*Lyra PoS* unchanged.
 
 ## Printing receipts
 
@@ -421,9 +436,9 @@ POS Maid is a large, decades-old program with features built up over years
 (time clock/payroll, layaway, gift/credit card processing, appointments and
 scheduling, mailing lists, barcode label printing, multi-currency). This app
 focuses on the core a small shop actually uses day to day: fast checkout,
-barcode scanning, stock, sales history, refunds, and an Admin Key to keep
-Setup and reports away from whoever's on the till. If a bigger feature turns
-out to be needed later, it's worth asking for it specifically so it can be
+barcode scanning, stock, sales history, refunds, voids, and a named sign-in that
+keeps Setup and the records away from whoever's on the till. If a bigger feature
+turns out to be needed later, it's worth asking for it specifically so it can be
 built to match how the shop actually works.
 
 ## Customizing for the shop
@@ -433,35 +448,40 @@ symbol, and tax rate — these appear on every receipt. Then go to **Stock**
 and add the products the shop actually sells (categories can be added from
 Setup → Categories before or as you go).
 
-## Who can see what in Client mode
+## Who can see what
 
-Locking the app keeps the shop's paperwork to yourself without stopping whoever
-is on the till from doing their job.
+The shop's people are set up under **Setup → Staff & access**, each with their
+own name, title and password. Nothing is inherited from whoever used the till
+last: the app opens on the sign-in screen, and leaving a restricted section
+locks it again.
 
-| | Client mode | Unlocked |
-|---|---|---|
-| Till — ring up, scan, hold, take payment | yes | yes |
-| Stock — look up, filter, check what's left | yes | yes |
-| Stock — add, edit or delete a product | yes | yes |
-| Ledger — look up a sale, reprint a receipt | yes | yes |
-| Ledger — refund a sale, whole or partial | yes | yes |
-| Overview, Reports, Setup | asks for the key | yes |
-| Reset sales & stock / Reset all data | asks for the key twice | asks for the key twice |
+| | Cashier | Owner | Manager |
+|---|---|---|---|
+| Till — ring up, scan, hold, take payment, print | yes | yes | yes |
+| Stock — look up, add, edit, delete | — | yes | yes |
+| Ledger — look up a sale, reprint | password each time | password each time | password each time |
+| Overview and its History tab | password each time | password each time | password each time |
+| Refund a sale, whole or partial | authorised password | own password | own password |
+| Void a sale | authorised password | own password | own password |
+| A price for one sale (the ✎) | authorised password | own password | own password |
+| Reports | — | — | yes |
+| Setup, staff, resets, backups | — | — | yes |
 
-So the key keeps your takings reports and your shop settings away from the till,
-not the day-to-day work: staff can still serve, correct stock, and put a refund
-through. The padlock icons next to Overview, Reports and Setup show what's shut.
+"Authorised password" means an owner's or manager's password entered at that
+moment; the sale, refund or void then records both the person who did it and
+the person who allowed it. A cashier who taps a locked section gets the same
+password prompt, and the session becomes the owner's or manager's while that
+section is open — so a cashier never sees the records themselves.
 
-The two Danger Zone resets in Setup are the exception — they ask for the key
-again even when you're already unlocked, so a stray click can't wipe anything.
+Leaving Stock, the Ledger, Overview, Reports or Setup returns the till to the
+sign-in screen, and the Ledger and Overview ask again on every visit. The lists
+that decide this are `ROLE_VIEWS`, `PASSWORD_EVERY_TIME` and `RESTRICTED_VIEWS`
+near the top of `ui/app.js`.
 
-If you would rather staff could *not* change stock or issue refunds without you,
-say so: refunds are gated in `canRefundSale` and stock changes would be gated by
-re-adding the check at the Stock entry points, both in `ui/app.js`.
-
-Choosing a locked view raises the Admin Key prompt and then opens the view you
-asked for, so nothing is more than one password away. The list of locked views
-is `PROTECTED_VIEWS` in `ui/app.js`.
+An install from before sign-ins is not locked out: its one Admin Key becomes
+the first **Manager** account's password, and the account can be renamed (and
+everyone else added) under Setup → Staff & access. Deleting the last manager is
+refused, so there is always someone who can get into Setup.
 
 ## Scanning barcodes
 

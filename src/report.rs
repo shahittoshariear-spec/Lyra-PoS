@@ -103,6 +103,8 @@ pub struct StockEditRow {
     /// The change in the shop's own words — "shelf R199.50 -> R99.00, R100.50
     /// short", "deleted, 12 in stock", "3 items, R450.00, held 12 min".
     pub detail: String,
+    /// Who made the change, as they signed in; empty on an older payload.
+    pub by: String,
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
@@ -245,6 +247,10 @@ pub struct HistorySale {
     pub payment: String,
     #[serde(deserialize_with = "number")]
     pub total: f64,
+    /// Who rang it up, as they signed in; empty on an older payload.
+    pub by: String,
+    /// Who authorised a refund or a price change, when someone did.
+    pub authorised_by: String,
     #[serde(deserialize_with = "list")]
     pub items: Vec<HistoryItem>,
 }
@@ -761,8 +767,12 @@ impl Sheet {
             // second line rather than being cut: which product was changed is the
             // whole point of this section.
             let room = (CONTENT - right_width - 14.0).max(140.0);
+            let who = match edit.by.trim() {
+                "" => String::new(),
+                by => format!(" — {by}"),
+            };
             let lines = wrap_face(
-                &format!("{}  {}", edit.time, edit.name),
+                &format!("{}  {}{}", edit.time, edit.name, who),
                 room,
                 SMALL,
                 Face::Bold,
@@ -1105,11 +1115,21 @@ impl Sheet {
             (true, n) => format!("Refund #{} of #{}", figure(sale.number), figure(n)),
             (false, _) => format!("Sale #{}", figure(sale.number)),
         };
-        let left = [sale.time.trim(), label.as_str(), sale.payment.trim()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("  ·  ");
+        // The line under which a person is answerable: who rang it up, and who
+        // authorised it when that was somebody else.
+        let mut parts: Vec<String> = vec![
+            sale.time.trim().to_string(),
+            label,
+            sale.payment.trim().to_string(),
+        ];
+        parts.retain(|part| !part.is_empty());
+        if !sale.by.trim().is_empty() {
+            parts.push(format!("by {}", sale.by.trim()));
+        }
+        if !sale.authorised_by.trim().is_empty() {
+            parts.push(format!("auth. {}", sale.authorised_by.trim()));
+        }
+        let left = parts.join("  ·  ");
         let right = money(currency, sale.total);
         let right_width = pdf::text_width(&right, BODY, Face::Bold);
         let left = pdf::truncate(
@@ -1428,6 +1448,7 @@ mod tests {
                     from: 24,
                     to: 18,
                     detail: String::new(),
+                    by: "Sarah Dlamini".to_string(),
                 },
                 StockEditRow {
                     time: "14:36".to_string(),
@@ -1435,13 +1456,23 @@ mod tests {
                     from: 0,
                     to: 0,
                     detail: "shelf R199.50 -> R99.00, R100.50 short".to_string(),
+                    by: "Sarah Dlamini, auth. Arif Patel".to_string(),
                 },
                 StockEditRow {
                     time: "15:02".to_string(),
+                    name: "Sale #1039 voided".to_string(),
+                    from: 0,
+                    to: 0,
+                    detail: "R1,240.00".to_string(),
+                    by: "Arif Patel".to_string(),
+                },
+                StockEditRow {
+                    time: "15:06".to_string(),
                     name: "Held sale discarded".to_string(),
                     from: 0,
                     to: 0,
                     detail: "3 items, R450.00, held 12 min".to_string(),
+                    by: "Sarah Dlamini".to_string(),
                 },
                 StockEditRow {
                     time: "09:05".to_string(),
@@ -1449,6 +1480,7 @@ mod tests {
                     from: 60,
                     to: 66,
                     detail: String::new(),
+                    by: "Arif Patel".to_string(),
                 },
             ],
             drawer: Drawer {
@@ -1571,6 +1603,8 @@ mod tests {
             refund_of_number: 0,
             payment: payment.to_string(),
             total,
+            by: "Sarah Dlamini".to_string(),
+            authorised_by: String::new(),
             items,
         }
     }
@@ -1606,6 +1640,8 @@ mod tests {
             refund_of_number: 104,
             payment: "Cash".to_string(),
             total: -199.50,
+            by: "Sarah Dlamini".to_string(),
+            authorised_by: "Arif Patel".to_string(),
             items: vec![HistoryItem {
                 name: "Dog Food 10 kg".to_string(),
                 qty: 1,
@@ -1670,6 +1706,7 @@ mod tests {
             from: 12,
             to: 5,
             detail: String::new(),
+            by: "Arif Patel".to_string(),
         }];
         let (bytes, path) = write(&report, "daily-report-stock-edit.pdf");
         assert!(bytes.starts_with(b"%PDF-"), "{path:?} is not a PDF");
@@ -1791,6 +1828,7 @@ mod tests {
             from: 0,
             to: 0,
             detail: "shelf R199.50 -> R99.00, R100.50 short".to_string(),
+            by: "Sarah Dlamini, auth. Arif Patel".to_string(),
         }];
         let (bytes, path) = write(&report, "daily-report-price-change.pdf");
         let text = String::from_utf8_lossy(&bytes);
@@ -1801,6 +1839,11 @@ mod tests {
         assert!(
             text.contains("shelf R199.50 -> R99.00, R100.50 short"),
             "the change in the shop's own words is missing: {path:?}"
+        );
+        // Who did it, and who allowed it, read as one line on the left.
+        assert!(
+            text.contains("Sarah Dlamini, auth. Arif Patel"),
+            "who made and authorised the change is missing: {path:?}"
         );
     }
 
@@ -1816,6 +1859,7 @@ mod tests {
                 from: 40 - i,
                 to: 12 - i,
                 detail: String::new(),
+                by: "Arif Patel".to_string(),
             })
             .collect();
         let (bytes, path) = write(&report, "daily-report-long-edit.pdf");
@@ -1846,6 +1890,7 @@ mod tests {
                 from: 50,
                 to: 50 - i,
                 detail: String::new(),
+                by: "Arif Patel".to_string(),
             })
             .collect();
         let (bytes, path) = write(&report, "daily-report-many-edits.pdf");
@@ -1945,11 +1990,11 @@ mod tests {
                     "lastSale": "18:10"
                 },
                 "stockEdits": [
-                    {"time": "14:32", "name": "Puppy Food 2kg", "from": 12, "to": 5, "detail": ""},
+                    {"time": "14:32", "name": "Puppy Food 2kg", "from": 12, "to": 5, "detail": "", "by": "Arif Patel"},
                     {"time": "14:36", "name": "Dog Food 10kg (sale #1041)", "from": 0, "to": 0,
-                     "detail": "shelf R199.50 -> R99.00, R100.50 short"},
-                    {"time": "15:02", "name": "Held sale discarded", "from": 0, "to": 0,
-                     "detail": "3 items, R450.00, held 12 min"}
+                     "detail": "shelf R199.50 -> R99.00, R100.50 short", "by": "Sarah, auth. Arif"},
+                    {"time": "15:02", "name": "Sale #1039 voided", "from": 0, "to": 0,
+                     "detail": "R1,240.00", "by": "Arif Patel"}
                 ],
                 "stockCheck": [{"name": "Dog Food 10kg", "sold": 3, "expected": 9, "actual": 5}],
                 "stockCheckSince": "Monday, 22 September 2026, 18:42"
@@ -1962,11 +2007,12 @@ mod tests {
         assert_eq!(report.drawer.first_sale, "07:58");
         assert_eq!(report.stock_edits.len(), 3);
         assert_eq!(report.stock_edits[0].from, 12);
+        assert_eq!(report.stock_edits[0].by, "Arif Patel");
         assert_eq!(
             report.stock_edits[1].detail,
             "shelf R199.50 -> R99.00, R100.50 short"
         );
-        assert_eq!(report.stock_edits[2].name, "Held sale discarded");
+        assert_eq!(report.stock_edits[2].name, "Sale #1039 voided");
         assert_eq!(report.stock_check.len(), 1);
         assert_eq!(report.stock_check[0].sold, 3);
         assert_eq!(report.stock_check[0].expected, 9);
@@ -2025,6 +2071,7 @@ mod tests {
             from: 50,
             to: 12,
             detail: String::new(),
+            by: "Arif Patel".to_string(),
         }];
         let (bytes, path) = write(&report, "daily-report-wrapped-edit.pdf");
         let first = text_y(&bytes, "Heavy-duty galvanised garden");
@@ -2065,6 +2112,15 @@ mod tests {
         assert!(
             text.contains("Puppy Food 2 kg"),
             "an item is missing: {path:?}"
+        );
+        // Every sale line says who rang it up; a refund says who authorised it.
+        assert!(
+            text.contains("by Sarah Dlamini"),
+            "the cashier is missing from the history: {path:?}"
+        );
+        assert!(
+            text.contains("auth. Arif Patel"),
+            "the authoriser is missing from the refund: {path:?}"
         );
         assert!(
             text.contains("\\(continued\\)"),

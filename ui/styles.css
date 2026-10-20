@@ -2205,6 +2205,71 @@ body::after {
   to { transform: scale(1) rotate(0); opacity: 1; }
 }
 
+/* ---------------- Sign-in, staff and voids ---------------- */
+
+.login-overlay {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--space-7);
+  background:
+    radial-gradient(900px 600px at 50% 0%, rgba(var(--blue-rgb), 0.12), transparent 70%),
+    rgba(3, 5, 12, 0.9);
+  backdrop-filter: blur(10px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base);
+}
+.login-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+
+/* The password prompt can open on top of another modal (refunding from a
+   receipt, for one), so it sits above them all — below the sign-in screen. */
+#authModalOverlay, #staffPasswordOverlay { z-index: 70; }
+
+.login-card {
+  width: 430px; max-width: 94vw;
+  background: linear-gradient(165deg, rgba(24, 35, 63, 0.96) 0%, rgba(8, 13, 26, 0.98) 100%);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-11);
+  box-shadow: var(--shadow-modal);
+}
+.login-brand { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--space-8); }
+.login-shop { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; color: #FFFFFF; }
+.login-tag { font-size: var(--text-2xs); letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-dim); }
+.login-card h2 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; margin: 0 0 var(--space-5) 0; color: #FFFFFF; }
+.login-people { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-bottom: var(--space-6); max-height: 240px; overflow-y: auto; }
+.login-person {
+  text-align: left; padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03); color: inherit; font: inherit; cursor: pointer;
+  transition: border-color var(--dur-fast), background-color var(--dur-fast);
+}
+.login-person:hover { border-color: var(--line-strong); background: rgba(var(--blue-rgb), 0.1); }
+.login-person.active { border-color: rgba(var(--blue-bright-rgb), 0.75); background: var(--blue-tint); box-shadow: var(--focus-glow); }
+.login-person-name { display: block; font-weight: 600; color: var(--text-ink); font-size: var(--text-sm); }
+.login-person-role { display: block; margin-top: 2px; font-size: var(--text-2xs); color: var(--text-muted); }
+.login-error { min-height: 18px; margin: var(--space-4) 0; color: var(--rust); font-size: var(--text-sm); }
+.login-btn { width: 100%; justify-content: center; }
+.login-hint { margin: var(--space-5) 0 0 0; font-size: var(--text-2xs); color: var(--text-dim); text-align: center; }
+
+.staff-list { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-7); }
+.staff-row {
+  display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+.staff-who { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 2px; }
+.staff-who b { color: var(--text-ink); font-weight: 600; }
+.staff-role { font-size: var(--text-2xs); color: var(--text-muted); }
+.staff-row .select-input { width: auto; min-width: 110px; }
+.void-tag {
+  display: inline-block; margin-left: var(--space-3); padding: 0 6px;
+  border: 1px solid var(--stamp-red-soft); border-radius: var(--radius-pill);
+  color: var(--stamp-red); font-size: var(--text-3xs); font-weight: 700;
+  letter-spacing: 0.08em; vertical-align: middle;
+}
+.voided-row td { opacity: 0.6; }
+
 /* ---------------- Ledger payment badges ---------------- */
 
 .pay-badge {

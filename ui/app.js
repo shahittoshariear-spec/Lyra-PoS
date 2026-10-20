@@ -7,23 +7,23 @@
   let currentSaleForReceipt = null;
   let currentReceiptIsHistorical = false;
   let editingProductId = null;
-  let unlocked = false;           // session-only; app always boots locked (Client mode)
-  let pendingUnlockView = null;
-  let pendingConfirmAction = null;
+  let session = null;             // { id, name, role } once someone has signed in
   let importParsed = null;        // {fileName, headers, rows}
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-  const PROTECTED_VIEWS = ['dashboard', 'reports', 'settings'];
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '2.5.0';
+  const APP_VERSION = '2.6.0';
   const WHATS_NEW = [
-    ['History, item by item', 'Overview has a History tab: every sale and refund, line by line, with the time it was rung up and how it was paid. Filter it to a day, or type an item to follow it through the whole history.'],
-    ["The day by email, twice over", "Every report email now carries a second PDF — the day's sales, item by item — and a copy of that day's sales is kept in the backups folder as a journal."],
-    ['More in the red list', 'Prices set for one sale, held sales thrown away, products added, changed or deleted, and imports now join the hand-edited stock in the day report, in red.'],
-    ['The drawer, and unaccounted stock', 'The report says what should be in the till at the end of the day, and lists any product whose stock moved without a sale since the last report.'],
+    ['Everyone has their own password', "Cashiers sign in with their own name and password, and every sale, refund, void and stock change is recorded under the person who did it. The till opens on the sign-in screen and locks again when a restricted section is left."],
+    ['Three titles, three jobs', 'A cashier has the till. An owner adds Stock, refunds, voids, price changes and the sales records. A manager has everything, including Setup, reports, the staff list and the resets.'],
+    ['The records ask every time', 'The Ledger and Overview ask for an owner or manager password each time they are opened, and refunds, voids and price changes ask at the moment they happen.'],
+    ['Voids, kept honestly', 'A sale can be voided with an owner or manager password. It stays in the Ledger marked VOID, stops counting towards every figure, and its stock goes back on the shelf.'],
+    ['Who did what, on every record', 'The Ledger, the History tab and the emailed history carry the cashier and the authoriser. The day report’s red list names the person behind every hand change.'],
+    ['Staff & access in Setup', 'Add, rename, re-title, re-password and remove staff under Setup. There is always at least one manager, and an older Admin Key becomes the first manager\'s password.'],
+    ['Unaccounted stock', 'The report says what the till should hold, and lists any product whose stock moved without a sale since the last report was built.'],
     ['Resets keep a copy', 'The Danger Zone takes a backup before it clears anything, so nothing can be wiped clean by accident.']
   ];
 
@@ -150,10 +150,10 @@
     });
   }
 
-  // The Admin Key is hashed on the Rust side, so the stored hash is exactly the
-  // one this app has always written and a key set in an earlier build still
-  // unlocks the till here.
-  function hashAdminKey(text) { return window.pos.hashAdminKey(text); }
+  // The password is hashed on the Rust side, so the stored hash is exactly the
+  // one this app has always written and an Admin Key set in an earlier build
+  // still signs its owner in.
+  function hashPassword(text) { return window.pos.hashPassword(text); }
 
   // ---------------- Navigation ----------------
 
@@ -194,11 +194,7 @@
   }
 
   function attemptSwitchView(view) {
-    if (PROTECTED_VIEWS.includes(view) && !unlocked) {
-      openAdminModal('unlock', view);
-      return;
-    }
-    switchView(view);
+    requestView(view);
   }
 
   const VIEW_ORDER = ['till', 'stock', 'ledger', 'dashboard', 'reports', 'settings'];
@@ -291,105 +287,286 @@
     setInterval(tick, 15000);
   }
 
-  // ---------------- Admin lock / Client mode ----------------
+  // ---------------- People, passwords and what they may do ----------------
 
-  function applyLockUI() {
-    $$('.nav-protected').forEach(b => b.classList.toggle('locked', !unlocked));
+  // Everyone who uses the till signs in with their own password, and the session
+  // decides what is on the screen. Nothing is remembered between runs: closing
+  // the app, signing out, or leaving a restricted section brings the sign-in
+  // screen back.
+
+  const ROLE_TITLES = { manager: 'Manager', owner: 'Owner', cashier: 'Cashier' };
+
+  // What each title may open. The till is the only thing a cashier gets; the
+  // records are what the owner signs in for; the shop's setup belongs to the
+  // manager.
+  const ROLE_VIEWS = {
+    cashier: ['till'],
+    owner: ['till', 'stock', 'ledger', 'dashboard'],
+    manager: ['till', 'stock', 'ledger', 'dashboard', 'reports', 'settings']
+  };
+
+  // Views that ask for a password every single time they are opened, whoever is
+  // already signed in: the shop's sales records.
+  const PASSWORD_EVERY_TIME = ['ledger', 'dashboard'];
+
+  // Views that lock the till again when the person leaves them.
+  const RESTRICTED_VIEWS = ['stock', 'ledger', 'dashboard', 'reports', 'settings'];
+
+  function staffList() { return Array.isArray(DATA.staff) ? DATA.staff : []; }
+
+  function staffName(person) {
+    return [person && person.name, person && person.surname]
+      .map(part => String(part == null ? '' : part).trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  function roleTitle(role) { return ROLE_TITLES[role] || role || 'Cashier'; }
+
+  function canView(role, view) { return (ROLE_VIEWS[role] || []).includes(view); }
+
+  function currentViewName() {
+    const el = document.querySelector('.view.active');
+    return el ? el.id.replace(/^view-/, '') : 'till';
+  }
+
+  function applySessionUI() {
+    $$('.nav-btn').forEach(btn => {
+      const view = btn.dataset.view;
+      btn.classList.toggle('locked', !session || !canView(session.role, view));
+    });
     const btn = $('#lockToggleBtn');
     const icon = $('#lockToggleIcon');
     const label = $('#lockToggleLabel');
-    btn.classList.toggle('is-locked', !unlocked);
-    icon.textContent = unlocked ? '🔓' : '🔒';
-    label.textContent = unlocked ? 'Admin unlocked' : 'Client mode';
+    if (!btn) return;
+    btn.classList.toggle('is-locked', !session);
+    icon.textContent = session ? '👤' : '🔒';
+    label.textContent = session ? session.name : 'Sign in';
+    btn.title = session
+      ? session.name + ' — ' + roleTitle(session.role) + '. Click to sign out.'
+      : 'Sign in';
   }
 
-  function lockApp() {
-    unlocked = false;
-    applyLockUI();
+  // ---------------- Sign-in ----------------
+
+  let loginSelection = null;
+
+  function renderLoginPeople() {
+    const wrap = $('#loginPeople');
+    if (!wrap) return;
+    const people = staffList();
+    wrap.innerHTML = people.map(person =>
+      '<button type="button" class="login-person' + (loginSelection === person.id ? ' active' : '') + '" data-staff="' + escapeHtml(person.id) + '">' +
+        '<span class="login-person-name">' + escapeHtml(staffName(person) || 'Unnamed') + '</span>' +
+        '<span class="login-person-role">' + escapeHtml(roleTitle(person.role)) + '</span>' +
+      '</button>').join('');
+  }
+
+  function showLogin(message) {
+    session = null;
+    loginSelection = null;
+    applySessionUI();
+    const firstRun = staffList().length === 0;
+    // One person on the list: pick them, so the password is all there is to type.
+    if (!firstRun && staffList().length === 1) loginSelection = staffList()[0].id;
+    const overlay = $('#loginOverlay');
+    if (!overlay) return;
+    $('#loginShopName').textContent = (DATA && DATA.settings.shopName) || 'My Shop';
+    $('#loginTitle').textContent = firstRun ? 'Set up the first account' : "Who's on the till?";
+    $('#loginNote').textContent = firstRun
+      ? 'The first account manages the shop. Name it after yourself and add everyone else under Setup → Staff once you are in.'
+      : 'Choose your name, then enter your password.';
+    $('#loginPeople').style.display = firstRun ? 'none' : '';
+    $('#loginPasswordFields').style.display = firstRun ? 'none' : '';
+    $('#loginFirstRun').style.display = firstRun ? '' : 'none';
+    $('#loginBtn').textContent = firstRun ? 'Create account and sign in' : 'Sign in';
+    $('#loginError').textContent = message || '';
+    $('#loginPassword').value = '';
+    $('#loginFirstName').value = '';
+    $('#loginSurname').value = '';
+    $('#loginNewPassword').value = '';
+    $('#loginNewPassword2').value = '';
+    renderLoginPeople();
+    overlay.classList.add('active');
+    setTimeout(() => (firstRun ? $('#loginFirstName') : $('#loginPassword')).focus(), 60);
+  }
+
+  async function signIn() {
+    if (!staffList().length) { await createFirstAccount(); return; }
+    if (!loginSelection) { $('#loginError').textContent = 'Choose your name first.'; return; }
+    const person = staffList().find(p => p.id === loginSelection);
+    if (!person) { $('#loginError').textContent = 'That person is no longer on the list.'; return; }
+    const hash = await hashPassword($('#loginPassword').value);
+    if (hash !== person.password_hash) {
+      $('#loginError').textContent = 'That password is not right.';
+      $('#loginPassword').value = '';
+      $('#loginPassword').focus();
+      return;
+    }
+    session = { id: person.id, name: staffName(person) || 'Manager', role: person.role };
+    $('#loginOverlay').classList.remove('active');
+    applySessionUI();
     switchView('till');
-    toast('Locked to Client mode.');
+    toast('Signed in as ' + session.name + ' (' + roleTitle(session.role) + ').');
   }
 
-  function openAdminModal(mode, targetView, opts) {
-    pendingUnlockView = targetView || null;
-    const overlay = $('#adminModalOverlay');
-    const isCreate = mode === 'create';
-    $('#adminModalTitle').textContent = (opts && opts.title) || (isCreate ? 'Create an Admin Key' : 'Enter Admin Key');
-    $('#adminModalNote').textContent = (opts && opts.note) || (isCreate
-      ? 'Set an Admin Key now — whoever manages the shop will need this to leave Client mode.'
-      : 'Leaving Client mode requires the Admin Key.');
-    $('#adminUnlockFields').style.display = isCreate ? 'none' : 'block';
-    $('#adminCreateFields').style.display = isCreate ? 'block' : 'none';
-    $('#adminCancelBtn').style.display = isCreate ? 'none' : 'inline-flex';
-    $('#adminConfirmBtn').textContent = (opts && opts.confirmLabel) || (isCreate ? 'Save Admin Key' : 'Unlock');
-    $('#adminKeyInput').value = '';
-    $('#adminKeyCreateInput').value = '';
-    $('#adminKeyConfirmInput').value = '';
-    overlay.dataset.mode = mode;
-    openModal(overlay);
-    setTimeout(() => (isCreate ? $('#adminKeyCreateInput') : $('#adminKeyInput')).focus(), 50);
+  async function createFirstAccount() {
+    const name = $('#loginFirstName').value.trim();
+    const surname = $('#loginSurname').value.trim();
+    const password = $('#loginNewPassword').value;
+    const again = $('#loginNewPassword2').value;
+    if (!name) { $('#loginError').textContent = 'A first name is needed.'; return; }
+    if (!password || password.length < 4) { $('#loginError').textContent = 'The password should be at least 4 characters.'; return; }
+    if (password !== again) { $('#loginError').textContent = "Those passwords don't match."; return; }
+    const hash = await hashPassword(password);
+    DATA.staff = [{ id: 'u' + Date.now(), name, surname, role: 'manager', passwordHash: hash }];
+    await persist();
+    session = { id: DATA.staff[0].id, name: staffName(DATA.staff[0]), role: 'manager' };
+    $('#loginOverlay').classList.remove('active');
+    applySessionUI();
+    // Straight to Setup: the shop's own details and the rest of the staff live
+    // there, and this account has everything needed to fill them in.
+    switchView('settings');
+    toast('Manager account made. Add the rest of the staff under Staff & access.');
   }
 
-  // Re-asks for the Admin Key even if already unlocked, then runs `action`.
-  // Used as a step-up confirmation gate in front of destructive operations.
-  function requireAdminConfirmation(action, opts) {
-    pendingConfirmAction = action;
-    openAdminModal('unlock', null, opts);
+  function signOut(message) {
+    session = null;
+    applySessionUI();
+    showLogin(message || '');
   }
 
-  // Stock and the Ledger are wide open in Client mode: whoever is on the till can
-  // check what's left, add or change a product, look a sale up, reprint it, or
-  // hand money back. Only Overview, Reports and Setup are held back, and the
-  // two Danger Zone resets still ask for the key again on top of that (see
-  // requireAdminConfirmation above).
+  // Everything that opens a screen goes through here, so no role can slip past
+  // its permissions — and the sales records ask for a password on every visit,
+  // then lock the till again when they are left.
+  async function requestView(view) {
+    if (!session) { showLogin('Sign in first.'); return false; }
+    if (!canView(session.role, view)) {
+      const person = await askPassword({
+        title: 'Authorised access needed',
+        note: 'This section is for the owner or manager. Enter one of their passwords to open it.',
+        roles: ['owner', 'manager'],
+        confirmLabel: 'Open it'
+      });
+      if (!person) return false;
+      session = { id: person.id, name: staffName(person), role: person.role };
+      applySessionUI();
+      switchView(view);
+      return true;
+    }
 
-  function initAdminModal() {
-    $('#adminCancelBtn').addEventListener('click', () => {
-      pendingConfirmAction = null;
-      closeModal('#adminModalOverlay');
-    });
+    if (PASSWORD_EVERY_TIME.includes(view)) {
+      const person = await askPassword({
+        title: 'Sales records',
+        note: 'Enter an owner or manager password to open the shop\'s sales records.',
+        roles: ['owner', 'manager'],
+        confirmLabel: 'Open the records'
+      });
+      if (!person) return false;
+      // Whoever opened the records is the one signed in while they are up, so a
+      // cashier never reads them over an owner's shoulder.
+      session = { id: person.id, name: staffName(person), role: person.role };
+      applySessionUI();
+    }
 
-    $('#adminConfirmBtn').addEventListener('click', async () => {
-      const overlay = $('#adminModalOverlay');
-      const mode = overlay.dataset.mode;
+    const leavingRestricted = RESTRICTED_VIEWS.includes(currentViewName()) && !RESTRICTED_VIEWS.includes(view);
+    switchView(view);
+    if (leavingRestricted) {
+      // Out of Stock, the Ledger, the records or Setup: the till locks behind
+      // whoever was in there.
+      signOut('The till locked when a restricted section was left. Sign in to carry on.');
+    }
+    return true;
+  }
 
-      if (mode === 'create') {
-        const key = $('#adminKeyCreateInput').value;
-        const confirm = $('#adminKeyConfirmInput').value;
-        if (!key || key.length < 4) { toast('Admin Key should be at least 4 characters.'); return; }
-        if (key !== confirm) { toast("Those don't match. Try again."); return; }
-        DATA.settings.adminKeyHash = await hashAdminKey(key);
-        await persist();
+  // ---------------- The password prompt ----------------
+
+  // Resolved with the person whose password it was, or null when called off.
+  // Opening the sales records, refunding, voiding, changing a price and the
+  // Danger Zone all pass through this one gate.
+  function askPassword(opts) {
+    const options = opts || {};
+    const roles = options.roles || ['owner', 'manager'];
+    const overlay = $('#authModalOverlay');
+    const input = $('#authPassword');
+    const confirm = $('#authConfirmBtn');
+    const cancel = $('#authCancelBtn');
+
+    $('#authModalTitle').textContent = options.title || 'Password needed';
+    $('#authModalNote').textContent = options.note || 'Enter the password of an owner or manager.';
+    confirm.textContent = options.confirmLabel || 'Continue';
+    input.value = '';
+    $('#authError').textContent = '';
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const cleanup = () => {
+        confirm.removeEventListener('click', onConfirm);
+        cancel.removeEventListener('click', onCancel);
+        input.removeEventListener('keydown', onKey);
+        overlay.removeEventListener('click', onBackdrop);
+      };
+      const finish = (person) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         closeModal(overlay);
-        unlocked = true;
-        applyLockUI();
-        toast('Admin Key saved. You are unlocked for this session.');
-      } else {
-        const key = $('#adminKeyInput').value;
-        const hash = await hashAdminKey(key || '');
-        if (hash !== DATA.settings.adminKeyHash) { toast('Incorrect Admin Key.'); return; }
-        closeModal(overlay);
-        unlocked = true;
-        applyLockUI();
-        if (pendingConfirmAction) {
-          const action = pendingConfirmAction;
-          pendingConfirmAction = null;
-          action();
-        } else if (pendingUnlockView) {
-          switchView(pendingUnlockView);
+        resolve(person);
+      };
+      const onConfirm = async () => {
+        const typed = input.value;
+        if (!typed) { $('#authError').textContent = 'Enter a password.'; return; }
+        const hash = await hashPassword(typed);
+        const person = staffList().find(p => roles.includes(p.role) && p.password_hash === hash);
+        if (!person) {
+          $('#authError').textContent = 'That password does not belong to ' +
+            (roles.length === 1 ? 'the ' + roleTitle(roles[0]).toLowerCase() : 'an owner or manager') + '.';
+          input.value = '';
+          input.focus();
+          return;
         }
-        pendingUnlockView = null;
-      }
-    });
+        finish(person);
+      };
+      const onCancel = () => finish(null);
+      const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); onConfirm(); } };
+      const onBackdrop = (e) => { if (e.target === overlay) onCancel(); };
 
-    // Enter key submits whichever field is focused
-    ['adminKeyInput', 'adminKeyConfirmInput'].forEach(id => {
-      $('#' + id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#adminConfirmBtn').click(); });
+      confirm.addEventListener('click', onConfirm);
+      cancel.addEventListener('click', onCancel);
+      input.addEventListener('keydown', onKey);
+      overlay.addEventListener('click', onBackdrop);
+      openModal(overlay);
+      setTimeout(() => input.focus(), 50);
     });
+  }
 
+  // The Danger Zone asks again, even though Setup is already manager-only.
+  async function managerConfirmation(title, note) {
+    return askPassword({
+      title: title || 'Confirm',
+      note: note || 'Enter the manager password to go ahead.',
+      roles: ['manager'],
+      confirmLabel: 'Continue'
+    });
+  }
+
+  function initAuth() {
+    $('#loginPeople').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-staff]');
+      if (!btn) return;
+      loginSelection = btn.dataset.staff;
+      renderLoginPeople();
+      $('#loginPassword').focus();
+    });
+    $('#loginBtn').addEventListener('click', signIn);
+    ['loginPassword', 'loginFirstName', 'loginSurname', 'loginNewPassword', 'loginNewPassword2'].forEach(id => {
+      $('#' + id).addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); signIn(); }
+      });
+    });
     $('#lockToggleBtn').addEventListener('click', () => {
-      if (unlocked) lockApp();
-      else openAdminModal('unlock', null);
+      if (!session) { showLogin(''); return; }
+      signOut('Signed out.');
     });
   }
 
@@ -413,6 +590,9 @@
     const MIN_LEN = 2;         // shop codes can be as short as "A1"
 
     document.addEventListener('keydown', (e) => {
+      // Nobody scans, types or presses a till key from the sign-in screen: the
+      // till is only live for the person signed in to it.
+      if (!session) return;
       const now = Date.now();
       const gap = now - lastTime;
       lastTime = now;
@@ -719,18 +899,28 @@
   }
 
   // The pen on a line: a price for this sale alone, leaving the product's own
-  // price — and every future sale — untouched.
+  // price — and every future sale — untouched. It is the one change on the till
+  // that leaves no other mark, so it waits for an owner or manager every time.
   let priceEditPid = null;
+  let priceEditAuthoriser = null;
 
-  function openPriceEdit(productId) {
+  async function openPriceEdit(productId) {
     const item = cart.find(i => i.productId === productId);
     if (!item) return;
+    const person = await askPassword({
+      title: 'Price change',
+      note: 'A price for this sale alone needs an owner or manager. Enter their password to continue.',
+      roles: ['owner', 'manager'],
+      confirmLabel: 'Allow price change'
+    });
+    if (!person) return;
+    priceEditAuthoriser = { id: person.id, name: staffName(person) };
     priceEditPid = productId;
     const product = DATA.products.find(p => p.id === productId);
     $('#priceEditName').textContent = item.name;
     $('#priceEditNote').textContent = product
-      ? ' — normal price ' + money(product.price) + '. This price is for this sale only.'
-      : '. This price is for this sale only.';
+      ? ' — normal price ' + money(product.price) + '. This price is for this sale only, and the change is recorded.'
+      : '. This price is for this sale only, and the change is recorded.';
     const input = $('#priceEditInput');
     input.value = item.price.toFixed(2);
     $('#priceResetBtn').style.display = lineIsPriceEdited(item) ? '' : 'none';
@@ -744,6 +934,9 @@
     const raw = parseFloat($('#priceEditInput').value);
     if (isNaN(raw) || raw < 0) { toast('Enter a price of 0 or more.'); return; }
     item.price = Math.round(raw * 100) / 100;
+    // The person whose password opened the change travels with the line, so the
+    // sale and the day's red list can both say who allowed it.
+    item.priceAuthorisedBy = priceEditAuthoriser ? priceEditAuthoriser.name : '';
     renderCart(item.productId);
     closeModal('#priceModalOverlay');
     toast('Price for this sale: ' + money(item.price) + '.');
@@ -754,6 +947,7 @@
     if (!item) { closeModal('#priceModalOverlay'); return; }
     const product = DATA.products.find(p => p.id === item.productId);
     if (product) item.price = product.price;
+    delete item.priceAuthorisedBy;
     renderCart(item.productId);
     closeModal('#priceModalOverlay');
     toast('Back to the normal price.');
@@ -1158,7 +1352,10 @@
       total: t.total,
       paymentMethod: method,
       tendered: tendered,
-      change: change
+      change: change,
+      // Every sale is recorded under the person signed in to the till.
+      cashierId: session ? session.id : '',
+      cashier: session ? session.name : ''
     };
     if (cashPaid != null) { sale.cashPaid = cashPaid; sale.cardPaid = cardPaid; }
 
@@ -1174,18 +1371,31 @@
       // A price set for this one sale and not the shelf's own leaves no other
       // mark anywhere: the till charges less, the report shows less, and only
       // the customer saw what they paid. It is written down here, against the
-      // sale it happened on.
-      sale.items.forEach(li => {
+      // sale it happened on, with whoever allowed it.
+      cart.forEach(li => {
         const p = DATA.products.find(pp => pp.id === li.productId);
         if (!p || Math.abs((p.price || 0) - li.price) < 0.005) return;
         const short = ((p.price || 0) - li.price) * li.qty;
         logChange(
           'price',
           li.name + ' (sale #' + sale.number + ')',
-          'shelf ' + money(p.price) + ' -> ' + money(li.price) + ', ' +
-            money(Math.abs(short)) + (short >= 0 ? ' short' : ' over')
+          money(li.price) + ' not ' + money(p.price) + ' (' + money(Math.abs(short)) +
+            (short >= 0 ? ' short)' : ' over)'),
+          [session ? session.name : '', li.priceAuthorisedBy ? 'auth. ' + li.priceAuthorisedBy : '']
+            .filter(Boolean).join(', ')
         );
       });
+
+      // The sale itself carries who allowed its price changes, so the records
+      // can be read without the log.
+      const priceAuthorisers = Array.from(new Set(cart
+        .filter(li => {
+          const p = DATA.products.find(pp => pp.id === li.productId);
+          return p && Math.abs((p.price || 0) - li.price) >= 0.005;
+        })
+        .map(li => li.priceAuthorisedBy)
+        .filter(Boolean)));
+      if (priceAuthorisers.length) sale.authorisedBy = priceAuthorisers.join(', ');
 
       DATA.sales.push(sale);
       await persist();
@@ -1229,24 +1439,85 @@
       .filter(line => line.remaining > 0);
   }
 
-  // Offered on any past sale with something left to hand back. No Admin Key is
-  // wanted: a refund is a normal part of a day on the till.
+  // Offered on any past sale with something left to hand back. Money going back
+  // over the counter needs an owner or manager at the till, every time — even if
+  // one of them is already the one signed in.
   function canRefundSale(sale) {
-    return !!sale && sale.type !== 'return' && refundableLines(sale).length > 0;
+    return !!sale && sale.type !== 'return' && !sale.voidedAt && refundableLines(sale).length > 0;
   }
 
   let refundTarget = null;
   let refundQty = new Map();   // productId -> quantity to hand back
+  let refundAuthoriser = null;
 
-  function openRefundModal(sale) {
+  async function openRefundModal(sale) {
     const lines = refundableLines(sale);
     if (!lines.length) { toast('There is nothing left to refund on this sale.'); return; }
+    const person = await askPassword({
+      title: 'Refund needs authorisation',
+      note: 'Enter an owner or manager password to refund sale #' + sale.number + '.',
+      roles: ['owner', 'manager'],
+      confirmLabel: 'Authorise refund'
+    });
+    if (!person) return;
+    refundAuthoriser = { id: person.id, name: staffName(person) };
     refundTarget = sale;
     // Start with everything selected — the common case is a full refund.
     refundQty = new Map(lines.map(l => [l.item.productId, l.remaining]));
     $('#refundModalTitle').textContent = 'Refund sale #' + sale.number;
     renderRefundLines();
     openModal('#refundModalOverlay');
+  }
+
+  // A void takes a sale out of every figure and puts its stock back. It stays in
+  // the Ledger, marked, because the record of it happening is the point. Only a
+  // sale with nothing refunded off it can be voided — a part-refunded sale is a
+  // refund's job.
+  function saleHasRefunds(sale) {
+    return DATA.sales.some(r => r.type === 'return' && r.refundOf === sale.id);
+  }
+
+  function canVoidSale(sale) {
+    return !!sale && sale.type !== 'return' && !sale.voidedAt && !saleHasRefunds(sale) &&
+      Array.isArray(sale.items) && sale.items.length > 0;
+  }
+
+  async function voidSale(sale) {
+    if (!canVoidSale(sale)) { toast('This sale cannot be voided.'); return; }
+    const person = await askPassword({
+      title: 'Void sale #' + sale.number,
+      note: 'A void stops the sale counting towards anything and puts its stock back. Enter an owner or manager password.',
+      roles: ['owner', 'manager'],
+      confirmLabel: 'Authorise void'
+    });
+    if (!person) return;
+    const ok = await confirmDialog(
+      'Void sale #' + sale.number + '?',
+      'The sale stays in the Ledger marked VOID, stops counting towards every figure, and its stock goes back on the shelf. ' + money(sale.total) + '.',
+      'Void sale'
+    );
+    if (!ok) return;
+
+    (sale.items || []).forEach(li => {
+      const p = DATA.products.find(pp => pp.id === li.productId);
+      if (p) p.stock += li.qty;
+    });
+    sale.voidedAt = new Date().toISOString();
+    sale.voidedBy = staffName(person);
+    sale.voidedById = person.id;
+    logChange(
+      'void',
+      'Sale #' + sale.number + ' voided',
+      money(sale.total),
+      [session ? session.name : '', 'auth. ' + staffName(person)].filter(Boolean).join(', ')
+    );
+    await persist();
+    closeModal('#receiptModalOverlay');
+    renderCatalog();
+    if ($('#view-stock').classList.contains('active')) renderStock();
+    if ($('#view-ledger').classList.contains('active')) renderLedger();
+    if ($('#view-dashboard').classList.contains('active')) renderDashboard();
+    toast('Sale #' + sale.number + ' voided. Stock went back on the shelf.');
   }
 
   // Tax is apportioned from the original sale rather than recalculated from the
@@ -1345,7 +1616,12 @@
       total: -totals.total,
       paymentMethod: sale.paymentMethod,
       tendered: -totals.total,
-      change: 0
+      change: 0,
+      // Who handed the money back, and who allowed it. Both are on the record
+      // for good.
+      cashierId: session ? session.id : '',
+      cashier: session ? session.name : '',
+      authorisedBy: refundAuthoriser ? refundAuthoriser.name : ''
     };
     if (typeof sale.cashPaid === 'number') {
       // A split sale is refunded off both halves in the proportion they were
@@ -1363,6 +1639,7 @@
     });
 
     DATA.sales.push(refund);
+    refundAuthoriser = null;
     await persist();
     renderCatalog();
     if ($('#view-stock').classList.contains('active')) renderStock();
@@ -1410,6 +1687,19 @@
       lines.push('Sale #' + sale.number);
     }
     lines.push(new Date(sale.date).toLocaleString());
+    // Who is answerable for it. The receipt is the customer's copy, but the
+    // shop's own record carries the same names in the Ledger and the report.
+    if (isReturn) {
+      if (sale.cashier) lines.push('Refunded by: ' + sale.cashier);
+      if (sale.authorisedBy) lines.push('Authorised by: ' + sale.authorisedBy);
+    } else {
+      if (sale.cashier) lines.push('Served by: ' + sale.cashier);
+      if (sale.authorisedBy) lines.push('Price change ok: ' + sale.authorisedBy);
+      if (sale.voidedAt) {
+        lines.push('*** VOID ***');
+        if (sale.voidedBy) lines.push('Voided by: ' + sale.voidedBy);
+      }
+    }
     lines.push('-'.repeat(32));
     sale.items.forEach(li => {
       lines.push(li.name);
@@ -1514,10 +1804,12 @@
     if (isReturn) preview.classList.add('printing-refund');
     $('#receiptModalTitle').textContent = isReturn
       ? 'Refund #' + sale.number
-      : (currentReceiptIsHistorical ? 'Sale #' + sale.number : 'Sale complete');
+      : (sale.voidedAt ? 'Sale #' + sale.number + ' — VOID'
+        : (currentReceiptIsHistorical ? 'Sale #' + sale.number : 'Sale complete'));
     $('#receiptModalOverlay .modal-receipt').classList.toggle('fresh-sale', fresh);
     const canRefund = currentReceiptIsHistorical && canRefundSale(sale);
     $('#receiptRefundBtn').style.display = canRefund ? 'inline-flex' : 'none';
+    $('#receiptVoidBtn').style.display = currentReceiptIsHistorical && canVoidSale(sale) ? 'inline-flex' : 'none';
     $('#receiptPrintBtn').textContent = currentReceiptIsHistorical ? 'Reprint receipt' : 'Print receipt';
     openModal('#receiptModalOverlay');
   }
@@ -1539,6 +1831,9 @@
     });
     $('#receiptRefundBtn').addEventListener('click', () => {
       if (currentSaleForReceipt) openRefundModal(currentSaleForReceipt);
+    });
+    $('#receiptVoidBtn').addEventListener('click', () => {
+      if (currentSaleForReceipt) voidSale(currentSaleForReceipt);
     });
   }
 
@@ -1883,7 +2178,8 @@
       productId: product.id,
       name: product.name,
       from: from,
-      to: to
+      to: to,
+      by: session ? session.name : ''
     });
     // Newest last. A till that runs for months must not grow this without end.
     if (DATA.stockLog.length > STOCK_LOG_MAX) {
@@ -1906,13 +2202,14 @@
 
   const CHANGE_LOG_MAX = 600;
 
-  function logChange(kind, name, detail) {
+  function logChange(kind, name, detail, by) {
     if (!Array.isArray(DATA.changeLog)) DATA.changeLog = [];
     DATA.changeLog.push({
       at: new Date().toISOString(),
       kind: kind,
       name: name,
-      detail: detail
+      detail: detail,
+      by: by == null ? (session ? session.name : '') : by
     });
     if (DATA.changeLog.length > CHANGE_LOG_MAX) {
       DATA.changeLog.splice(0, DATA.changeLog.length - CHANGE_LOG_MAX);
@@ -2082,7 +2379,7 @@
     const t = computePeriodTotals(todayKey, 'day');
     const month = computePeriodTotals(periodKeyFromDayKey(todayKey, 'month'), 'month');
 
-    const records = DATA.sales.filter(s => s.date.slice(0, 10) === todayKey);
+    const records = DATA.sales.filter(s => !s.voidedAt && s.date.slice(0, 10) === todayKey);
     const refunded = records
       .filter(s => s.type === 'return')
       .reduce((sum, s) => sum + Math.abs(s.total), 0);
@@ -2130,17 +2427,18 @@
     const handChanges = [
       (Array.isArray(DATA.stockLog) ? DATA.stockLog : [])
         .filter(e => (e.at || '').slice(0, 10) === todayKey)
-        .map(e => ({ at: e.at, name: e.name, from: e.from, to: e.to, detail: '' })),
+        .map(e => ({ at: e.at, name: e.name, from: e.from, to: e.to, detail: '', by: e.by || '' })),
       (Array.isArray(DATA.changeLog) ? DATA.changeLog : [])
         .filter(e => (e.at || '').slice(0, 10) === todayKey)
-        .map(e => ({ at: e.at, name: e.name, from: 0, to: 0, detail: e.detail || '' }))
+        .map(e => ({ at: e.at, name: e.name, from: 0, to: 0, detail: e.detail || '', by: e.by || '' }))
     ].sort((a, b) => String(a.at).localeCompare(String(b.at)));
     const stockEdits = handChanges.map(e => ({
       time: stockEditTime(e.at),
       name: e.name,
       from: e.from,
       to: e.to,
-      detail: e.detail
+      detail: e.detail,
+      by: e.by
     }));
 
     // The cash side of the day: what came in over the counter, what went back,
@@ -2240,6 +2538,8 @@
     // stock off the shelf, refunds put it back.
     const moved = new Map();
     DATA.sales.forEach(sale => {
+      // A voided sale's stock went out and came back; it explains nothing.
+      if (sale.voidedAt) return;
       if (!(Date.parse(sale.date) > at)) return;
       const sign = sale.type === 'return' ? -1 : 1;
       (sale.items || []).forEach(li => {
@@ -2273,7 +2573,7 @@
     const todayKey = dayKeyAgo(0);
     const t = computePeriodTotals(todayKey, 'day');
     const records = DATA.sales
-      .filter(s => s.date.slice(0, 10) === todayKey)
+      .filter(s => !s.voidedAt && s.date.slice(0, 10) === todayKey)
       // Oldest first: a history reads the way the day happened.
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -2301,6 +2601,10 @@
           refundOfNumber: isReturn ? (sale.refundOfNumber || 0) : 0,
           payment: sale.paymentMethod || '',
           total: sale.total || 0,
+          // Who rang it up, and who authorised a refund or a price change above
+          // them: the audit trail, carried into the emailed history.
+          by: sale.cashier || '',
+          authorisedBy: sale.authorisedBy || '',
           // A refund's own lines carry the money going back as a negative, so
           // the history reads the same way the totals do.
           items: (sale.items || []).map(li => ({
@@ -2558,7 +2862,17 @@
 
   function onTill() { return $('#view-till').classList.contains('active'); }
 
-  function goTill() { if (!onTill()) switchView('till'); }
+  function goTill() { if (!onTill()) requestView('till'); }
+
+  // Runs a till action once the till is really in front of the person. Leaving a
+  // restricted screen can lock the till, and a charge dialog must never open
+  // behind the sign-in screen.
+  function afterTill(action) {
+    if (onTill()) { action(); return; }
+    requestView('till').then(() => {
+      if (onTill() && !$('#loginOverlay').classList.contains('active')) action();
+    });
+  }
 
   function runShortcut(id) {
     switch (id) {
@@ -2567,44 +2881,48 @@
         attemptSwitchView(id.slice(4).toLowerCase());
         return;
       case 'tillFocus':
-        goTill();
-        focusScanTarget();
+        afterTill(() => focusScanTarget());
         return;
       case 'tillCharge':
-        goTill();
-        if ($('#chargeBtn').disabled) toast('Nothing on the till to charge yet.');
-        else openChargeModal();
+        afterTill(() => {
+          if ($('#chargeBtn').disabled) toast('Nothing on the till to charge yet.');
+          else openChargeModal();
+        });
         return;
       case 'tillHold':
-        goTill();
-        if ($('#holdBtn').disabled) toast('Nothing on the till to hold yet.');
-        else $('#holdBtn').click();
+        afterTill(() => {
+          if ($('#holdBtn').disabled) toast('Nothing on the till to hold yet.');
+          else $('#holdBtn').click();
+        });
         return;
       case 'tillClear':
-        goTill();
-        if ($('#clearCartBtn').disabled) toast('The till is already empty.');
-        else $('#clearCartBtn').click();
+        afterTill(() => {
+          if ($('#clearCartBtn').disabled) toast('The till is already empty.');
+          else $('#clearCartBtn').click();
+        });
         return;
       case 'tillHide':
-        goTill();
-        $('#hideItemsBtn').click();
+        afterTill(() => $('#hideItemsBtn').click());
         return;
       case 'tillEmail':
         emailDayReport();
         return;
       case 'stockAdd':
-        attemptSwitchView('stock');
-        openProductModal(null);
+        requestView('stock').then(opened => { if (opened) openProductModal(null); });
         return;
       case 'stockClearFilter':
-        attemptSwitchView('stock');
-        $('#stockSearch').value = '';
-        renderStock();
+        requestView('stock').then(opened => {
+          if (!opened) return;
+          $('#stockSearch').value = '';
+          renderStock();
+        });
         return;
       case 'stockDelete':
-        attemptSwitchView('stock');
-        if (selectedStockIds.size) $('#stockBulkDeleteBtn').click();
-        else toast('Nothing is ticked in Stock.');
+        requestView('stock').then(opened => {
+          if (!opened) return;
+          if (selectedStockIds.size) $('#stockBulkDeleteBtn').click();
+          else toast('Nothing is ticked in Stock.');
+        });
         return;
     }
   }
@@ -2640,6 +2958,7 @@
 
       const combo = comboFrom(e);
       if (!combo) return;
+      if (!session) return;             // nothing fires from the sign-in screen
       const hit = shortcutMap()[combo];
       if (!hit) return;
       if (isForeignTypingField(document.activeElement) && !shortcutIsSafe(combo)) return;
@@ -2981,6 +3300,13 @@
     return '<span class="pay-badge ' + cls + '">' + escapeHtml(method || '—') + '</span>';
   }
 
+  // Who rang it up, and who authorised a refund or price change above them.
+  function byCell(sale) {
+    const who = sale.cashier || '—';
+    const auth = sale.authorisedBy;
+    return escapeHtml(who) + (auth ? '<div class="row-sub">auth. ' + escapeHtml(auth) + '</div>' : '');
+  }
+
   // The band that sits above a day's sales in the Ledger: how many trips to the
   // till that day was, cash, card and the ones paid both ways. No money here —
   // the day's takings are the Overview's job, and the shop reads these three
@@ -3005,7 +3331,7 @@
       parts.push(chip('day-other', 'Other', day.otherCount,
         groupedInt(day.otherCount) + (day.otherCount === 1 ? ' sale' : ' sales') + ' paid some other way'));
     }
-    return '<tr class="ledger-day"><td colspan="6">' +
+    return '<tr class="ledger-day"><td colspan="7">' +
       '<div class="ledger-day-inner">' +
         '<span class="ledger-day-name">' + escapeHtml(periodLabel(dayKey, 'day')) + '</span>' +
         '<span class="ledger-day-split">' + parts.join('') + '</span>' +
@@ -3021,7 +3347,7 @@
     if (dateVal) sales = sales.filter(s => s.date.slice(0, 10) === dateVal);
 
     if (!sales.length) {
-      body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:26px;">No sales recorded yet.</td></tr>';
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:26px;">No sales recorded yet.</td></tr>';
       return;
     }
 
@@ -3047,8 +3373,8 @@
         dayTotals.set(key, day);
       }
       // Money going back moves the money but is not a sale, so a refund is left
-      // out of the counts.
-      if (entry.type === 'return') return;
+      // out of the counts — and a voided sale no longer is one.
+      if (entry.type === 'return' || entry.voidedAt) return;
       const cash = saleCashPart(entry) !== 0;
       const card = saleCardPart(entry) !== 0;
       if (cash) day.cashCount += 1;
@@ -3067,24 +3393,26 @@
       }
       const itemCount = sale.items.reduce((n, i) => n + i.qty, 0);
       const isReturn = sale.type === 'return';
+      const isVoid = !!sale.voidedAt;
       const original = isReturn ? findSaleById(sale.refundOf) : null;
       const originalNumber = isReturn ? (sale.refundOfNumber || (original && original.number)) : null;
       const label = isReturn
         ? 'Refund #' + sale.number + (originalNumber ? ' <span class="row-sub">of #' + originalNumber + '</span>' : '')
-        : '#' + sale.number;
+        : '#' + sale.number + (isVoid ? ' <span class="void-tag">VOID</span>' : '');
       rowsHtml +=
-        '<tr data-id="' + sale.id + '">' +
+        '<tr data-id="' + sale.id + '"' + (isVoid ? ' class="voided-row"' : '') + '>' +
           '<td>' + label + '</td>' +
           '<td>' + new Date(sale.date).toLocaleString() + '</td>' +
           '<td>' + itemCount + '</td>' +
-          '<td class="num" style="' + (isReturn ? 'color:var(--stamp-red);' : '') + '">' + money(sale.total) + '</td>' +
+          '<td class="num" style="' + (isReturn || isVoid ? 'color:var(--stamp-red);' : '') + '">' + money(sale.total) + '</td>' +
           '<td>' + paymentBadge(sale.paymentMethod) + '</td>' +
+          '<td>' + byCell(sale) + '</td>' +
           '<td><span class="row-link" data-action="print">Reprint</span> <span class="row-link" data-action="view">View</span></td>' +
         '</tr>';
     });
     if (sales.length > shownSales.length) {
       const next = Math.min(MAX_LEDGER_ROWS, sales.length - shownSales.length);
-      rowsHtml += `<tr class="table-more"><td colspan="6">
+      rowsHtml += `<tr class="table-more"><td colspan="7">
         Showing the newest ${shownSales.length} of ${sales.length} entries.
         <button type="button" class="table-more-btn" data-more="ledger">Show ${next} more</button>
         <span class="table-more-hint">or filter by date to narrow the list.</span>
@@ -3186,7 +3514,9 @@
   }
 
   function computePeriodTotals(key, period) {
-    const records = DATA.sales.filter(s => periodKeyFromDayKey(s.date.slice(0, 10), period) === key);
+    // A voided sale stays in the records, but it is no longer part of the day's
+    // trade: it counts towards nothing.
+    const records = DATA.sales.filter(s => !s.voidedAt && periodKeyFromDayKey(s.date.slice(0, 10), period) === key);
     const saleRecords = records.filter(s => s.type !== 'return');
     const returnRecords = records.filter(s => s.type === 'return');
     const total = records.reduce((s, r) => s + r.total, 0);
@@ -3472,7 +3802,7 @@
     renderPaymentSplit('#paymentSplitToday', t, 'No sales in this period yet.');
     renderSalesChart(period);
 
-    const periodSales = DATA.sales.filter(s => s.type !== 'return' && periodKeyFromDayKey(s.date.slice(0, 10), period) === currentKey);
+    const periodSales = DATA.sales.filter(s => s.type !== 'return' && !s.voidedAt && periodKeyFromDayKey(s.date.slice(0, 10), period) === currentKey);
     const tally = {};
     periodSales.forEach(sale => sale.items.forEach(li => { tally[li.name] = (tally[li.name] || 0) + li.qty; }));
     const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -3551,7 +3881,7 @@
       chip('', 'Items', groupedInt(day.items), groupedInt(day.items) + ' items sold'),
       chip('', 'Takings', moneyGrouped(day.takings), 'What the day came to, refunds off')
     ];
-    return '<tr class="ledger-day"><td colspan="7">' +
+    return '<tr class="ledger-day"><td colspan="8">' +
       '<div class="ledger-day-inner">' +
         '<span class="ledger-day-name">' + escapeHtml(periodLabel(dayKey, 'day')) + '</span>' +
         '<span class="ledger-day-split">' + parts.join('') + '</span>' +
@@ -3598,16 +3928,20 @@
         day = { sales: 0, refunds: 0, items: 0, takings: 0 };
         dayTotals.set(dayKey, day);
       }
-      if (sale.type === 'return') day.refunds += 1;
-      else day.sales += 1;
-      day.takings += sale.total || 0;
+      // A voided sale's lines are still shown — the record of what was rung up
+      // is the point — but they are no longer part of the day's trade.
+      if (!sale.voidedAt) {
+        if (sale.type === 'return') day.refunds += 1;
+        else day.sales += 1;
+        day.takings += sale.total || 0;
+      }
       items.forEach(li => {
-        day.items += li.qty;
+        if (!sale.voidedAt) day.items += li.qty;
         lines.push({ sale, li });
       });
     });
 
-    const columns = 7;
+    const columns = 8;
     if (!lines.length) {
       body.innerHTML = '<tr><td colspan="' + columns + '" style="text-align:center;color:var(--text-muted);padding:26px;">' +
         (query || dateVal ? 'Nothing in the history matches that.' : 'No sales recorded yet.') + '</td></tr>';
@@ -3624,15 +3958,16 @@
         rowsHtml += historyDayBand(dayKey, dayTotals.get(dayKey));
       }
       const isReturn = sale.type === 'return';
+      const isVoid = !!sale.voidedAt;
       const original = isReturn ? findSaleById(sale.refundOf) : null;
       const originalNumber = isReturn ? (sale.refundOfNumber || (original && original.number)) : null;
       const saleLabel = isReturn
         ? 'Refund #' + sale.number + (originalNumber ? ' <span class="row-sub">of #' + originalNumber + '</span>' : '')
-        : '#' + sale.number;
+        : '#' + sale.number + (isVoid ? ' <span class="void-tag">VOID</span>' : '');
       const lineTotal = (li.lineTotal != null ? li.lineTotal : (li.price || 0) * li.qty) * (isReturn ? -1 : 1);
       const time = new Date(sale.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       rowsHtml +=
-        '<tr data-id="' + sale.id + '">' +
+        '<tr data-id="' + sale.id + '"' + (isVoid ? ' class="voided-row"' : '') + '>' +
           '<td>' + escapeHtml(time) + '</td>' +
           '<td>' + saleLabel + '</td>' +
           '<td>' + escapeHtml(li.name || '') + '</td>' +
@@ -3640,6 +3975,7 @@
           '<td class="num">' + money(li.price) + '</td>' +
           '<td class="num" style="' + (isReturn ? 'color:var(--stamp-red);' : '') + '">' + money(lineTotal) + '</td>' +
           '<td>' + paymentBadge(sale.paymentMethod) + '</td>' +
+          '<td>' + byCell(sale) + '</td>' +
         '</tr>';
     });
     if (lines.length > shown.length) {
@@ -3670,7 +4006,7 @@
   }
 
   function computeItemsSoldForPeriod(currentKey, period) {
-    const records = DATA.sales.filter(s => periodKeyFromDayKey(s.date.slice(0, 10), period) === currentKey);
+    const records = DATA.sales.filter(s => !s.voidedAt && periodKeyFromDayKey(s.date.slice(0, 10), period) === currentKey);
     const map = {};
     records.forEach(sale => {
       const sign = sale.type === 'return' ? -1 : 1;
@@ -4126,9 +4462,6 @@
     $('#setCurrency').value = s.currency;
     $('#setTaxRate').value = s.taxRate;
     $('#setLowStock').value = s.lowStockThreshold;
-    $('#setCurrentKey').value = '';
-    $('#setNewKey').value = '';
-    $('#setConfirmKey').value = '';
     $('#setReportEmail').value = s.reportEmail || '';
     $('#setMailFrom').value = s.mailFrom || '';
     // The App Password is never sent back to the screen; the line underneath
@@ -4143,6 +4476,7 @@
     refreshBackupStatus();
     refreshMailStatus();
     renderSettingsCategoryChips();
+    renderStaffList();
     renderPrinterSetting();
   }
 
@@ -4231,6 +4565,146 @@
     if ($('#view-stock').classList.contains('active')) renderStock();
     renderCatalog();
     toast(inUse ? 'Category deleted, products moved to ' + fallback + '.' : 'Category deleted.');
+  }
+
+  // ---------------- Staff (Setup → Staff & access) ----------------
+
+  let staffPasswordTarget = null;
+
+  function countManagers() {
+    return staffList().filter(p => p.role === 'manager').length;
+  }
+
+  function renderStaffList() {
+    const list = $('#staffList');
+    if (!list) return;
+    const people = staffList();
+    list.innerHTML = people.length
+      ? people.map(person =>
+          '<div class="staff-row" data-staff="' + escapeHtml(person.id) + '">' +
+            '<span class="staff-who"><b>' + escapeHtml(staffName(person) || 'Unnamed') + '</b>' +
+              '<span class="staff-role">' + escapeHtml(roleTitle(person.role)) +
+              (session && session.id === person.id ? ' · you' : '') + '</span></span>' +
+            '<select class="select-input" data-role="' + escapeHtml(person.id) + '" title="What this person may do">' +
+              ['cashier', 'owner', 'manager'].map(role =>
+                '<option value="' + role + '"' + (person.role === role ? ' selected' : '') + '>' + roleTitle(role) + '</option>'
+              ).join('') +
+            '</select>' +
+            '<button class="btn btn-ghost btn-sm" data-pass="' + escapeHtml(person.id) + '">Password…</button>' +
+            '<button class="btn btn-ghost btn-sm" data-remove="' + escapeHtml(person.id) + '">Remove</button>' +
+          '</div>').join('')
+      : '<p class="panel-note">No one on the list yet.</p>';
+  }
+
+  async function addStaffMember() {
+    const name = $('#staffName').value.trim();
+    const surname = $('#staffSurname').value.trim();
+    const role = $('#staffRole').value;
+    const password = $('#staffPassword').value;
+    if (!name) { toast('A first name is needed.'); return; }
+    if (!password || password.length < 4) { toast('The password should be at least 4 characters.'); return; }
+    DATA.staff.push({
+      id: 'u' + Date.now(),
+      name: name,
+      surname: surname,
+      role: role,
+      passwordHash: await hashPassword(password)
+    });
+    await persist();
+    $('#staffName').value = '';
+    $('#staffSurname').value = '';
+    $('#staffPassword').value = '';
+    renderStaffList();
+    toast(name + (surname ? ' ' + surname : '') + ' added as ' + roleTitle(role) + '.');
+  }
+
+  async function changeStaffRole(id, role) {
+    const person = staffList().find(p => p.id === id);
+    if (!person || person.role === role) return;
+    if (person.role === 'manager' && countManagers() <= 1) {
+      toast('There must always be one manager.');
+      renderStaffList();
+      return;
+    }
+    person.role = role;
+    await persist();
+    if (session && session.id === id) {
+      // The title changed under the person using it: sign them out so the new
+      // permissions take effect from the sign-in screen.
+      signOut('Your title was changed. Sign in again.');
+      return;
+    }
+    renderStaffList();
+    toast((staffName(person) || 'That person') + ' is now ' + roleTitle(role) + '.');
+  }
+
+  async function removeStaffMember(id) {
+    const person = staffList().find(p => p.id === id);
+    if (!person) return;
+    if (person.role === 'manager' && countManagers() <= 1) {
+      toast('There must always be one manager.');
+      return;
+    }
+    const ok = await confirmDialog(
+      'Remove ' + (staffName(person) || 'this person') + '?',
+      'They can no longer sign in. Their past sales, refunds and records stay exactly as they are.',
+      'Remove'
+    );
+    if (!ok) return;
+    DATA.staff = staffList().filter(p => p.id !== id);
+    await persist();
+    if (session && session.id === id) {
+      signOut('Your account was removed. Sign in with another one.');
+      return;
+    }
+    renderStaffList();
+    toast('Removed ' + (staffName(person) || 'that account') + '.');
+  }
+
+  function openStaffPassword(id) {
+    const person = staffList().find(p => p.id === id);
+    if (!person) return;
+    staffPasswordTarget = id;
+    $('#staffPasswordTitle').textContent = 'New password for ' + (staffName(person) || 'this person');
+    $('#staffPasswordNew').value = '';
+    $('#staffPasswordConfirm').value = '';
+    openModal('#staffPasswordOverlay');
+    setTimeout(() => $('#staffPasswordNew').focus(), 50);
+  }
+
+  async function saveStaffPassword() {
+    const person = staffList().find(p => p.id === staffPasswordTarget);
+    if (!person) { closeModal('#staffPasswordOverlay'); return; }
+    const next = $('#staffPasswordNew').value;
+    const again = $('#staffPasswordConfirm').value;
+    if (!next || next.length < 4) { toast('The password should be at least 4 characters.'); return; }
+    if (next !== again) { toast("Those passwords don't match."); return; }
+    person.passwordHash = await hashPassword(next);
+    await persist();
+    closeModal('#staffPasswordOverlay');
+    toast('Password changed for ' + (staffName(person) || 'that person') + '.');
+  }
+
+  function initStaffPanel() {
+    if (!$('#staffAddBtn')) return;
+    $('#staffAddBtn').addEventListener('click', addStaffMember);
+    $('#staffList').addEventListener('click', (e) => {
+      const remove = e.target.closest('[data-remove]');
+      if (remove) { removeStaffMember(remove.dataset.remove); return; }
+      const pass = e.target.closest('[data-pass]');
+      if (pass) openStaffPassword(pass.dataset.pass);
+    });
+    $('#staffList').addEventListener('change', (e) => {
+      const sel = e.target.closest('[data-role]');
+      if (sel) changeStaffRole(sel.dataset.role, sel.value);
+    });
+    $('#staffPasswordSaveBtn').addEventListener('click', saveStaffPassword);
+    $('#staffPasswordCancelBtn').addEventListener('click', () => closeModal('#staffPasswordOverlay'));
+    ['staffPasswordNew', 'staffPasswordConfirm'].forEach(id => {
+      $('#' + id).addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); saveStaffPassword(); }
+      });
+    });
   }
 
   function initSettingsView() {
@@ -4397,6 +4871,7 @@
       });
     });
     initAppearanceControls();
+    initStaffPanel();
 
     $('#testPrintBtn').addEventListener('click', async () => {
       const printer = $('#setPrinter').value;
@@ -4408,20 +4883,6 @@
       );
       if (res && res.ok) toast('Test receipt sent to ' + printer + '.');
       else toast('Could not print: ' + ((res && res.error) || 'unknown error'));
-    });
-
-    $('#changeAdminKeyBtn').addEventListener('click', async () => {
-      const current = $('#setCurrentKey').value;
-      const next = $('#setNewKey').value;
-      const confirmVal = $('#setConfirmKey').value;
-      const currentHash = await hashAdminKey(current || '');
-      if (currentHash !== DATA.settings.adminKeyHash) { toast('Current Admin Key is incorrect.'); return; }
-      if (!next || next.length < 4) { toast('New Admin Key should be at least 4 characters.'); return; }
-      if (next !== confirmVal) { toast("New keys don't match."); return; }
-      DATA.settings.adminKeyHash = await hashAdminKey(next);
-      await persist();
-      $('#setCurrentKey').value = ''; $('#setNewKey').value = ''; $('#setConfirmKey').value = '';
-      toast('Admin Key updated.');
     });
 
     $('#addCategoryBtn').addEventListener('click', async () => {
@@ -4457,8 +4918,9 @@
       if (!DATA.heldSales) DATA.heldSales = [];
       applyShopIdentity();
       refreshHeldButton();
-      switchView('dashboard');
-      toast('Backup imported.');
+      // The file may carry a different staff list from the one signed in now, so
+      // the safe thing is to start again at the sign-in screen.
+      showLogin('Backup imported. Sign in with the passwords that came with it.');
     });
 
     $('#importProductsBtn').addEventListener('click', startProductImport);
@@ -4472,26 +4934,30 @@
         'Reset sales & stock'
       );
       if (!ok) return;
-      requireAdminConfirmation(performResetSalesStock, {
-        title: 'Confirm reset',
-        note: 'Enter your Admin Key to reset sales & stock.',
-        confirmLabel: 'Reset sales & stock'
-      });
+      // Setup is manager-only already; the reset asks for the manager's password
+      // again so a stray click can never wipe the shop.
+      const person = await managerConfirmation(
+        'Confirm reset',
+        'Enter the manager password to reset sales & stock.'
+      );
+      if (!person) return;
+      await performResetSalesStock();
     });
 
     $('#resetAllBtn').addEventListener('click', async () => {
       const ok = await confirmDialog(
         'Reset ALL data?',
-        "This wipes products, sales, categories, settings, and the Admin Key itself back to a blank install. " +
+        "This wipes products, sales, categories, settings, the staff list and their passwords back to a blank install. " +
         "A backup of the shop's data is taken to the backups folder first.",
         'Reset all data'
       );
       if (!ok) return;
-      requireAdminConfirmation(performResetAll, {
-        title: 'Confirm full reset',
-        note: 'Enter your Admin Key to reset everything back to a blank install.',
-        confirmLabel: 'Reset all data'
-      });
+      const person = await managerConfirmation(
+        'Confirm full reset',
+        'Enter the manager password to reset everything back to a blank install.'
+      );
+      if (!person) return;
+      await performResetAll();
     });
   }
 
@@ -4520,13 +4986,13 @@
     }
     DATA = res.data;
     cart = [];
-    unlocked = false;
-    applyLockUI();
     applyShopIdentity();
     refreshHeldButton();
-    switchView('till');
+    applySessionUI();
+    // The staff list went with everything else: the sign-in screen asks for the
+    // first account again.
+    showLogin('All data was reset. Set up the first account.');
     toast('All data has been reset.');
-    openAdminModal('create', null);
   }
 
   function applyShopIdentity() {
@@ -4649,7 +5115,6 @@
     if (!Array.isArray(DATA.reportQueue)) DATA.reportQueue = [];
     if (!Array.isArray(DATA.stockLog)) DATA.stockLog = [];
     if (!Array.isArray(DATA.changeLog)) DATA.changeLog = [];
-    if (!DATA.settings.adminKeyHash) DATA.settings.adminKeyHash = '';
     // A file written before this batch has no slots in it, and a shop should
     // never be shown an empty row of squares to fill in.
     if (!Array.isArray(DATA.settings.customThemes) || DATA.settings.customThemes.length < DEFAULT_CUSTOM_THEMES.length) {
@@ -4663,7 +5128,7 @@
     initSegGliders();
     updateNavPill();
     initClock();
-    initAdminModal();
+    initAuth();
     initBarcodeScanning();
     initCatalogToggle();
     initHeldSales();
@@ -4714,7 +5179,7 @@
     });
     $('#clearCartBtn').addEventListener('click', () => { cart = []; renderCart(); });
 
-    applyLockUI();
+    applySessionUI();
     refreshHeldButton();
     renderCatalog();
     renderCart();
@@ -4724,9 +5189,9 @@
       ov.addEventListener('click', (e) => { if (e.target === ov) closeModal(ov); });
     });
 
-    if (!DATA.settings.adminKeyHash) {
-      openAdminModal('create', null);
-    }
+    // Every launch starts at the sign-in screen: none of the till's permissions
+    // are inherited from whoever used the machine last.
+    showLogin('');
 
     hideSplash();
   }

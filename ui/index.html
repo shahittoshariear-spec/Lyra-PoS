@@ -99,11 +99,11 @@
         <button class="nav-btn active" data-view="till" title="Till">
           <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.4" /><circle cx="12" cy="12" r="3.2" /></svg></span> Till
         </button>
-        <button class="nav-btn" data-view="stock" title="Stock">
-          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.4 19.6 8.4v7.2L12 19.6 4.4 15.6V8.4z" /><path d="M4.4 8.4 12 12.4l7.6-4M12 12.4v7.2" /></svg></span> Stock
+        <button class="nav-btn nav-protected" data-view="stock" title="Stock">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.4 19.6 8.4v7.2L12 19.6 4.4 15.6V8.4z" /><path d="M4.4 8.4 12 12.4l7.6-4M12 12.4v7.2" /></svg></span> Stock <span class="nav-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.4" /><path d="M8.4 11V8a3.6 3.6 0 0 1 7.2 0v3" /></svg></span>
         </button>
-        <button class="nav-btn" data-view="ledger" title="Ledger">
-          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.6" y="3.6" width="14.8" height="16.8" rx="2.6" /><path d="M8.4 8.6h7.2M8.4 12h7.2M8.4 15.4h4.2" /></svg></span> Ledger
+        <button class="nav-btn nav-protected" data-view="ledger" title="Ledger">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.6" y="3.6" width="14.8" height="16.8" rx="2.6" /><path d="M8.4 8.6h7.2M8.4 12h7.2M8.4 15.4h4.2" /></svg></span> Ledger <span class="nav-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.4" /><path d="M8.4 11V8a3.6 3.6 0 0 1 7.2 0v3" /></svg></span>
         </button>
         <button class="nav-btn nav-protected" data-view="dashboard" title="Overview">
           <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2" /><rect x="13" y="4" width="7" height="7" rx="2" /><rect x="4" y="13" width="7" height="7" rx="2" /><rect x="13" y="13" width="7" height="7" rx="2" /></svg></span> Overview <span class="nav-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.4" /><path d="M8.4 11V8a3.6 3.6 0 0 1 7.2 0v3" /></svg></span>
@@ -117,8 +117,8 @@
       </div>
 
       <div class="sidebar-foot">
-        <button class="lock-toggle" id="lockToggleBtn" title="Lock and return to Client mode">
-          <span id="lockToggleIcon">🔓</span> <span id="lockToggleLabel">Admin unlocked</span>
+        <button class="lock-toggle" id="lockToggleBtn" title="Sign in">
+          <span id="lockToggleIcon">🔒</span> <span id="lockToggleLabel">Sign in</span>
         </button>
         <div class="clock" id="clock">--:--</div>
         <div class="shop-name-mini" id="shopNameMini">My Shop</div>
@@ -248,6 +248,7 @@
                 <th>Items</th>
                 <th class="num">Total</th>
                 <th>Payment</th>
+                <th>By</th>
                 <th></th>
               </tr>
             </thead>
@@ -376,6 +377,7 @@
                     <th class="num">Price</th>
                     <th class="num">Line</th>
                     <th>Paid</th>
+                    <th>By</th>
                   </tr>
                 </thead>
                 <tbody id="historyLogBody"></tbody>
@@ -560,13 +562,26 @@
             </div>
           </div>
 
-          <div class="panel">
-            <h2>Security</h2>
-            <p class="panel-note">The Admin Key protects Stock, Ledger, Overview, and Setup from Client mode. Anyone at the till can still ring up sales without it.</p>
-            <label class="field"><span>Current Admin Key</span><input type="password" id="setCurrentKey" autocomplete="off" /></label>
-            <label class="field"><span>New Admin Key</span><input type="password" id="setNewKey" autocomplete="off" /></label>
-            <label class="field"><span>Confirm new Admin Key</span><input type="password" id="setConfirmKey" autocomplete="off" /></label>
-            <button class="btn btn-primary" id="changeAdminKeyBtn">Update Admin Key</button>
+          <div class="panel panel-full">
+            <h2>Staff &amp; access</h2>
+            <p class="panel-note">Everyone signs in with their own password, and every sale, refund, void and stock change is recorded under the person who did it. <b>Managers</b> can do everything, including Setup, reports and resets. <b>Owners</b> can use the till, Stock, refunds, voids, price changes and the sales records. <b>Cashiers</b> can use the till.</p>
+            <div class="staff-list" id="staffList"></div>
+            <div class="field-row">
+              <label class="field"><span>First name</span><input type="text" id="staffName" autocomplete="off" /></label>
+              <label class="field"><span>Surname</span><input type="text" id="staffSurname" autocomplete="off" /></label>
+            </div>
+            <div class="field-row">
+              <label class="field"><span>Title</span>
+                <select id="staffRole">
+                  <option value="cashier">Cashier</option>
+                  <option value="owner">Owner</option>
+                  <option value="manager">Manager</option>
+                </select>
+              </label>
+              <label class="field"><span>Password</span><input type="password" id="staffPassword" autocomplete="off" /></label>
+            </div>
+            <button class="btn btn-primary" id="staffAddBtn">Add person</button>
+            <p class="panel-note">There must always be at least one manager. Removing someone never touches the sales and records they already made.</p>
           </div>
 
         <div class="panel panel-full">
@@ -711,25 +726,34 @@
     </div>
   </div>
 
-  <!-- Admin key modal (create on first run, or unlock to leave client mode) -->
-  <div class="modal-overlay" id="adminModalOverlay">
+  <!-- Password prompt: opening the sales records, refunding, voiding, changing
+       a price and the Danger Zone all pass through here. -->
+  <div class="modal-overlay" id="authModalOverlay">
     <div class="modal modal-narrow">
-      <h2 id="adminModalTitle">Enter Admin Key</h2>
-      <p class="panel-note" id="adminModalNote">Leaving Client mode requires the Admin Key.</p>
-
-      <div id="adminUnlockFields">
-        <label class="field"><span>Admin Key</span><input type="password" id="adminKeyInput" autocomplete="off" /></label>
-      </div>
-
-      <div id="adminCreateFields" style="display:none;">
-        <label class="field"><span>Choose an Admin Key</span><input type="password" id="adminKeyCreateInput" autocomplete="off" /></label>
-        <label class="field"><span>Confirm Admin Key</span><input type="password" id="adminKeyConfirmInput" autocomplete="off" /></label>
-      </div>
-
+      <h2 id="authModalTitle">Password needed</h2>
+      <p class="panel-note" id="authModalNote">Enter the password of an owner or manager.</p>
+      <label class="field"><span>Password</span><input type="password" id="authPassword" autocomplete="off" /></label>
+      <p class="login-error" id="authError"></p>
       <div class="modal-actions">
-        <div class="modal-actions-right" id="adminModalActions">
-          <button class="btn btn-ghost" id="adminCancelBtn">Cancel</button>
-          <button class="btn btn-primary" id="adminConfirmBtn">Unlock</button>
+        <button class="btn btn-ghost" id="authCancelBtn">Cancel</button>
+        <div class="modal-actions-right">
+          <button class="btn btn-primary" id="authConfirmBtn">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- A manager setting a new password for someone on the staff list. -->
+  <div class="modal-overlay" id="staffPasswordOverlay">
+    <div class="modal modal-narrow">
+      <h2 id="staffPasswordTitle">New password</h2>
+      <p class="panel-note">Four characters or more. You can tell the person afterwards; nothing shows it on screen.</p>
+      <label class="field"><span>New password</span><input type="password" id="staffPasswordNew" autocomplete="off" /></label>
+      <label class="field"><span>Confirm new password</span><input type="password" id="staffPasswordConfirm" autocomplete="off" /></label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="staffPasswordCancelBtn">Cancel</button>
+        <div class="modal-actions-right">
+          <button class="btn btn-primary" id="staffPasswordSaveBtn">Save password</button>
         </div>
       </div>
     </div>
@@ -825,6 +849,7 @@
       <h2 id="receiptModalTitle">Sale complete</h2>
       <div class="receipt-preview" id="receiptPreview"></div>
       <div class="modal-actions">
+        <button class="btn btn-danger" id="receiptVoidBtn" style="display:none;">Void sale…</button>
         <button class="btn btn-danger" id="receiptRefundBtn" style="display:none;">Refund items…</button>
         <div class="modal-actions-right">
           <button class="btn btn-ghost" id="receiptCloseBtn">Close</button>
@@ -889,6 +914,40 @@
   <!-- Where a receipt is put so the system's own print dialog can reach it.
        Hidden on screen; the print stylesheet shows this and nothing else. -->
   <pre id="printRoot" aria-hidden="true"></pre>
+
+  <!-- The sign-in screen. The app opens here, and comes back here whenever
+       someone signs out or leaves a restricted section. -->
+  <div class="login-overlay active" id="loginOverlay">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="login-shop" id="loginShopName">My Shop</div>
+        <div class="login-tag">Lyra PoS</div>
+      </div>
+      <h2 id="loginTitle">Who's on the till?</h2>
+      <p class="panel-note" id="loginNote">Choose your name, then enter your password.</p>
+
+      <div class="login-people" id="loginPeople"></div>
+
+      <div id="loginPasswordFields">
+        <label class="field"><span>Password</span><input type="password" id="loginPassword" autocomplete="off" /></label>
+      </div>
+
+      <div id="loginFirstRun" style="display:none;">
+        <div class="field-row">
+          <label class="field"><span>First name</span><input type="text" id="loginFirstName" autocomplete="off" /></label>
+          <label class="field"><span>Surname</span><input type="text" id="loginSurname" autocomplete="off" /></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Password</span><input type="password" id="loginNewPassword" autocomplete="off" /></label>
+          <label class="field"><span>Confirm password</span><input type="password" id="loginNewPassword2" autocomplete="off" /></label>
+        </div>
+      </div>
+
+      <p class="login-error" id="loginError"></p>
+      <button class="btn btn-primary login-btn" id="loginBtn">Sign in</button>
+      <p class="login-hint">Every sale, refund and stock change is recorded under the person signed in.</p>
+    </div>
+  </div>
 
   <script src="bridge.js"></script>
   <script src="starfield.js"></script>

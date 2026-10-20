@@ -32,10 +32,10 @@
 
     saveData: (data) => call('save_data', { data }),
 
-    // The Admin Key is hashed here rather than in the page, so the stored hash
-    // is exactly the one the app has always used and a key set in the old
-    // version still unlocks this one.
-    hashAdminKey: (key) => call('hash_admin_key', { key: String(key == null ? '' : key) }),
+    // Passwords are hashed here rather than in the page, so the stored hash is
+    // exactly the one the app has always written, and an Admin Key set in an
+    // earlier build still signs its owner in.
+    hashPassword: (password) => call('hash_password', { password: String(password == null ? '' : password) }),
 
     // The resets take a copy of the data file into the backups folder before
     // they clear anything, so they can answer with an error instead of wiping
