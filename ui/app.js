@@ -15,11 +15,9 @@
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '2.7.1';
+  const APP_VERSION = '2.7.2';
   const WHATS_NEW = [
-    ['Overview, Reports and Setup are the owner\'s', "A manager keeps the till, Stock, the Ledger, refunds, voids and price changes, but the shop's figures and settings now need the owner signed in. A manager cannot open them with a password."],
-    ['One owner, always kept', "The last owner cannot be removed or re-titled. A shop from an earlier version whose only account was a manager has that account made the owner once, so nobody is locked out of Setup."],
-    ['The new mark, everywhere', 'The installed app and its shortcut carry the new Lyra icon.']
+    ['The daily email sends again', "A hand-change or stock-check row with a blank name no longer crashes the report task. The row is drawn without a name and the email goes out."]
   ];
 
   function money(n) {

@@ -772,7 +772,12 @@ impl Sheet {
                 by => format!(" — {by}"),
             };
             let lines = wrap_face(
-                &format!("{}  {}{}", edit.time, edit.name, who),
+                &format!(
+                    "{}  {}{}",
+                    edit.time,
+                    shown_name(&edit.name, "Unnamed product"),
+                    who
+                ),
                 room,
                 SMALL,
                 Face::Bold,
@@ -780,7 +785,7 @@ impl Sheet {
             );
             self.needs(LEAD + 4.0 + LEAD * (lines.len().saturating_sub(1)) as f64);
             self.page
-                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &lines[0]);
+                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, first_line(&lines));
             self.page
                 .text_colour(RIGHT - right_width, self.y, SMALL, Face::Bold, RED, &right);
             if lines.len() > 1 {
@@ -830,10 +835,16 @@ impl Sheet {
             let right = pdf::truncate(&detail, FIGURE_COLUMN, SMALL, Face::Bold);
             let right_width = pdf::text_width(&right, SMALL, Face::Bold);
             let room = (CONTENT - right_width - 14.0).max(140.0);
-            let lines = wrap_face(&row.name, room, SMALL, Face::Bold, 2);
+            let lines = wrap_face(
+                shown_name(&row.name, "Unnamed product"),
+                room,
+                SMALL,
+                Face::Bold,
+                2,
+            );
             self.needs(LEAD + 4.0 + LEAD * (lines.len().saturating_sub(1)) as f64);
             self.page
-                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, &lines[0]);
+                .text_colour(MARGIN, self.y, SMALL, Face::Bold, RED, first_line(&lines));
             self.page
                 .text_colour(RIGHT - right_width, self.y, SMALL, Face::Bold, RED, &right);
             if lines.len() > 1 {
@@ -1164,7 +1175,7 @@ impl Sheet {
     /// cut: which item sold is the whole point of the sheet.
     fn history_item(&mut self, item: &HistoryItem, currency: &str, ink: Option<(f64, f64, f64)>) {
         let qty = figure(item.qty);
-        let name = item.name.trim();
+        let name = shown_name(&item.name, "Unnamed item");
         let label = if item.qty != 1 && item.price != 0.0 {
             format!("{} x {}  @ {}", qty, name, money(currency, item.price))
         } else {
@@ -1182,7 +1193,7 @@ impl Sheet {
             SMALL,
             Face::Regular,
             0.05,
-            &lines[0],
+            first_line(&lines),
         );
         self.written(
             ink,
@@ -1374,7 +1385,29 @@ fn wrap_face(text: &str, width: f64, size: f64, face: Face, most: usize) -> Vec<
     if !line.is_empty() {
         lines.push(line);
     }
+    // A blank name is still a row on the report. Returning no lines here is
+    // what made `lines[0]` panic on a shop whose hand-change log held an empty
+    // name, and the same guard is cheaper than trusting every caller forever.
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
     lines
+}
+
+/// The first line of a wrapped label, or an empty string if there is none.
+fn first_line(lines: &[String]) -> &str {
+    lines.first().map(String::as_str).unwrap_or("")
+}
+
+/// A name for a report row: the shop's own, or a plain fallback when an older
+/// record carries none. Better a readable row than a blank one.
+fn shown_name<'a>(name: &'a str, fallback: &'a str) -> &'a str {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        fallback
+    } else {
+        trimmed
+    }
 }
 
 #[cfg(test)]
@@ -1730,6 +1763,55 @@ mod tests {
         assert!(
             text.contains("0.720 0.050 0.050 rg"),
             "the line is not red: {path:?}"
+        );
+    }
+
+    #[test]
+    fn an_empty_hand_change_name_does_not_break_the_report() {
+        // A shop whose hand-change log holds a blank name used to panic the
+        // email task at `lines[0]`, so the report never rendered at all.
+        let mut report = quiet_day();
+        report.stock_edits = vec![StockEditRow {
+            time: String::new(),
+            name: String::new(),
+            from: 0,
+            to: 0,
+            detail: String::new(),
+            by: String::new(),
+        }];
+        report.stock_check = vec![StockCheckRow {
+            name: String::new(),
+            sold: 0,
+            expected: 0,
+            actual: 0,
+        }];
+
+        let (bytes, path) = write(&report, "daily-report-empty-name.pdf");
+        assert!(bytes.starts_with(b"%PDF-"), "{path:?} is not a PDF");
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("CHANGES THE TAKINGS CANNOT ACCOUNT FOR"),
+            "the hand-change section is missing: {path:?}"
+        );
+        assert!(
+            text.contains("UNACCOUNTED STOCK"),
+            "the stock-check section is missing: {path:?}"
+        );
+        assert!(
+            text.contains("Unnamed product"),
+            "a blank name should read as a fallback rather than disappear: {path:?}"
+        );
+    }
+
+    #[test]
+    fn empty_text_still_wraps_to_one_line() {
+        assert_eq!(
+            wrap_face("", 100.0, SMALL, Face::Regular, 2),
+            vec![String::new()]
+        );
+        assert_eq!(
+            wrap_face("   ", 100.0, SMALL, Face::Regular, 2),
+            vec![String::new()]
         );
     }
 

@@ -13,12 +13,11 @@
 >    splash screen): Lyra's four-pointed star with its cyan-to-violet ring, on
 >    the deep indigo sky.
 > 3. **Versions move in single `0.01` steps**, with a major update now and
->    then — this build is `v2.33`: the app's own mark and icon set redrawn, a
->    short title sequence on startup, the maker's mark (S.S) carried into the
->    top tab bar, and figures read at a glance grouped with commas throughout
->    the Overview — over the v2.3 work (Moonlight and Rust, three theme slots of
->    your own, screens across the top, the silent stock audit) and everything
->    under it.
+>    then — this build is `v2.7.2`: owner-only figures and settings, the named
+>    audit trail, the History tab and its PDF, the sale chime, the email-report
+>    fix, and a smoother interface over the v2.3 work (Moonlight and Rust,
+>    three theme slots of your own, screens across the top, the silent stock
+>    audit) and everything under it.
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -33,15 +32,15 @@
 > - **Performance.** No browser engine is bundled and no Node.js runs behind the
 >   screens. The window is the system's own webview, every machine-facing job
 >   (files, backups, printing, spreadsheets) is compiled Rust, and the app is a
->   single ~10 MB executable instead of a folder of hundreds.
+>   single executable of about 12 MB instead of a folder of hundreds.
 > - **Consistency.** One binary that behaves the same on every machine, with the
 >   data file written atomically, so an interrupted save can never leave a
 >   half-written file behind. It always opens: a file it cannot read is set aside
 >   rather than being a reason to fail.
-- **Security.** The screens can reach exactly the commands the app defines,
-and nothing else: no remote content and no scripting bridge into the
-operating system. The only thing the app itself reaches over the network is
-the shop's own mail server, and only when a report is emailed.
+> - **Security.** The screens can reach exactly the commands the app defines,
+>   and nothing else: no remote content and no scripting bridge into the
+>   operating system. The only thing the app itself reaches over the network is
+>   the shop's own mail server, and only when a report is emailed.
 >
 > Your data comes with you — see "Where the data lives" below.
 
@@ -54,6 +53,35 @@ everything that touches the machine — the data file, backups, spreadsheet
 imports, and printing — is Rust, behind [Tauri](https://tauri.app). On Windows
 the window is rendered by the WebView2 runtime that ships with Windows 10 and 11,
 so there is no browser to install and no Node.js to install.
+
+## Current release: v2.7.2
+
+- **2.7.2** — The daily email no longer panics on a hand-change or
+  stock-check row with a blank name. A wrapped label now always keeps at least
+  one line, so the report renders, the attachment is built, and the email goes
+  out.
+- **2.7.1** — Overview, Reports and Setup are owner-only; managers keep the
+  till, Stock and the Ledger. The last owner cannot be removed or re-titled,
+  and a shop whose staff list had no owner (an older install with only
+  managers, for example) has its first manager made the owner once. The
+  installed app and its shortcut carry the new Lyra icon.
+- **2.7.0** — A signed-in owner or manager is no longer asked for a password on
+  every screen; a cashier still needs authorisation for refunds, voids, price
+  changes and the sections their title cannot open. Adds the sale-complete
+  water-drop chime with a permanent switch in **Setup → Till sound**, nine
+  fonts, a smoother motion pass, and the new icon throughout.
+- **2.6.x** — Named sign-in with cashier, manager and owner titles; audit
+  fields naming who did and authorised each sale, refund, void and stock edit;
+  voids that put stock back; and the fix that lets an older Admin Key
+  (including `1234`) sign in.
+- **2.5.0** — Overview → **History**, item by item, and the second
+  `sales-history-<date>.pdf` in the day's email; an extended red list
+  (sale-only prices, discarded holds, product changes, imports); the cash
+  drawer and first/last sale; the unaccounted-stock check; and a backup before
+  every reset.
+
+The in-app notes are `WHATS_NEW` at the top of `ui/app.js`; the published
+release and its setup, MSI and portable files are on GitHub.
 
 ## What it does
 
@@ -183,9 +211,11 @@ so there is no browser to install and no Node.js to install.
   backup export/import, bulk product import, when the day report sends itself,
   automatic backups, the Shortcuts screen, the sale chime, and the **Themes**
   tab: Midnight, Purple Galaxy, Green Cosmos, **Moonlight** and **Rust**, three
-  slots to make your own from an accent and a night, nine fonts, four text
-  sizes, and where the screens sit — down the side, or **across the top** as
-  browser-style tabs. Everything applies the moment it is picked.
+  slots to make your own from an accent and a night, nine fonts (Segoe UI,
+  Calibri, Candara, Trebuchet MS, Verdana, Georgia, Cambria, Cascadia Mono and
+  Consolas), four text sizes, and where the screens sit — down the side, or
+  **across the top** as browser-style tabs. Everything applies the moment it is
+  picked.
 - **A chime when a sale lands** — the till plays a soft water-drop sound as the
   receipt appears, so the counter knows the sale went through even with the
   receipt turned away. **Setup → Till sound** turns it off for good, and the
@@ -327,6 +357,23 @@ installer on Windows, etc.) unless you set up cross-building separately. The
 app's icon (`icons/icon.ico` and `icons/icon.png`) is already wired up in
 `tauri.conf.json`, so the installer and the installed app carry it
 automatically — nothing extra to configure.
+
+Lyra PoS is built and tested on Windows. The thermal-printer, page-printing and
+Credential Manager code is Windows-first, so the macOS and Linux bundles are not
+a supported target yet even though Tauri can produce them.
+
+### Releasing a build
+
+1. Bump the version in `Cargo.toml`, `tauri.conf.json` and `APP_VERSION` at the
+   top of `ui/app.js`, and rewrite `WHATS_NEW` in the same file.
+2. `cargo fmt --check && cargo test && cargo tauri build`.
+3. Copy `target/release/lyra-pos.exe` and both installers into `release/`
+   under the versioned names. For the machine you are working on, copy the exe
+   over the installed one rather than running the NSIS setup silently; the
+   silent installer hangs.
+4. Commit, tag `v<version>`, push `main --tags`, and create a GitHub Release
+   with the setup, MSI and portable exe attached. A pushed tag is not a
+   GitHub Release on its own.
 
 ## Where the data lives
 
@@ -534,6 +581,8 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 |---|---|
 | `ui/` | The screens: `index.html`, `styles.css`, `app.js`, `bridge.js` |
 | `ui/app-icon.png` | The mark as the screens draw it — the brand, the title sequence, the window icon |
+| `ui/sale-complete.mp3` | The water-drop chime played when a sale completes |
+| `icons/` | The Windows app icon: `icon.ico` and `icon.png`; `ui/app-icon.png` is the copy the screens use |
 | `ui/charts.js` | The Overview's graphs — the takings/profit line and the payment-split ring |
 | `src/main.rs` | The commands the screens can call, and the window setup |
 | `src/data.rs` | The shape of the saved data, and reading/writing it |
@@ -544,25 +593,62 @@ scanner down if it's typing too fast for the till; the app copes with gaps up to
 | `src/report.rs` | Laying the day's report and the sales history out as PDFs |
 | `src/pdf.rs` | The small PDF writer the report is drawn with |
 | `src/mail.rs` | Emailing the report through the shop's own Gmail account |
-| `src/bridge.js` | The one place the screens talk to the machine |
+| `ui/bridge.js` | The one place the screens talk to the machine |
 
 Everything a shop actually sees is in `ui/`. The Rust half deliberately holds no
 prices, no totals and no receipt layout — it moves bytes and files, and the
 arithmetic stays where it can be read alongside the screen that shows it.
 
+## If you rebuild this elsewhere
+
+The screens are replaceable; the records are not. A port to another UI toolkit
+should keep these:
+
+- **The data file** — `%APPDATA%\Lyra PoS\lyra-pos-data.json`, camelCase JSON,
+  written atomically. The shape is in `src/data.rs`; the top-level keys are
+  `settings`, `staff`, `categories`, `products`, `sales`, `heldSales`,
+  `nextSaleNumber`, `nextProductId`, `reportQueue`, `lastBackupAt`,
+  `lastAutoReport`, `stockLog`, `changeLog`, `stockSnapshot` and
+  `heldProduct`.
+- **The roles** — a **cashier** starts with the till; a **manager** adds Stock,
+  the Ledger, refunds, voids and price changes; an **owner** has everything,
+  including Overview, Reports and Setup. The last owner cannot be removed or
+  demoted. The screen gate is `ROLE_VIEWS`, `canView` and `requestView` in
+  `ui/app.js`; a port should enforce the same matrix, preferably in its core
+  rather than only in the UI.
+- **The audit fields** — `cashier` and `cashierId` on a sale or refund;
+  `authorisedBy` when someone else allowed it; `voidedAt`, `voidedBy` and
+  `voidedById` on a void; `by` on `stockLog` and `changeLog`; and the
+  `stockSnapshot` that catches stock moved with no record at all. Never drop
+  these when editing a record.
+- **The money** — totals, tax apportioning, refund apportioning, period
+  buckets and receipt layout are in `ui/app.js`; the Rust half deliberately
+  does no arithmetic. Keep one implementation and test it.
+- **The two PDFs** — the day report and `sales-history-<date>.pdf`, both
+  attached to the same email and built from the same records.
+- **Printing** — direct ESC/POS through `src/escpos.rs` and `src/printing.rs`,
+  with the system print dialog as the fallback. Receipts are 32 columns.
+- **The settings** — `saleSound`, the nine font choices, five themes plus three
+  custom slots, text size, `navLayout`, `receiptWidth`, the shortcuts and
+  `seenVersion` all live in `settings`.
+- **The tests** — `cargo test` covers the data, PDFs, mail, import and ESC/POS.
+  There is no UI test suite, so a port needs its own before it replaces this
+  one.
+
 ## Checking your changes
 
 ```bash
+cargo fmt --check
 cargo test
 ```
 
-This runs the tests for the Rust half — the data file (including that a file
-written by an older version still loads, and that a return round-trips as
-`"type":"return"`), the ESC/POS builder (accents, line endings, the cut, and
-that a combining accent prints as `é` rather than `?`), and the column-matching
-for spreadsheet imports (including that a "SupplyPrice" column becomes Cost
-rather than Price). It exits non-zero if anything fails, so it is safe to use as
-a build gate.
+`cargo fmt --check` is the formatting gate. `cargo test` runs the 78 tests for
+the Rust half — the data file (including that a file written by an older
+version still loads, and that a return round-trips as `"type":"return"`), the
+ESC/POS builder (accents, line endings, the cut, and that a combining accent
+prints as `é` rather than `?`), and the column-matching for spreadsheet imports
+(including that a "SupplyPrice" column becomes Cost rather than Price). It
+exits non-zero if anything fails, so it is safe to use as a build gate.
 
 The shop's own arithmetic — totals, tax, refund apportioning, period buckets and
 the receipt layout — lives in `ui/app.js`, and the earlier build drove that with
