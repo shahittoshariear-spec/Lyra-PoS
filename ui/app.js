@@ -1,6 +1,48 @@
 (() => {
   'use strict';
 
+  // ---------------------------------------------------------------------------
+  // Before anything else, paint the look the shop chose last time.
+  //
+  // The data file arrives over IPC a moment after the page is on screen, and
+  // waiting for it would show one frame of the stock theme on every launch.
+  // This mirror is only for appearance: no shop data, no figures, nothing that
+  // could disagree with the file. app.js replaces it as soon as the file loads.
+  // ---------------------------------------------------------------------------
+  const APPEARANCE_KEY = 'lyra.appearance';
+
+  function cachedAppearance() {
+    try {
+      const raw = localStorage.getItem(APPEARANCE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function applyCachedAppearance() {
+    const cached = cachedAppearance();
+    if (!cached) return;
+    const html = document.documentElement;
+    if (typeof cached.theme === 'string' && cached.theme) html.dataset.theme = cached.theme;
+    if (typeof cached.font === 'string' && cached.font) html.dataset.font = cached.font;
+    if (typeof cached.size === 'string' && cached.size) html.dataset.size = cached.size;
+    if (typeof cached.nav === 'string' && cached.nav) html.dataset.nav = cached.nav;
+    if (typeof cached.sky === 'string' && cached.sky) html.dataset.sky = cached.sky;
+    if (typeof cached.motion === 'string' && cached.motion) html.dataset.motion = cached.motion;
+    if (typeof cached.tabs === 'string' && cached.tabs) html.dataset.tabAnim = cached.tabs;
+    if (cached.glow === false) html.dataset.glow = 'off';
+    if (cached.glass === false) html.dataset.glass = 'off';
+    if (cached.cards === 'compact') html.dataset.cards = 'compact';
+    if (cached.vars && typeof cached.vars === 'object') {
+      Object.keys(cached.vars).forEach(name => {
+        if (name.indexOf('--') === 0) html.style.setProperty(name, cached.vars[name]);
+      });
+    }
+  }
+
+  applyCachedAppearance();
+
   let DATA = null;
   let cart = [];                  // [{productId, name, price, qty}]
   let activeCategory = 'All';
@@ -10,14 +52,24 @@
   let session = null;             // { id, name, role } once someone has signed in
   let importParsed = null;        // {fileName, headers, rows}
 
+  // Bumped after every save. The heavy screens use it to skip a rebuild when
+  // nothing they draw has changed since they were last on screen — switching
+  // between the till and Stock should not re-lay a thousand rows to show the
+  // same thousand rows.
+  let dataRevision = 0;
+
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '2.7.2';
+  const APP_VERSION = '3.0.0';
   const WHATS_NEW = [
-    ['The daily email sends again', "A hand-change or stock-check row with a blank name no longer crashes the report task. The row is drawn without a name and the email goes out."]
+    ['The stars learn your name', 'The app now opens with a sky of flickering stars that gather into “Lyra PoS”, and any key or click ends the sequence at once. Setup → Themes can bring back the classic opening, or turn it off.'],
+    ['A nebula behind the till', 'A new, optional background hangs slow clouds of colour behind the screens with stars flickering through them. The old constellation is still there, and the sky can be made subtler, stronger or switched off entirely.'],
+    ['Setup → Themes is now an atmosphere', 'Background style and strength, the opening, motion across the whole app, how screens change, compact product tiles, clock seconds, glow, frosted glass — each one is a switch of your own, remembered for the next launch.'],
+    ['New themes and a quicker way around', 'Solaris and Ion join the themes, and Ctrl+K opens a command palette for every screen and the actions you reach for most. Tab changes cross-fade or slide, and screens no longer redraw work that has not changed.'],
+    ['Updates, on your terms', 'At startup Lyra PoS can ask GitHub whether a newer release exists. It says what changed and offers the installer; Not now leaves everything exactly as it was, and the check can be turned off for good in Setup.']
   ];
 
   function money(n) {
@@ -49,7 +101,16 @@
   function uid(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function nextProductId() { return 'p' + (DATA.nextProductId++); }
 
-  async function persist() { await window.pos.saveData(DATA); }
+  async function persist() {
+    try {
+      await window.pos.saveData(DATA);
+    } finally {
+      // Even a failed save means the screen's copy has moved on; the heavy
+      // screens must draw it rather than trust their old rows.
+      dataRevision++;
+      scheduleTillPulse();
+    }
+  }
 
   function toast(msg) {
     const t = $('#toast');
@@ -193,25 +254,93 @@
   const VIEW_ORDER = ['till', 'stock', 'ledger', 'dashboard', 'reports', 'settings'];
   let currentViewIndex = 0;
 
-  function switchView(view) {
-    $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    updateNavPill();
+  // What each heavy screen was last drawn from. A screen only rebuilds when the
+  // saved data has actually moved (or the day has, so an overnight till does
+  // not show yesterday's figures under today's date). This is what makes
+  // switching back to Stock or the Ledger instant: the rows are already there.
+  const viewRenderState = {
+    till: { rev: -1, day: '' },
+    stock: { rev: -1, day: '' },
+    ledger: { rev: -1, day: '' },
+    dashboard: { rev: -1, day: '' },
+    reports: { rev: -1, day: '' }
+  };
 
+  function todayStamp() { return new Date().toISOString().slice(0, 10); }
+
+  function needsViewRender(name) {
+    const state = viewRenderState[name];
+    if (!state) return true;
+    return state.rev !== dataRevision || state.day !== todayStamp();
+  }
+
+  function noteViewRendered(name) {
+    const state = viewRenderState[name];
+    if (!state) return;
+    state.rev = dataRevision;
+    state.day = todayStamp();
+  }
+
+  let viewTransition = null;
+
+  // One screen gives way to the next. Where the webview can cross-fade the two
+  // snapshots itself (Chromium's View Transitions), that is used: it runs on the
+  // compositor, so the change stays smooth even when the screen arriving has a
+  // thousand rows in it. Everywhere else the older CSS entrance still plays.
+  function switchView(view) {
     const newIndex = VIEW_ORDER.indexOf(view);
     const dir = newIndex === currentViewIndex ? 'none' : (newIndex > currentViewIndex ? 'forward' : 'back');
     currentViewIndex = newIndex;
 
-    $$('.view').forEach(v => { v.classList.remove('active', 'dir-forward', 'dir-back', 'dir-none'); });
-    const target = $('#view-' + view);
-    target.classList.add('active', 'dir-' + dir);
+    const canTransition = typeof document.startViewTransition === 'function' &&
+      currentTabTransition() !== 'off' && currentMotionLevel() !== 'off' && !prefersStillMotion();
 
-    if (view === 'stock') { renderStock(); focusStockFilter(); }
-    if (view === 'ledger') renderLedger();
-    if (view === 'dashboard') renderDashboard();
-    if (view === 'reports') renderReports();
-    if (view === 'settings') renderSettings();
-    if (view === 'till') { renderCatalog(); focusScanTarget(); }
-    repositionSegGliders();
+    const perform = (legacy) => {
+      $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+      updateNavPill();
+
+      $$('.view').forEach(v => { v.classList.remove('active', 'dir-forward', 'dir-back', 'dir-none'); });
+      const target = $('#view-' + view);
+      if (!target) return;
+      target.classList.add('active');
+      if (legacy && currentTabTransition() !== 'off' && currentMotionLevel() !== 'off' && !prefersStillMotion()) {
+        target.classList.add('dir-' + dir);
+      }
+
+      if (view === 'stock') {
+        if (needsViewRender('stock')) renderStock();
+        focusStockFilter();
+      }
+      if (view === 'ledger' && needsViewRender('ledger')) renderLedger();
+      if (view === 'dashboard' && needsViewRender('dashboard')) renderDashboard();
+      if (view === 'reports' && needsViewRender('reports')) renderReports();
+      if (view === 'settings') renderSettings();
+      if (view === 'till') {
+        if (needsViewRender('till')) renderCatalog();
+        renderTillPulse();
+        focusScanTarget();
+      }
+      repositionSegGliders();
+    };
+
+    if (canTransition) {
+      document.documentElement.dataset.tabDir = dir;
+      try {
+        if (viewTransition) {
+          try { viewTransition.skipTransition(); } catch (err) { /* already gone */ }
+          viewTransition = null;
+        }
+        viewTransition = document.startViewTransition(() => perform(false));
+        const started = viewTransition;
+        started.finished.finally(() => {
+          if (viewTransition === started) viewTransition = null;
+        });
+        return;
+      } catch (err) {
+        viewTransition = null;
+      }
+    }
+    perform(true);
   }
 
   // The pill's geometry only changes when the window is resized, but this used to
@@ -249,7 +378,11 @@
   }
 
   function repositionSegGliders() {
-    $$('.segmented.has-glider').forEach(moveSegGlider);
+    // A control on a screen that is not showing measures zero; moving its pill
+    // from those readings is wasted layout work on every tab change.
+    $$('.segmented.has-glider').forEach(seg => {
+      if (seg.offsetParent !== null) moveSegGlider(seg);
+    });
   }
 
   function initSegGliders() {
@@ -271,13 +404,251 @@
     window.addEventListener('resize', () => repositionSegGliders());
   }
 
+  let clockTimer = 0;
+
+  function tickClock() {
+    if (!DATA || !DATA.settings) return;
+    const d = new Date();
+    const seconds = prefBool('clockSeconds', false);
+    const text = d.toLocaleTimeString([], seconds
+      ? { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+      : { hour: '2-digit', minute: '2-digit' });
+    const el = $('#clock');
+    if (el && el.textContent !== text) el.textContent = text;
+  }
+
+  // Restarted when the "show seconds" choice changes, so the app never keeps
+  // two clock intervals running at once.
+  function restartClock() {
+    tickClock();
+    clearInterval(clockTimer);
+    clockTimer = setInterval(tickClock, prefBool('clockSeconds', false) ? 1000 : 15000);
+  }
+
   function initClock() {
-    const tick = () => {
-      const d = new Date();
-      $('#clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    };
-    tick();
-    setInterval(tick, 15000);
+    restartClock();
+  }
+
+  // ---------------- The command palette ----------------
+
+  // Ctrl+K, or the Jump to button under the brand: every screen the signed-in
+  // person may open, plus the handful of actions a shop reaches for most. The
+  // list is built on each open, so a sign-out or a role change never leaves an
+  // action the person is no longer allowed to use.
+  let paletteItems = [];
+  let paletteIndex = 0;
+
+  const PALETTE_VIEWS = [
+    { view: 'till', label: 'Go to the Till', note: 'Ring up a sale', glyph: '◎', keys: 'till checkout sell scan cashier' },
+    { view: 'stock', label: 'Go to Stock', note: 'Products, prices and shelves', glyph: '▣', keys: 'stock products inventory add edit shelves' },
+    { view: 'ledger', label: 'Go to the Ledger', note: 'Every sale that has gone through', glyph: '▤', keys: 'ledger sales history receipts refunds' },
+    { view: 'dashboard', label: 'Go to the Overview', note: 'Takings, profit and history', glyph: '◫', keys: 'overview dashboard figures profit report chart' },
+    { view: 'reports', label: 'Go to Reports', note: 'How much of what sold', glyph: '▥', keys: 'reports items sold quantities' },
+    { view: 'settings', label: 'Go to Setup', note: 'Shop, themes, staff and backups', glyph: '⚙', keys: 'setup settings shop themes staff backup options' }
+  ];
+
+  function paletteCommands() {
+    if (!session) return [];
+    const commands = [];
+    PALETTE_VIEWS.forEach(entry => {
+      if (!canView(session.role, entry.view)) return;
+      commands.push({
+        id: 'view-' + entry.view,
+        label: entry.label,
+        note: entry.note,
+        glyph: entry.glyph,
+        keys: entry.keys,
+        run: () => switchView(entry.view)
+      });
+    });
+
+    if (canView(session.role, 'stock')) {
+      commands.push({
+        id: 'add-product', label: 'Add a product', note: 'Open the product form on Stock', glyph: '＋',
+        keys: 'add product new stock item create',
+        run: () => { switchView('stock'); setTimeout(() => openProductModal(null), 60); }
+      });
+    }
+
+    if (canView(session.role, 'till')) {
+      commands.push({
+        id: 'hide-items', label: 'Hide or show the product list', note: 'Give the receipt the whole window', glyph: '◐',
+        keys: 'hide show items receipt catalogue customer display',
+        run: () => { if (currentViewName() !== 'till') switchView('till'); setTimeout(() => $('#hideItemsBtn').click(), 40); }
+      });
+      commands.push({
+        id: 'email-report', label: "Email today's report", note: 'Send the day figures as a PDF', glyph: '✉',
+        keys: 'email report daily day pdf send mail',
+        run: () => emailDayReport()
+      });
+    }
+
+    if (canView(session.role, 'settings')) {
+      commands.push({
+        id: 'export-backup', label: 'Export a backup', note: 'Save a copy of the shop data', glyph: '↧',
+        keys: 'backup export save copy json',
+        run: () => { switchView('settings'); setTimeout(() => $('#exportBackupBtn').click(), 60); }
+      });
+      commands.push({
+        id: 'backup-now', label: 'Back up now', note: 'Write a spare copy beside the data file', glyph: '↧',
+        keys: 'backup automatic copy save',
+        run: () => { switchView('settings'); setTimeout(() => $('#backupNowBtn').click(), 60); }
+      });
+      commands.push({
+        id: 'check-updates', label: 'Check for updates', note: 'Ask GitHub for the latest release', glyph: '⟳',
+        keys: 'update upgrade version github release',
+        run: () => checkForUpdates({ manual: true })
+      });
+      commands.push({
+        id: 'theme-tab', label: 'Open the Atmosphere settings', note: 'Background, opening, motion and themes', glyph: '✦',
+        keys: 'theme atmosphere background nebula stars motion splash appearance',
+        run: () => {
+          switchView('settings');
+          setTimeout(() => {
+            const tab = $('#settingsTabs .seg-btn[data-tab="themes"]');
+            if (tab) tab.click();
+          }, 60);
+        }
+      });
+      commands.push({
+        id: 'cycle-sky', label: 'Change the background', note: 'Nebula, constellation or off', glyph: '✧',
+        keys: 'background sky nebula constellation stars off',
+        run: async () => {
+          const order = ['nebula', 'constellation', 'off'];
+          const next = order[(order.indexOf(currentSkyStyle()) + 1) % order.length];
+          DATA.settings.skyStyle = next;
+          applyAppearance();
+          await persist();
+          renderAppearanceControls();
+          toast('Background: ' + (next === 'off' ? 'off' : next) + '.');
+        }
+      });
+      commands.push({
+        id: 'preview-opening', label: 'Preview the opening', note: 'Play the startup sequence again', glyph: '✧',
+        keys: 'splash opening preview animation start',
+        run: () => { if (window.LyraSplash) window.LyraSplash.preview(); }
+      });
+    }
+
+    commands.push({
+      id: 'sign-out', label: 'Sign out', note: session.name + ' · ' + roleTitle(session.role), glyph: '⇥',
+      keys: 'lock sign out exit session switch user',
+      run: () => { const btn = $('#lockToggleBtn'); if (btn) btn.click(); }
+    });
+
+    return commands;
+  }
+
+  function renderPalette() {
+    const list = $('#paletteList');
+    if (!list) return;
+    if (!paletteItems.length) {
+      list.innerHTML = '<li class="palette-empty">Nothing matches that. Try a screen name, or “backup”.</li>';
+      return;
+    }
+    list.innerHTML = paletteItems.map((item, i) =>
+      '<li class="palette-item' + (i === paletteIndex ? ' active' : '') + '" role="option" data-index="' + i + '" aria-selected="' + (i === paletteIndex) + '">' +
+        '<span class="palette-glyph" aria-hidden="true">' + escapeHtml(item.glyph) + '</span>' +
+        '<span class="palette-text"><span class="palette-label">' + escapeHtml(item.label) + '</span>' +
+        '<span class="palette-note">' + escapeHtml(item.note) + '</span></span>' +
+        '<span class="palette-enter">↵</span>' +
+      '</li>').join('');
+    const active = list.querySelector('.palette-item.active');
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  function filterPalette() {
+    const input = $('#paletteInput');
+    const q = (input ? input.value : '').trim().toLowerCase();
+    const all = paletteCommands();
+    const words = q ? q.split(/\s+/) : [];
+    paletteItems = words.length
+      ? all.filter(item => words.every(w => (item.label + ' ' + item.note + ' ' + item.keys).toLowerCase().includes(w)))
+      : all;
+    paletteIndex = 0;
+    renderPalette();
+  }
+
+  function runPaletteItem() {
+    const item = paletteItems[paletteIndex];
+    if (!item) return;
+    closeModal('#paletteOverlay');
+    // After the overlay has begun closing, so a screen change is not fighting
+    // the modal's exit for the next frame.
+    setTimeout(() => { try { item.run(); } catch (err) { toast('That action could not be completed.'); } }, 240);
+  }
+
+  function openPalette() {
+    if (!session) {
+      toast('Sign in first, then press Ctrl+K to jump anywhere.');
+      return;
+    }
+    const overlay = $('#paletteOverlay');
+    if (!overlay) return;
+    const input = $('#paletteInput');
+    if (input) input.value = '';
+    paletteIndex = 0;
+    filterPalette();
+    openModal(overlay);
+    setTimeout(() => { if (input) { input.focus(); input.select(); } }, 40);
+  }
+
+  function initCommandPalette() {
+    const trigger = $('#paletteBtn');
+    if (trigger) trigger.addEventListener('click', openPalette);
+
+    const input = $('#paletteInput');
+    if (input) {
+      input.addEventListener('input', filterPalette);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (paletteItems.length) { paletteIndex = (paletteIndex + 1) % paletteItems.length; renderPalette(); }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (paletteItems.length) { paletteIndex = (paletteIndex - 1 + paletteItems.length) % paletteItems.length; renderPalette(); }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          runPaletteItem();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          closeModal('#paletteOverlay');
+        }
+      });
+    }
+
+    const list = $('#paletteList');
+    if (list) {
+      list.addEventListener('click', (e) => {
+        const item = e.target.closest('.palette-item');
+        if (!item) return;
+        paletteIndex = Number(item.dataset.index) || 0;
+        runPaletteItem();
+      });
+      list.addEventListener('mousemove', (e) => {
+        const item = e.target.closest('.palette-item');
+        if (!item) return;
+        const index = Number(item.dataset.index);
+        if (index === paletteIndex) return;
+        paletteIndex = index;
+        renderPalette();
+      });
+    }
+
+    const overlay = $('#paletteOverlay');
+
+    document.addEventListener('keydown', (e) => {
+      const key = (e.key || '').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && key === 'k') {
+        const open = overlay && overlay.classList.contains('active');
+        // Do not pull the palette over a dialog the person is already working
+        // in (a payment, a refund, the update card). Ctrl+K closes it as usual.
+        if (!open && document.querySelector('.modal-overlay.active')) return;
+        e.preventDefault();
+        if (open) closeModal(overlay);
+        else openPalette();
+      }
+    });
   }
 
   // ---------------- People, passwords and what they may do ----------------
@@ -341,6 +712,7 @@
     btn.title = session
       ? session.name + ' — ' + roleTitle(session.role) + '. Click to sign out.'
       : 'Sign in';
+    if (DATA) renderTillPulse();
   }
 
   // ---------------- Sign-in ----------------
@@ -715,16 +1087,43 @@
   // slow, so the list is capped once it gets long (searching narrows it).
   const MAX_CATALOG_CARDS = 120;
 
+  let categoryChipsKey = '';
+
   function renderCategoryChips() {
     const row = $('#categoryChips');
     const cats = ['All', ...DATA.categories];
-    row.innerHTML = '';
-    cats.forEach(c => {
-      const chip = document.createElement('button');
-      chip.className = 'chip' + (activeCategory === c ? ' active' : '');
-      chip.textContent = c;
-      chip.addEventListener('click', () => { activeCategory = c; renderCatalog(); });
-      row.appendChild(chip);
+    const key = cats.join('\u0000');
+    // Only the row itself changes when a category is added or removed. Just
+    // moving the highlight used to rebuild every chip and bind a listener to
+    // each one, on every keystroke in the search box.
+    if (key !== categoryChipsKey) {
+      categoryChipsKey = key;
+      const fragment = document.createDocumentFragment();
+      cats.forEach(c => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip';
+        chip.dataset.category = c;
+        chip.textContent = c;
+        fragment.appendChild(chip);
+      });
+      row.innerHTML = '';
+      row.appendChild(fragment);
+    }
+    $$('#categoryChips .chip').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.category === activeCategory);
+    });
+  }
+
+  function initCatalogChips() {
+    const row = $('#categoryChips');
+    if (!row) return;
+    // One listener for the row, like the product grid beside it.
+    row.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip[data-category]');
+      if (!chip || chip.dataset.category === activeCategory) return;
+      activeCategory = chip.dataset.category;
+      renderCatalog();
     });
   }
 
@@ -748,6 +1147,7 @@
     if (!items.length) {
       catalogueSignature = null;
       grid.innerHTML = '<div class="tape-empty" style="grid-column:1/-1;">No products match. Add stock from the Stock tab, or scan a barcode.</div>';
+      noteViewRendered('till');
       return;
     }
 
@@ -774,7 +1174,45 @@
       html += `<div class="tape-empty" style="grid-column:1/-1;">Showing ${shown.length} of ${items.length} products — type to narrow the list.</div>`;
     }
     grid.innerHTML = html;
+    noteViewRendered('till');
   }
+
+  // The quiet line at the near end of the till's action bar: who is on, how
+  // many sales today, and what they came to. The figures are the day's real
+  // takings, not the current cart, so it answers “how has it gone?” at a glance.
+  function greetingForHour(hour) {
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  function renderTillPulse() {
+    const el = $('#tillPulseText');
+    if (!el || !DATA || !DATA.settings) return;
+    const today = todayStamp();
+    let count = 0;
+    let total = 0;
+    const sales = Array.isArray(DATA.sales) ? DATA.sales : [];
+    for (let i = 0; i < sales.length; i++) {
+      const sale = sales[i];
+      if (!sale || sale.type === 'return' || sale.voidedAt) continue;
+      if ((sale.date || '').slice(0, 10) !== today) continue;
+      count++;
+      total += Number(sale.total) || 0;
+    }
+    const firstName = session ? String(session.name || '').trim().split(/\s+/)[0] : '';
+    const greeting = firstName ? greetingForHour(new Date().getHours()) + ', ' + firstName : 'The till is ready';
+    const salesText = count
+      ? groupedInt(count) + (count === 1 ? ' sale' : ' sales')
+      : 'No sales yet';
+    el.innerHTML = escapeHtml(greeting) +
+      ' <span class="pulse-sep">·</span> ' + escapeHtml(salesText) +
+      (count
+        ? ' <span class="pulse-sep">·</span> <span class="pulse-money">' + escapeHtml(moneyGrouped(total)) + '</span> today'
+        : ' — ready for the first one.');
+  }
+
+  const scheduleTillPulse = debounce(renderTillPulse, 250);
 
   function flyToCart(sourceEl) {
     const target = $('.receipt-tape');
@@ -1917,6 +2355,7 @@
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:26px;">No products yet. Click "Add product", scan a barcode, or import a list.</td></tr>';
       updateStockBulkBar();
+      noteViewRendered('stock');
       return;
     }
 
@@ -1945,6 +2384,7 @@
     }
     body.innerHTML = rowsHtml;
     updateStockBulkBar();
+    noteViewRendered('stock');
   }
 
   function stockMoreRow(shown, total) {
@@ -2175,6 +2615,157 @@
     };
     $('#whatsNewClose').addEventListener('click', dismiss, { once: true });
     $('#whatsNewGo').addEventListener('click', dismiss, { once: true });
+  }
+
+  // ---------------- Updates ----------------
+
+  // The only outbound request the app ever makes. It happens on a Rust worker
+  // thread, after the app is already usable, and the answer is a suggestion:
+  // Not now leaves everything untouched, and Skip this version keeps it quiet
+  // until the next release. With the check switched off, nothing is sent.
+  let updateBusy = false;
+  let updatePromptedFor = '';
+  let updateCheckedThisSession = false;
+
+  function setUpdateStatus(text) {
+    const el = $('#updateStatus');
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.keep = '1';
+  }
+
+  function updateNotesLines(notes) {
+    const raw = String(notes || '').replace(/\r/g, '').split('\n');
+    const lines = [];
+    for (let i = 0; i < raw.length; i++) {
+      let line = raw[i].trim();
+      if (!line) continue;
+      if (/^#{1,6}\s/.test(line)) {
+        line = line.replace(/^#{1,6}\s+/, '');
+        if (line) lines.push(line);
+        continue;
+      }
+      line = line.replace(/^[-*+]\s+/, '• ');
+      line = line.replace(/^>\s*/, '');
+      // The release body is Markdown. The card reads as prose, so the common
+      // inline decorations come off and only their words remain.
+      line = line.replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
+      lines.push(line);
+    }
+    // A release body can be long. The card shows the first useful lines and
+    // says where the rest is, rather than growing past the window.
+    const shown = lines.slice(0, 14);
+    if (lines.length > shown.length) shown.push('…and the full notes are on the release page.');
+    if (!shown.length) shown.push('This release has no written notes.');
+    return shown;
+  }
+
+  function showUpdatePrompt(info) {
+    if (!info) return;
+    $('#updateTitle').textContent = 'Lyra PoS ' + info.version + ' is ready';
+    const when = info.publishedAt ? new Date(info.publishedAt) : null;
+    const whenText = when && !isNaN(when.getTime()) ? ' · ' + when.toLocaleDateString() : '';
+    $('#updateVersion').textContent = 'You are on v' + APP_VERSION + whenText;
+    const notes = $('#updateNotes');
+    notes.innerHTML = updateNotesLines(info.notes)
+      .map(line => '<p>' + escapeHtml(line) + '</p>').join('');
+    $('#updateExplanation').textContent = info.downloadUrl
+      ? 'The installer opens in your browser. Lyra PoS keeps working exactly as it does now until you choose to install it.'
+      : 'The release page opens in your browser. Lyra PoS keeps working exactly as it does now until you choose to install it.';
+    $('#updateDownloadBtn').textContent = info.downloadUrl ? 'Get the update' : 'See the release';
+    $('#updateDownloadBtn').disabled = false;
+    const notesBtn = $('#updateNotesBtn');
+    if (notesBtn) {
+      notesBtn.onclick = async () => {
+        const res = await window.pos.openUpdatePage(info.pageUrl || info.downloadUrl);
+        if (!res || !res.ok) toast('The release page could not be opened.');
+      };
+    }
+
+    $('#updateDownloadBtn').onclick = async () => {
+      const res = await window.pos.openUpdatePage(info.downloadUrl || info.pageUrl);
+      if (res && res.ok) {
+        setUpdateStatus('The update was opened in your browser.');
+        closeModal('#updateModalOverlay');
+      } else {
+        toast('The browser could not be opened. The release page is ' + (info.pageUrl || 'on GitHub') + '.');
+      }
+    };
+    $('#updateLaterBtn').onclick = () => closeModal('#updateModalOverlay');
+    $('#updateSkipBtn').onclick = async () => {
+      DATA.settings.skippedVersion = info.version;
+      await persist();
+      setUpdateStatus('Version ' + info.version + ' will not be mentioned again. A later release still will.');
+      closeModal('#updateModalOverlay');
+    };
+
+    // Never stack two prompts for the same release in one session.
+    updatePromptedFor = info.version;
+    openModal('#updateModalOverlay');
+  }
+
+  async function checkForUpdates(options) {
+    const manual = !!(options && options.manual);
+    if (updateBusy) return;
+    updateBusy = true;
+    if (manual) {
+      setUpdateStatus('Checking GitHub…');
+      const btn = $('#checkUpdateBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+    }
+
+    try {
+      const res = await window.pos.checkForUpdate(APP_VERSION);
+      if (!res || !res.ok) {
+        if (manual) {
+          setUpdateStatus('Could not check for updates. The machine may be offline, or GitHub unreachable. Nothing about the till has changed.');
+        }
+        return;
+      }
+      const info = res.info;
+      if (!info.available) {
+        setUpdateStatus('Lyra PoS v' + APP_VERSION + ' is the latest release.');
+        if (manual) toast('Lyra PoS is up to date.');
+        return;
+      }
+
+      setUpdateStatus('Version ' + info.version + ' is available — you are on v' + APP_VERSION + '.');
+      const skipped = DATA.settings.skippedVersion === info.version;
+      if (skipped && !manual) {
+        setUpdateStatus('Version ' + info.version + ' is available. You chose to skip this one; a later release will still be mentioned.');
+        return;
+      }
+      showUpdatePrompt(info);
+    } finally {
+      updateBusy = false;
+      updateCheckedThisSession = true;
+      const btn = $('#checkUpdateBtn');
+      if (btn) { btn.disabled = false; btn.textContent = 'Check now'; }
+    }
+  }
+
+  function initUpdatePanel() {
+    const check = $('#setUpdateCheck');
+    if (check) {
+      check.addEventListener('change', async () => {
+        DATA.settings.updateCheck = check.checked;
+        await persist();
+        toast(check.checked ? 'Startup update checks are on.' : 'Startup update checks are off.');
+      });
+    }
+    const now = $('#checkUpdateBtn');
+    if (now) now.addEventListener('click', () => checkForUpdates({ manual: true }));
+  }
+
+  function scheduleUpdateCheck() {
+    if (!prefBool('updateCheck', true)) return;
+    const delay = currentSplashStyle() === 'off' ? 900 : 3600;
+    setTimeout(() => {
+      // A manual check may already have answered; never ask twice at once.
+      if (!updateBusy && !updateCheckedThisSession && !updatePromptedFor) checkForUpdates({ manual: false });
+    }, delay);
   }
 
   // ---------------- Hand-edited stock (written down, never announced) ----------------
@@ -3365,6 +3956,7 @@
 
     if (!sales.length) {
       body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:26px;">No sales recorded yet.</td></tr>';
+      noteViewRendered('ledger');
       return;
     }
 
@@ -3436,6 +4028,7 @@
       </td></tr>`;
     }
     body.innerHTML = rowsHtml;
+    noteViewRendered('ledger');
   }
 
   function initLedger() {
@@ -3565,6 +4158,9 @@
   function animateStatNumber(selector, targetValue, formatter) {
     const el = $(selector);
     if (!el) return;
+    // A quick tap through Day/Week/Month/Year used to leave several count-up
+    // loops writing to the same figure at once. The newest render owns it.
+    if (el._statRaf) cancelAnimationFrame(el._statRaf);
     const prevRaw = parseFloat(el.dataset.raw);
     const prev = isNaN(prevRaw) ? 0 : prevRaw;
     if (prev === targetValue) { el.textContent = formatter(targetValue); el.dataset.raw = targetValue; return; }
@@ -3579,10 +4175,10 @@
       const eased = 1 - Math.pow(1 - p, 3);
       const val = prev + (targetValue - prev) * eased;
       el.textContent = formatter(val);
-      if (p < 1) requestAnimationFrame(tick);
-      else { el.textContent = formatter(targetValue); el.dataset.raw = targetValue; }
+      if (p < 1) el._statRaf = requestAnimationFrame(tick);
+      else { el.textContent = formatter(targetValue); el.dataset.raw = targetValue; el._statRaf = 0; }
     }
-    requestAnimationFrame(tick);
+    el._statRaf = requestAnimationFrame(tick);
   }
 
   // Where the money came from, as a ring: the same three figures the bars used
@@ -3772,7 +4368,7 @@
   function renderDashboard() {
     // The History subtab is not a period at all: it is drawn on its own, and the
     // figures and charts behind it do not need laying out while it is up.
-    if (overviewTab === 'history') { renderHistoryLog(); return; }
+    if (overviewTab === 'history') { renderHistoryLog(); noteViewRendered('dashboard'); return; }
 
     const period = dashboardPeriod;
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -3831,6 +4427,7 @@
     renderLowStockList(lowStockItems);
 
     renderHistory(period, currentKey);
+    noteViewRendered('dashboard');
   }
 
   const HISTORY_LIMITS = { day: 30, week: 16, month: 24, year: 10 };
@@ -4053,6 +4650,7 @@
     const body = $('#reportsTableBody');
     if (!rows.length) {
       body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:26px;">No items sold ${phrase} yet.</td></tr>`;
+      noteViewRendered('reports');
       return;
     }
 
@@ -4073,6 +4671,7 @@
     });
     body.innerHTML = '';
     body.appendChild(fragment);
+    noteViewRendered('reports');
   }
 
   // ---------------- Appearance (Setup → Themes) ----------------
@@ -4086,6 +4685,8 @@
     { id: 'cosmos', name: 'Green Cosmos', note: 'Emerald and starlight' },
     { id: 'moonlight', name: 'Moonlight', note: 'Silver over deep indigo' },
     { id: 'rust', name: 'Rust', note: 'Burnt orange on cold iron' },
+    { id: 'solaris', name: 'Solaris', note: 'Molten gold on a dark sun' },
+    { id: 'ion', name: 'Ion', note: 'Electric cyan on black water' },
     { id: 'custom-1', name: 'Yours I', note: 'Your own two colours', slot: 0 },
     { id: 'custom-2', name: 'Yours II', note: 'Your own two colours', slot: 1 },
     { id: 'custom-3', name: 'Yours III', note: 'Your own two colours', slot: 2 }
@@ -4266,6 +4867,11 @@
     { id: 'consolas', name: 'Consolas', note: 'A coder’s typewriter' }
   ];
   const SIZE_CHOICES = ['compact', 'normal', 'large', 'huge'];
+  const SKY_STYLES = ['nebula', 'constellation', 'off'];
+  const SKY_INTENSITIES = ['subtle', 'balanced', 'vivid'];
+  const SPLASH_STYLES = ['stars', 'classic', 'off'];
+  const MOTION_LEVELS = ['full', 'gentle', 'off'];
+  const TAB_TRANSITIONS = ['slide', 'fade', 'zoom', 'off'];
 
   function currentThemeId() {
     return THEME_CHOICES.some(t => t.id === DATA.settings.theme) ? DATA.settings.theme : 'midnight';
@@ -4276,6 +4882,87 @@
   function currentSizeId() {
     return SIZE_CHOICES.includes(DATA.settings.fontSize) ? DATA.settings.fontSize : 'normal';
   }
+  function currentSkyStyle() {
+    return SKY_STYLES.includes(DATA.settings.skyStyle) ? DATA.settings.skyStyle : 'nebula';
+  }
+  function currentSkyIntensity() {
+    return SKY_INTENSITIES.includes(DATA.settings.skyIntensity) ? DATA.settings.skyIntensity : 'balanced';
+  }
+  function currentSplashStyle() {
+    return SPLASH_STYLES.includes(DATA.settings.splashStyle) ? DATA.settings.splashStyle : 'stars';
+  }
+  function currentMotionLevel() {
+    return MOTION_LEVELS.includes(DATA.settings.motionLevel) ? DATA.settings.motionLevel : 'full';
+  }
+  function currentTabTransition() {
+    return TAB_TRANSITIONS.includes(DATA.settings.tabTransition) ? DATA.settings.tabTransition : 'slide';
+  }
+  function prefBool(name, fallback) {
+    const value = DATA && DATA.settings ? DATA.settings[name] : undefined;
+    return value === undefined || value === null ? fallback : !!value;
+  }
+
+  // A data file written before this release has none of the Atmosphere choices
+  // in it. They are filled in memory with the defaults (never written just for
+  // being read), so every screen can trust the values it asks for.
+  function normalizeAppearanceSettings() {
+    if (!DATA || !DATA.settings) return;
+    const s = DATA.settings;
+    if (!SKY_STYLES.includes(s.skyStyle)) s.skyStyle = 'nebula';
+    if (!SKY_INTENSITIES.includes(s.skyIntensity)) s.skyIntensity = 'balanced';
+    if (typeof s.skyParallax !== 'boolean') s.skyParallax = true;
+    if (!SPLASH_STYLES.includes(s.splashStyle)) s.splashStyle = 'stars';
+    if (!MOTION_LEVELS.includes(s.motionLevel)) s.motionLevel = 'full';
+    if (!TAB_TRANSITIONS.includes(s.tabTransition)) s.tabTransition = 'slide';
+    if (typeof s.glowEffects !== 'boolean') s.glowEffects = true;
+    if (typeof s.glassEffects !== 'boolean') s.glassEffects = true;
+    if (typeof s.compactCards !== 'boolean') s.compactCards = false;
+    if (typeof s.clockSeconds !== 'boolean') s.clockSeconds = false;
+    if (typeof s.updateCheck !== 'boolean') s.updateCheck = true;
+    if (typeof s.skippedVersion !== 'string') s.skippedVersion = '';
+  }
+
+  function prefersStillMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  // The appearance half of the data file, mirrored to localStorage. The sky
+  // and the opening read it before the file has arrived, so a launch never
+  // flashes the wrong theme. It holds no shop data and is overwritten on every
+  // change.
+  function writeAppearanceCache() {
+    if (!DATA || !DATA.settings) return;
+    const vars = {};
+    const choice = THEME_CHOICES.find(t => t.id === currentThemeId());
+    if (choice && choice.slot != null) {
+      Object.assign(vars, customThemeVars(choice.slot));
+    }
+    try {
+      localStorage.setItem(APPEARANCE_KEY, JSON.stringify({
+        theme: currentThemeId(),
+        font: currentFontId(),
+        size: currentSizeId(),
+        nav: DATA.settings.navLayout === 'top' ? 'top' : 'side',
+        sky: currentSkyStyle(),
+        skyIntensity: currentSkyIntensity(),
+        skyParallax: prefBool('skyParallax', true),
+        splash: currentSplashStyle(),
+        motion: currentMotionLevel(),
+        tabs: currentTabTransition(),
+        glow: prefBool('glowEffects', true),
+        glass: prefBool('glassEffects', true),
+        cards: prefBool('compactCards', false) ? 'compact' : 'cozy',
+        vars
+      }));
+    } catch (err) {
+      // A webview with storage disabled simply gets the file-only experience.
+    }
+  }
+
+  // The colour pickers fire on every pixel of a drag. The cache is a mirror,
+  // not the record, so it is written once the hand comes off rather than on
+  // every frame; the data file remains the record.
+  const writeAppearanceCacheSoon = debounce(writeAppearanceCache, 220);
 
   function applyAppearance() {
     if (!DATA || !DATA.settings) return;
@@ -4284,6 +4971,12 @@
     html.dataset.theme = theme;
     html.dataset.font = currentFontId();
     html.dataset.size = currentSizeId();
+    html.dataset.motion = currentMotionLevel();
+    html.dataset.tabAnim = currentTabTransition();
+    html.dataset.glow = prefBool('glowEffects', true) ? 'on' : 'off';
+    html.dataset.glass = prefBool('glassEffects', true) ? 'on' : 'off';
+    html.dataset.cards = prefBool('compactCards', false) ? 'compact' : 'cozy';
+    html.dataset.sky = currentSkyStyle();
     // The built-in looks carry every colour in the stylesheet, so any token a
     // custom theme left on <html> has to come back out before it is read again.
     CUSTOM_VAR_NAMES.forEach(name => html.style.removeProperty(name));
@@ -4292,6 +4985,35 @@
       const vars = customThemeVars(choice.slot);
       Object.keys(vars).forEach(name => html.style.setProperty(name, vars[name]));
     }
+
+    writeAppearanceCacheSoon();
+
+    // The sky follows the theme's own palette, and every choice in Setup is
+    // applied the moment it is made.
+    if (window.LyraSky) {
+      window.LyraSky.apply({
+        style: currentSkyStyle(),
+        intensity: currentSkyIntensity(),
+        parallax: prefBool('skyParallax', true),
+        motion: currentMotionLevel()
+      });
+    }
+    if (window.LyraSplash) window.LyraSplash.setMotion(currentMotionLevel());
+  }
+
+  // A short wash of the new theme's own light when the shop picks another one,
+  // so the change is seen rather than found. Never used while dragging a
+  // colour picker, where it would strobe.
+  let themeFlashTimer = 0;
+  function applyAppearanceLive() {
+    applyAppearance();
+    if (currentMotionLevel() === 'off' || prefersStillMotion()) return;
+    const html = document.documentElement;
+    html.classList.remove('theme-flash');
+    void html.offsetWidth;
+    html.classList.add('theme-flash');
+    clearTimeout(themeFlashTimer);
+    themeFlashTimer = setTimeout(() => html.classList.remove('theme-flash'), 620);
   }
 
   // A preview of a theme, built the same way its screen is: the slot's own two
@@ -4334,6 +5056,41 @@
     $$('#sizeSeg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.size === currentSizeId()));
     renderCustomThemeEditor();
     renderNavLayoutControl();
+    renderExperienceControls();
+  }
+
+  function markSegmented(selector, attr, value) {
+    $$(selector + ' .seg-btn').forEach(b => b.classList.toggle('active', b.getAttribute(attr) === value));
+    const seg = $(selector);
+    if (seg && seg.classList.contains('has-glider') && seg.offsetParent !== null) moveSegGlider(seg);
+  }
+
+  // The Atmosphere panel is one list of choices rendered from the file, so a
+  // launch with an older data file lands on the defaults rather than on a row
+  // of controls with nothing selected.
+  function renderExperienceControls() {
+    if (!DATA || !DATA.settings) return;
+    const s = DATA.settings;
+    markSegmented('#skyStyleSeg', 'data-sky', currentSkyStyle());
+    markSegmented('#skyIntensitySeg', 'data-sky-intensity', currentSkyIntensity());
+    markSegmented('#splashStyleSeg', 'data-splash', currentSplashStyle());
+    markSegmented('#motionSeg', 'data-motion', currentMotionLevel());
+    markSegmented('#tabTransitionSeg', 'data-tab-anim', currentTabTransition());
+
+    const set = (id, value) => { const el = $(id); if (el) el.checked = value; };
+    set('#setSkyParallax', prefBool('skyParallax', true));
+    set('#setCompactCards', prefBool('compactCards', false));
+    set('#setClockSeconds', prefBool('clockSeconds', false));
+    set('#setGlowEffects', prefBool('glowEffects', true));
+    set('#setGlassEffects', prefBool('glassEffects', true));
+  }
+
+  function renderUpdateControls() {
+    if (!DATA || !DATA.settings) return;
+    const check = $('#setUpdateCheck');
+    if (check) check.checked = prefBool('updateCheck', true);
+    const status = $('#updateStatus');
+    if (status && !status.dataset.keep) status.textContent = 'Not checked yet.';
   }
 
   // The three slots, kept in step with what is saved: the pickers show the
@@ -4402,21 +5159,74 @@
   // Wiring, once. Every choice is applied the moment it is clicked and then
   // saved, so what the shop sees is what comes back on the next launch.
   function initAppearanceControls() {
-    const pick = (selector, attr, key) => {
+    const pick = (selector, attr, key, live) => {
       const host = $(selector);
       if (!host) return;
       host.addEventListener('click', async (e) => {
         const btn = e.target.closest('[' + attr + ']');
         if (!btn) return;
         DATA.settings[key] = btn.getAttribute(attr);
+        if (live) applyAppearanceLive();
+        else applyAppearance();
+        await persist();
+        renderAppearanceControls();
+      });
+    };
+    pick('#themeCards', 'data-theme', 'theme', true);
+    pick('#fontCards', 'data-font', 'fontFamily');
+    pick('#sizeSeg', 'data-size', 'fontSize');
+
+    // The Atmosphere controls. They follow the same rule as every other
+    // appearance choice: apply at once, then save, so the next launch is what
+    // is on screen now.
+    const pickTone = (selector, attr, key, after) => {
+      const host = $(selector);
+      if (!host) return;
+      host.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[' + attr + ']');
+        if (!btn) return;
+        const next = btn.getAttribute(attr);
+        if (DATA.settings[key] === next) return;
+        DATA.settings[key] = next;
+        if (after) after(next);
+        applyAppearance();
+        renderAppearanceControls();
+        await persist();
+      });
+    };
+    pickTone('#skyStyleSeg', 'data-sky', 'skyStyle');
+    pickTone('#skyIntensitySeg', 'data-sky-intensity', 'skyIntensity');
+    pickTone('#splashStyleSeg', 'data-splash', 'splashStyle', (value) => {
+      // A choice in Setup records itself without replaying the sequence; the
+      // Preview button is there for that, and the next launch opens with it.
+      if (window.LyraSplash) window.LyraSplash.applyStyle(value, { silent: true });
+    });
+    pickTone('#motionSeg', 'data-motion', 'motionLevel');
+    pickTone('#tabTransitionSeg', 'data-tab-anim', 'tabTransition');
+
+    const toggle = (id, key, after) => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener('change', async () => {
+        DATA.settings[key] = el.checked;
+        if (after) after(el.checked);
         applyAppearance();
         await persist();
         renderAppearanceControls();
       });
     };
-    pick('#themeCards', 'data-theme', 'theme');
-    pick('#fontCards', 'data-font', 'fontFamily');
-    pick('#sizeSeg', 'data-size', 'fontSize');
+    toggle('#setSkyParallax', 'skyParallax');
+    toggle('#setCompactCards', 'compactCards');
+    toggle('#setClockSeconds', 'clockSeconds', restartClock);
+    toggle('#setGlowEffects', 'glowEffects');
+    toggle('#setGlassEffects', 'glassEffects');
+
+    const preview = $('#previewSplashBtn');
+    if (preview) {
+      preview.addEventListener('click', () => {
+        if (window.LyraSplash) window.LyraSplash.preview();
+      });
+    }
 
     const navSeg = $('#navLayoutSeg');
     if (navSeg) {
@@ -4453,7 +5263,7 @@
         const use = e.target.closest('[data-use]');
         if (use) {
           DATA.settings.theme = use.dataset.use;
-          applyAppearance();
+          applyAppearanceLive();
           await persist();
           renderAppearanceControls();
           return;
@@ -4495,6 +5305,7 @@
     $('#setSaleSound').checked = s.saleSound !== false;
     renderShortcutList();
     renderAppearanceControls();
+    renderUpdateControls();
     refreshBackupStatus();
     refreshMailStatus();
     renderSettingsCategoryChips();
@@ -4946,7 +5757,11 @@
       }
       DATA = res.data;
       if (!DATA.heldSales) DATA.heldSales = [];
+      normalizeAppearanceSettings();
+      dataRevision++;
       applyShopIdentity();
+      applyAppearance();
+      applyNavLayout(false);
       refreshHeldButton();
       // The file may carry a different staff list from the one signed in now, so
       // the safe thing is to start again at the sign-in screen.
@@ -4990,6 +5805,9 @@
       return;
     }
     DATA = res.data;
+    dataRevision++;
+    normalizeAppearanceSettings();
+    applyAppearance();
     cart = [];
     renderCart();
     renderCatalog();
@@ -5005,6 +5823,10 @@
       return;
     }
     DATA = res.data;
+    dataRevision++;
+    normalizeAppearanceSettings();
+    applyAppearance();
+    applyNavLayout(false);
     cart = [];
     applyShopIdentity();
     refreshHeldButton();
@@ -5140,6 +5962,8 @@
     if (!Array.isArray(DATA.settings.customThemes) || DATA.settings.customThemes.length < DEFAULT_CUSTOM_THEMES.length) {
       DATA.settings.customThemes = DEFAULT_CUSTOM_THEMES.map((t, i) => Object.assign({}, t, (DATA.settings.customThemes || [])[i] || {}));
     }
+    normalizeAppearanceSettings();
+    dataRevision = 1;
     applyShopIdentity();
     applyAppearance();
     applyNavLayout(false);
@@ -5148,6 +5972,8 @@
     initSegGliders();
     updateNavPill();
     initClock();
+    initCommandPalette();
+    initCatalogChips();
     initAuth();
     initBarcodeScanning();
     initCatalogToggle();
@@ -5161,6 +5987,7 @@
     refreshHeldProductHint();
     initLedger();
     initSettingsView();
+    initUpdatePanel();
     initImportModal();
     initPeriodTabs();
     initOverviewTabs();
@@ -5203,6 +6030,7 @@
     refreshHeldButton();
     renderCatalog();
     renderCart();
+    renderTillPulse();
     focusScanTarget();
 
     $$('.modal-overlay').forEach(ov => {
@@ -5213,34 +6041,13 @@
     // are inherited from whoever used the machine last.
     showLogin('');
 
-    hideSplash();
-  }
+    // The opening has been running under all of that; apply the saved choice
+    // now that the file has answered. 'stars' is already in flight, so this is
+    // a no-op in the common case and a switch for a shop that chose the
+    // classic sequence or Off.
+    if (window.LyraSplash) window.LyraSplash.applyStyle(currentSplashStyle());
 
-  // A short title sequence opens the app: the constellation draws itself, the
-  // mark lands with a band of light across it, the ribbons of its ring trace
-  // past, and the whole figure leans into the screen. About two and a half
-  // seconds of it, and any key or click ends it at once — a shop that opens the
-  // till twenty times a day should never have to sit through it.
-  const SPLASH_MS = 2450;
-
-  function hideSplash() {
-    const el = $('#splashScreen');
-    if (!el) return;
-    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let done = false;
-    let timer = null;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      window.removeEventListener('keydown', finish, true);
-      window.removeEventListener('pointerdown', finish, true);
-      el.classList.add('hide');
-      setTimeout(() => el.remove(), 550);
-    };
-    timer = setTimeout(finish, still ? 400 : SPLASH_MS);
-    window.addEventListener('keydown', finish, true);
-    window.addEventListener('pointerdown', finish, true);
+    scheduleUpdateCheck();
   }
 
   document.addEventListener('DOMContentLoaded', boot);

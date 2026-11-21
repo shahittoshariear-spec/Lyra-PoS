@@ -1,6 +1,6 @@
 [package]
 name = "lyra-pos"
-version = "2.7.2"
+version = "3.0.0"
 edition = "2024"
 description = "Offline point-of-sale app for small shops. A Rust + Tauri rebuild of End PoS (formerly Immaculate POS) by Shariear's Software."
 license = "MIT"
@@ -25,6 +25,10 @@ sha2 = "0.11.0"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2.7.3"
 unicode-normalization = "0.1.25"
+# The one outbound request the app makes: GitHub's latest release, only when
+# the shop leaves update checks on. Pure Rust with rustls, so no OpenSSL or
+# system TLS is dragged into the build.
+ureq = "3"
 
 [target.'cfg(windows)'.dependencies]
 # webview2-com and windows-core are pinned to the versions Tauri 2.11 already

@@ -270,6 +270,41 @@ pub struct Settings {
     /// A soft chime when a sale completes. On unless the shop turns it off in
     /// Setup; the choice is kept in the data file, so it survives restarts.
     pub sale_sound: bool,
+    /// The background behind every screen: "nebula" (the new drifting cloud of
+    /// stars), "constellation" (the original Lyra figure) or "off". Every one
+    /// of them is optional and the shop can change its mind at any time.
+    pub sky_style: String,
+    /// How much of the sky to show: "subtle", "balanced" or "vivid". It changes
+    /// the star count and brightness, never the contrast of anything in front.
+    pub sky_intensity: String,
+    /// Whether the sky leans very slightly with the pointer. Off for a machine
+    /// where even that is too much movement.
+    pub sky_parallax: bool,
+    /// The opening animation: "stars" (flickering stars gathering into the
+    /// name), "classic" (the title sequence from earlier builds) or "off".
+    pub splash_style: String,
+    /// The whole app's motion: "full", "gentle" or "off". The operating
+    /// system's own reduced-motion preference still wins over all three.
+    pub motion_level: String,
+    /// How one screen gives way to the next: "slide", "fade", "zoom" or "off".
+    pub tab_transition: String,
+    /// Glow, bloom and coloured shadows. Off is a flatter, cheaper screen that
+    /// some shops prefer on a bright counter.
+    pub glow_effects: bool,
+    /// Frosted glass (backdrop blur) on the large surfaces. Off trades the blur
+    /// for a solid panel, which feels lighter on older machines.
+    pub glass_effects: bool,
+    /// Tighter product tiles, so more of the catalogue fits on one screen.
+    pub compact_cards: bool,
+    /// Show seconds on the sidebar clock. Off by default: a till reads the time
+    /// in minutes.
+    pub clock_seconds: bool,
+    /// Ask GitHub whether a newer release exists when the app opens. Off means
+    /// the app never makes an outbound request of any kind.
+    pub update_check: bool,
+    /// A version the shop asked not to be reminded about. The card still
+    /// appears for any later release.
+    pub skipped_version: String,
 }
 
 impl Default for Settings {
@@ -302,6 +337,18 @@ impl Default for Settings {
             seen_version: String::new(),
             custom_themes: default_custom_themes(),
             sale_sound: true,
+            sky_style: "nebula".to_string(),
+            sky_intensity: "balanced".to_string(),
+            sky_parallax: true,
+            splash_style: "stars".to_string(),
+            motion_level: "full".to_string(),
+            tab_transition: "slide".to_string(),
+            glow_effects: true,
+            glass_effects: true,
+            compact_cards: false,
+            clock_seconds: false,
+            update_check: true,
+            skipped_version: String::new(),
         }
     }
 }

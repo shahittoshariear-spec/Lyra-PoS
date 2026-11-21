@@ -9,15 +9,18 @@
 >
 > 1. **The S.S. / “Shariear's Software” credit** still shows on the splash screen
 >    and in the app window.
-> 2. **The app icon** is the same mark (`icons/`, and `ui/app-icon.png` on the
->    splash screen): Lyra's four-pointed star with its cyan-to-violet ring, on
->    the deep indigo sky.
+> 2. **The app icon** is Lyra's mark (`icons/`, and `ui/app-icon.png` on the
+>    splash screen): the four-pointed star with its cyan-to-violet ring, on the
+>    deep indigo sky. It is redrawn at every size Windows asks for, from the
+>    16-pixel taskbar glyph to the installer's own icon.
 > 3. **Versions move in single `0.01` steps**, with a major update now and
->    then — this build is `v2.7.2`: owner-only figures and settings, the named
->    audit trail, the History tab and its PDF, the sale chime, the email-report
->    fix, and a smoother interface over the v2.3 work (Moonlight and Rust,
->    three theme slots of your own, screens across the top, the silent stock
->    audit) and everything under it.
+>    then — this build is `v3.0.0`: the star-gathering opening, the nebula sky,
+>    the Atmosphere panel and its switches, Solaris and Ion, the Ctrl+K command
+>    palette, smoother screen changes, and an optional update prompt.
+>    Everything under it is the v2.7 line (owner-only figures and settings, the
+>    named audit trail, the History tab and its PDF, the sale chime, and the
+>    email-report fix) over the v2.3–v2.5 work (Moonlight and Rust, three theme
+>    slots of your own, screens across the top, the silent stock audit).
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -39,14 +42,19 @@
 >   rather than being a reason to fail.
 > - **Security.** The screens can reach exactly the commands the app defines,
 >   and nothing else: no remote content and no scripting bridge into the
->   operating system. The only thing the app itself reaches over the network is
->   the shop's own mail server, and only when a report is emailed.
+>   operating system. The app reaches the network only for the shop's own mail
+>   server, when a report is emailed, and — if the shop leaves it on — GitHub's
+>   public release list, to say a newer version exists. Neither request carries
+>   any of the shop's data, and the update check has a permanent switch in
+>   Setup. Everything else is local and works with wifi off.
 >
 > Your data comes with you — see "Where the data lives" below.
 
 A simple, offline point-of-sale app for a small shop. No internet connection is
 needed once it's installed. All data (products, stock, sales) is saved to a file
-on the computer it runs on.
+on the computer it runs on. The only outbound requests the app can make are the
+day report you configure (to your own mail server) and an optional, switchable
+check for a newer release.
 
 It is built in two halves: the screens are plain HTML, CSS and JavaScript, and
 everything that touches the machine — the data file, backups, spreadsheet
@@ -54,8 +62,39 @@ imports, and printing — is Rust, behind [Tauri](https://tauri.app). On Windows
 the window is rendered by the WebView2 runtime that ships with Windows 10 and 11,
 so there is no browser to install and no Node.js to install.
 
-## Current release: v2.7.2
+## Current release: v3.0.0
 
+- **3.0.0 — the atmosphere update.**
+  - **The opening.** Flickering stars scatter across the window and gather into
+    the words **Lyra PoS**, then the maker's mark fades in beneath them. Any key
+    or click ends it at once. Setup → Themes can bring back the classic title
+    sequence or turn the opening off entirely.
+  - **A new sky.** The background can be a **nebula** — slow clouds of the
+    theme's own colour with stars flickering through them — or the original
+    **constellation** around Lyra's figure, or **Off**. Its strength is Subtle,
+    Balanced or Vivid, and the gentle pointer parallax has its own switch.
+  - **Setup → Themes → Atmosphere.** Background style and strength, opening,
+    motion across the whole app (Full / Gentle / Off), how one screen gives way
+    to the next (Slide / Fade / Zoom / Off), compact product tiles, clock
+    seconds, glow and frosted glass — every choice applies immediately and is
+    remembered.
+  - **Two new themes.** **Solaris** (molten gold on a dark sun) and **Ion**
+    (electric cyan on black water) join Midnight, Purple Galaxy, Green Cosmos,
+    Moonlight and Rust, each with its own sky palette as well.
+  - **Ctrl+K.** A command palette for every screen the signed-in person may
+    open, plus Add product, Email the day report, Export a backup, Check for
+    updates and a few more. It is also the Jump to button under the brand.
+  - **Smoother screens, less redrawing.** Screen changes use the webview's own
+    compositor cross-fade where available (with the CSS entrance as the
+    fallback), and a screen that has not changed is no longer rebuilt every
+    time it is opened. The sky pre-renders its stars and its nebula, pauses
+    when the window is hidden, and frees the splash canvas when the opening is
+    over.
+  - **Updates on your terms.** At startup Lyra PoS can ask GitHub whether a
+    newer release exists. It shows what changed and opens the installer in your
+    browser if you choose; **Not now** leaves everything exactly as it is, and
+    **Skip this version** stays quiet until the next one. The whole check can
+    be switched off in Setup → Shop → Updates.
 - **2.7.2** — The daily email no longer panics on a hand-change or
   stock-check row with a blank name. A wrapped label now always keeps at least
   one line, so the report renders, the attachment is built, and the email goes
@@ -273,8 +312,9 @@ release and its setup, MSI and portable files are on GitHub.
   a backup first — see "Resetting data" below.
 
 There are no discounts in this build — just straightforward pricing plus tax.
-Everything else runs locally: there's no login over a network, no cloud sync,
-and no network calls — it works with wifi off.
+Everything else runs locally: there's no login over a network and no cloud sync.
+The app works with wifi off. The only requests it can make are the day report
+when you send it, and the optional update check in Setup → Shop → Updates.
 
 ## Importing a product list
 
@@ -488,7 +528,10 @@ ones are cleared out on their own.
 
 Nothing else about the app has changed: it still runs with no internet
 connection at all, and only tries to reach the mail server when a report is
-actually being sent. If there is no internet, it says so rather than waiting.
+actually being sent. If the update check is left on, the one other request is
+the public GitHub release list at startup — it carries nothing about the shop
+and can be turned off for good in Setup → Shop → Updates. If there is no internet,
+the report says so rather than waiting, and the update check is silent.
 
 ## What's not in this build
 

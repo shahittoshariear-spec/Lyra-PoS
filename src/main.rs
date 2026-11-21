@@ -14,6 +14,7 @@ mod page_print;
 mod pdf;
 mod printing;
 mod report;
+mod update;
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -278,6 +279,23 @@ async fn send_daily_report(request: mail::MailRequest) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+/// Checks GitHub for a newer release. Never called unless the shop has update
+/// checks switched on in Setup, and never on the window's thread: a till has
+/// nothing to gain from waiting on a socket.
+#[tauri::command]
+async fn check_for_update(current_version: String) -> Result<update::UpdateInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || update::check(&current_version))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Opens the release (or its installer) in the person's browser. The address
+/// is checked against this app's own repository before anything is launched.
+#[tauri::command]
+fn open_update_page(url: String) -> Result<(), String> {
+    update::open_release_page(&url)
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -309,6 +327,8 @@ fn main() {
             save_mail_password,
             has_mail_password,
             send_daily_report,
+            check_for_update,
+            open_update_page,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lyra PoS");

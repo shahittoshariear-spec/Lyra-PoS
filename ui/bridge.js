@@ -207,6 +207,29 @@
 
     async backupFolder() {
       try { return await call('backup_folder'); } catch (err) { return ''; }
+    },
+
+    // The latest GitHub release, checked by the Rust side so the webview never
+    // reaches the network itself. Resolves { ok:false, error } when the machine
+    // is offline, which is a normal answer rather than a failure of the till.
+    async checkForUpdate(currentVersion) {
+      try {
+        const info = await call('check_for_update', { currentVersion: String(currentVersion || '') });
+        return { ok: true, info };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
+
+    // Opens the release installer (or its page) in the default browser. The
+    // Rust side refuses any address that is not this app's own release URL.
+    async openUpdatePage(url) {
+      try {
+        await call('open_update_page', { url: String(url || '') });
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
     }
   };
 })();
