@@ -106,6 +106,7 @@
 
   let currentPalette = null;
   let paletteKey = '';
+  let appliedTheme = '';
   let sprites = null;
 
   // ---- Palettes ------------------------------------------------------------
@@ -128,11 +129,14 @@
 
   function palette() {
     const id = document.documentElement.dataset.theme || 'midnight';
-    if (id === paletteKey && currentPalette) return currentPalette;
-    paletteKey = id;
+    const accentRaw = id.indexOf('custom-') === 0
+      ? getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim()
+      : '';
+    const cacheKey = accentRaw ? id + '|' + accentRaw : id;
+    if (cacheKey === paletteKey && currentPalette) return currentPalette;
+    paletteKey = cacheKey;
 
     if (isCustomTheme()) {
-      const accentRaw = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim();
       const accent = (accentRaw || '120, 170, 255').split(',').map(v => parseInt(v, 10) || 0);
       const glow = mix(accent, [255, 255, 255], 0.28);
       const deep = mix(accent, [0, 0, 0], 0.3);
@@ -152,13 +156,18 @@
     return currentPalette;
   }
 
-  function makeSprite(rgb) {
-    const size = 64;
+  function blankCanvas(size) {
     const c = document.createElement('canvas');
     c.width = size;
     c.height = size;
+    return c;
+  }
+
+  function paintSprite(c, rgb) {
+    const size = c.width;
     const g = c.getContext('2d');
-    if (!g) return c;
+    if (!g) return;
+    g.clearRect(0, 0, size, size);
     const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
     grad.addColorStop(0, 'rgba(' + rgb + ',1)');
     grad.addColorStop(0.22, 'rgba(' + rgb + ',0.6)');
@@ -166,16 +175,13 @@
     grad.addColorStop(1, 'rgba(' + rgb + ',0)');
     g.fillStyle = grad;
     g.fillRect(0, 0, size, size);
-    return c;
   }
 
-  function makeFlare(rgb) {
-    const size = 160;
-    const c = document.createElement('canvas');
-    c.width = size;
-    c.height = size;
+  function paintFlare(c, rgb) {
+    const size = c.width;
     const g = c.getContext('2d');
-    if (!g) return c;
+    if (!g) return;
+    g.clearRect(0, 0, size, size);
     const mid = size / 2;
     const across = g.createLinearGradient(0, mid, size, mid);
     across.addColorStop(0, 'rgba(' + rgb + ',0)');
@@ -189,19 +195,22 @@
     down.addColorStop(1, 'rgba(' + rgb + ',0)');
     g.fillStyle = down;
     g.fillRect(mid - 0.5, 0, 1, size);
-    return c;
   }
 
   function ensureSprites() {
     const p = palette();
     const key = p.cool + '|' + p.warm + '|' + p.line;
-    if (sprites && sprites.key === key) return;
-    sprites = {
-      cool: makeSprite(p.cool),
-      warm: makeSprite(p.warm),
-      flare: makeFlare(p.cool),
-      key
-    };
+    if (!sprites) {
+      sprites = { cool: blankCanvas(64), warm: blankCanvas(64), flare: blankCanvas(160), key: '' };
+    }
+    if (sprites.key === key) return;
+    // Repaint the existing canvases rather than allocating new ones on every
+    // theme change; a shop that tries its own colours repeatedly should not
+    // see the app's memory climb with each try.
+    paintSprite(sprites.cool, p.cool);
+    paintSprite(sprites.warm, p.warm);
+    paintFlare(sprites.flare, p.cool);
+    sprites.key = key;
   }
 
   function stamp(sprite, x, y, size, alpha) {
@@ -245,8 +254,15 @@
     const scale = 0.24;
     const nw = Math.max(2, Math.min(520, Math.round(w * scale)));
     const nh = Math.max(2, Math.min(340, Math.round(h * scale)));
-    nebulaCanvas.width = nw;
-    nebulaCanvas.height = nh;
+    // Keep the same drawing buffer when the size has not changed. Setting
+    // width/height reallocates it, and a shop trying a few themes should not
+    // pay for a new megabyte each time.
+    if (nebulaCanvas.width !== nw || nebulaCanvas.height !== nh) {
+      nebulaCanvas.width = nw;
+      nebulaCanvas.height = nh;
+    } else {
+      nctx.clearRect(0, 0, nw, nh);
+    }
 
     nctx.globalCompositeOperation = 'source-over';
     nctx.clearRect(0, 0, nw, nh);
@@ -512,7 +528,6 @@
 
   function apply(next) {
     const incoming = next || {};
-    const previousPalette = paletteKey;
     config = {
       style: ['nebula', 'constellation', 'off'].includes(incoming.style) ? incoming.style : 'nebula',
       intensity: ['subtle', 'balanced', 'vivid'].includes(incoming.intensity) ? incoming.intensity : 'balanced',
@@ -521,10 +536,10 @@
     };
 
     const theme = document.documentElement.dataset.theme || '';
-    if (theme !== previousPalette) {
+    if (theme !== appliedTheme) {
+      appliedTheme = theme;
       paletteKey = '';
       currentPalette = null;
-      sprites = null;
       nebulaKey = '';
     }
 
@@ -556,7 +571,6 @@
   function refresh() {
     paletteKey = '';
     currentPalette = null;
-    sprites = null;
     nebulaKey = '';
     if (config.style === 'nebula') paintNebula();
     draw(performance.now());

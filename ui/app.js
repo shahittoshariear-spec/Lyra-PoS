@@ -63,8 +63,9 @@
 
   // Shown once per release, in the card at the bottom of the screen. Bump this
   // with the version and write what changed underneath it.
-  const APP_VERSION = '3.0.0';
+  const APP_VERSION = '3.0.1';
   const WHATS_NEW = [
+    ['Your own themes are smooth again', 'Dragging a colour no longer re-lays the sky, the theme cards and the saved settings for every pixel of the drag, and changing themes repeatedly no longer grows the app’s memory. The sky still follows your colours, on a slower beat.'],
     ['The stars learn your name', 'The app now opens with a sky of flickering stars that gather into “Lyra PoS”, and any key or click ends the sequence at once. Setup → Themes can bring back the classic opening, or turn it off.'],
     ['A nebula behind the till', 'A new, optional background hangs slow clouds of colour behind the screens with stars flickering through them. The old constellation is still there, and the sky can be made subtler, stronger or switched off entirely.'],
     ['Setup → Themes is now an atmosphere', 'Background style and strength, the opening, motion across the whole app, how screens change, compact product tiles, clock seconds, glow, frosted glass — each one is a switch of your own, remembered for the next launch.'],
@@ -4990,21 +4991,34 @@
 
     // The sky follows the theme's own palette, and every choice in Setup is
     // applied the moment it is made.
-    if (window.LyraSky) {
-      window.LyraSky.apply({
-        style: currentSkyStyle(),
-        intensity: currentSkyIntensity(),
-        parallax: prefBool('skyParallax', true),
-        motion: currentMotionLevel()
-      });
-    }
-    if (window.LyraSplash) window.LyraSplash.setMotion(currentMotionLevel());
+    applySkyAppearanceSoon();
   }
 
   // A short wash of the new theme's own light when the shop picks another one,
   // so the change is seen rather than found. Never used while dragging a
   // colour picker, where it would strobe.
   let themeFlashTimer = 0;
+  let skyApplyTimer = 0;
+
+  // A colour picker fires on every pixel of a drag. Rebuilding the sky, its
+  // sprites and all the theme cards for each of those pixels is what made the
+  // panel stutter; the light and the cards follow once the hand pauses.
+  function applySkyAppearanceSoon() {
+    clearTimeout(skyApplyTimer);
+    skyApplyTimer = setTimeout(() => {
+      skyApplyTimer = 0;
+      if (!DATA || !DATA.settings) return;
+      if (window.LyraSky) {
+        window.LyraSky.apply({
+          style: currentSkyStyle(),
+          intensity: currentSkyIntensity(),
+          parallax: prefBool('skyParallax', true),
+          motion: currentMotionLevel()
+        });
+      }
+      if (window.LyraSplash) window.LyraSplash.setMotion(currentMotionLevel());
+    }, 110);
+  }
   function applyAppearanceLive() {
     applyAppearance();
     if (currentMotionLevel() === 'off' || prefersStillMotion()) return;
@@ -5242,8 +5256,10 @@
 
     // The colour pickers fire continuously while a colour is being dragged
     // around, so the screen follows immediately and the file is written once
-    // the hand comes off it.
+    // the hand comes off it. The card previews are refreshed on the same slow
+    // beat, rather than rebuilt for every pixel of the drag.
     const writeCustomThemes = debounce(() => persist(), 300);
+    const refreshThemeCards = debounce(() => renderAppearanceControls(), 320);
     const editor = $('#customThemes');
     if (editor) {
       editor.addEventListener('input', (e) => {
@@ -5255,7 +5271,8 @@
         patch[input.dataset.color] = input.value;
         setCustomTheme(Number(row.dataset.slot), patch);
         applyAppearance();
-        renderAppearanceControls();
+        renderCustomThemeEditor();
+        refreshThemeCards();
         writeCustomThemes();
       });
 

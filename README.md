@@ -14,13 +14,12 @@
 >    deep indigo sky. It is redrawn at every size Windows asks for, from the
 >    16-pixel taskbar glyph to the installer's own icon.
 > 3. **Versions move in single `0.01` steps**, with a major update now and
->    then — this build is `v3.0.0`: the star-gathering opening, the nebula sky,
->    the Atmosphere panel and its switches, Solaris and Ion, the Ctrl+K command
->    palette, smoother screen changes, and an optional update prompt.
->    Everything under it is the v2.7 line (owner-only figures and settings, the
->    named audit trail, the History tab and its PDF, the sale chime, and the
->    email-report fix) over the v2.3–v2.5 work (Moonlight and Rust, three theme
->    slots of your own, screens across the top, the silent stock audit).
+>    then — this build is `v3.0.1`: the smooth-theme fix over the v3.0.0
+>    atmosphere update (the star-gathering opening, nebula sky, Atmosphere
+>    switches, Solaris and Ion, the Ctrl+K palette, smoother screens and the
+>    optional update prompt). Everything under it is the v2.7 line (owner-only
+>    figures and settings, the named audit trail, the History tab and its PDF,
+>    the sale chime, and the email-report fix) over the v2.3–v2.5 work.
 > 4. **Your shop's data carries over.** See "Where the data lives" below.
 >
 > If you fork it, please leave 1–4 alone. Everything else — shop name, address,
@@ -62,8 +61,13 @@ imports, and printing — is Rust, behind [Tauri](https://tauri.app). On Windows
 the window is rendered by the WebView2 runtime that ships with Windows 10 and 11,
 so there is no browser to install and no Node.js to install.
 
-## Current release: v3.0.0
+## Current release: v3.0.1
 
+- **3.0.1** — Dragging the colours of your own theme no longer re-lays the
+  sky, the theme cards and the settings on every pixel of the drag. The sky
+  still follows the colours, a beat behind, and its sprites and nebula texture
+  are repainted in place rather than reallocated, so trying a few themes no
+  longer makes the app grow in memory. No data or settings are affected.
 - **3.0.0 — the atmosphere update.**
   - **The opening.** Flickering stars scatter across the window and gather into
     the words **Lyra PoS**, then the maker's mark fades in beneath them. Any key
