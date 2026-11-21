@@ -9,3 +9,7 @@
 
 *.log
 .DS_Store
+
+# The installed app, created here by running the setup from this folder
+/lyra-pos.exe
+/uninstall.exe
